@@ -506,6 +506,21 @@ class ImpactOfDependence:
                                   param_max, all_sample=False)
             quantiles = self._quantForest.computeQuantile(listParam, alpha)
 
+        # Find the almost independent configuration
+        max_eps = 1.E-1
+        if self._corr_dim == 1:
+            id_indep = (np.abs(listParam)).argmin()
+        elif self._corr_dim == 3:
+            id_indep = np.abs(listParam).sum(axis=1).argmin()
+
+        indep_param = listParam[id_indep]
+        indep_quant = quantiles[id_indep]
+
+        if np.sum(indep_param) > max_eps:
+            print_indep = False
+        else:
+            print_indep = True
+
         fig = plt.figure(figsize=figsize)  # Create the fig object
 
         if self._corr_dim == 1:  # If correlation dimension is 1
@@ -515,14 +530,18 @@ class ImpactOfDependence:
                     linewidth=2)
             if with_sample:
                 ax.plot(self._list_param, self._output_sample, 'k.')
+
+            if print_indep:
+                ax.plot([listParam.min(), listParam.max()], [indep_quant]*2,
+                        "r-")
             ax.set_xlabel("$%s_{12}$" % (param_name), fontsize=14)
             ax.set_ylabel("Quantile")
             ax.legend(loc="best")
         elif self._corr_dim == 3:  # If correlation dimension is 3
             color_scale = quantiles
             cm = plt.get_cmap(color_map)
-            cNorm = matplotlib.colors.Normalize(vmin=min(color_scale),
-                                                vmax=max(color_scale))
+            c_min, c_max = min(color_scale), max(color_scale)
+            cNorm = matplotlib.colors.Normalize(vmin=c_min, vmax=c_max)
             scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=cm)
 
             x, y, z = listParam[:, 0], listParam[:, 1], listParam[:, 2]
@@ -530,8 +549,25 @@ class ImpactOfDependence:
             ax = fig.add_subplot(111, projection='3d')
             ax.scatter(x, y, z, c=scalarMap.to_rgba(color_scale), s=40)
             scalarMap.set_array(color_scale)
-            fig.colorbar(scalarMap)
+            cbar = fig.colorbar(scalarMap)
+            if print_indep:
+                pos = cbar.ax.get_position()
+                cbar.ax.set_aspect('auto')
+                ax2 = cbar.ax.twinx()
+                ax2.set_ylim([c_min, c_max])
+                width = 0.05
+                pos.x0 = pos.x1 - width
+                ax2.set_position(pos)
+                cbar.ax.set_position(pos)
+                n_label = 5
+                labels_val = np.linspace(c_min, c_max, n_label).tolist()
+                labels = [str(round(labels_val[i], 2)) for i in range(n_label)]
+                labels_val.append(indep_quant)
+                labels.append("Indep=%.2f" % indep_quant)
+                ax2.set_yticks([indep_quant])
+                ax2.set_yticklabels(["Indep"])
 
+                
             ax.set_xlabel("$%s_{12}$" % (param_name), fontsize=14)
             ax.set_ylabel("$%s_{13}$" % (param_name), fontsize=14)
             ax.set_zlabel("$%s_{23}$" % (param_name), fontsize=14)
@@ -674,7 +710,7 @@ if __name__ == "__main__":
     rho_in = impact._list_param[0]
 #    impact.draw_design_space(rho_in, display_quantile_value=alpha)
     impact.draw_quantiles(alpha, estimation_method, n_rho_dim,
-                          dep_meas=measure, saveFig=True)
+                          dep_meas=measure, saveFig=False)
 #    impact.draw_design_space(rho_in, input_names=input_names,
 #                             output_name=out_names[0])
 #    impact.save_all_data()
