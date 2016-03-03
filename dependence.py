@@ -667,7 +667,7 @@ if __name__ == "__main__":
         return output
 
     # Creation of the random variable
-    dim = 2  # Input dimension
+    dim = 3  # Input dimension
     copula_name = "NormalCopula"  # Name of the used copula
     marginals = [ot.Normal()]*dim  # Marginals
 
@@ -682,8 +682,8 @@ if __name__ == "__main__":
     var = ot.ComposedDistribution(marginals, copula)
 
     # Parameters
-    n_rho_dim = 50  # Number of correlation values per dimension
-    n_obs_sample = 5000  # Observation per rho
+    n_rho_dim = 10  # Number of correlation values per dimension
+    n_obs_sample = 20  # Observation per rho
     rho_dim = dim * (dim - 1)/2
     sample_size = (n_rho_dim**rho_dim + 1)*n_obs_sample
 #    sample_size = 100000  # Number of sample
