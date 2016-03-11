@@ -165,7 +165,10 @@ class ImpactOfDependence:
                             from_init_sample)
 #        print self._input_sample[0, :]
         self._all_output_sample = self._modelFunction(self._input_sample)
-        self._output_sample = self._all_output_sample[:, out_ID]
+        if self._all_output_sample.shape[0] == self._all_output_sample.size:
+            self._output_sample = self._all_output_sample
+        else:
+            self._output_sample = self._all_output_sample[:, out_ID]
 
     def _create_sample(self, n_sample, fixed_grid, dep_measure, n_obs_sample,
                        from_init_sample):
@@ -667,7 +670,7 @@ if __name__ == "__main__":
         return output
 
     # Creation of the random variable
-    dim = 3  # Input dimension
+    dim = 2  # Input dimension
     copula_name = "NormalCopula"  # Name of the used copula
     marginals = [ot.Normal()]*dim  # Marginals
 
@@ -691,7 +694,7 @@ if __name__ == "__main__":
     fixed_grid = True  # Fixed design sampling
     estimation_method = 1  # Used method
     measure = "PearsonRho"
-    n_output = 2
+    n_output = 1
     out_names = ["A", "B"]
     input_names = ["H", "L", "K"]
     out_names = []
@@ -701,6 +704,8 @@ if __name__ == "__main__":
         out = levy_function(x)
         if n_output > 1:
             output = np.asarray([out*(i+1) for i in range(n_output)]).T
+        else:
+            output = out
         return output
 
     impact = ImpactOfDependence(used_function, var)
