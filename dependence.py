@@ -454,7 +454,11 @@ class ImpactOfDependence:
 
         title = "Design Space with $n = %d$ observations" % len(id_corr)
         if corr_value is not None:
-            title += "\n $q_\\alpha = %.1f$ - $\\rho = " % (quant)
+            if display_quantile_value:
+                title += "\n$q_\\alpha = %.1f$ - $\\rho = " % (quant)
+            else:
+                title += "\n$\\rho = "
+
             if self._corr_dim == 1:
                 title += "%.1f$" % (corr_value)
             elif self._corr_dim == 3:
