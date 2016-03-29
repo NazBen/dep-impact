@@ -17,7 +17,6 @@ np.random.seed(0)
 
 COPULA_LIST = ["Normal", "Clayton", "Gumbel"]
 
-
 class Conversion:
     class NormalCopula:
         @staticmethod
