@@ -89,8 +89,8 @@ def get_grid_rho(n_sample, dim=3, rho_min=-1., rho_max=1., all_sample=True):
                 list_rho[n*i+j, :] = tmp
 
         return list_rho
-
-
+      
+     
 class ImpactOfDependence:
     _load_data = False
 
@@ -291,6 +291,7 @@ class ImpactOfDependence:
             self._quantiles = np.percentile(out_sample, alpha*100., axis=1)
         elif estimation_method == 2:
             self.buildForest()
+            self._quantiles = self._quantForest.compute_quantile(self._params, alpha)
         else:
             raise Exception("Not done yet")
 
