@@ -2,6 +2,7 @@
 import numpy as np
 import openturns as ot
 import sys
+import os
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.cm as cmx
@@ -10,6 +11,7 @@ import pandas as pd
 import nlopt
 import random
 sys.path.append("/netdata/D58174/gdrive/These/Scripts/library/randomForest")
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/randomForest")
 from quantForest import QuantileForest
 np.random.seed(0)
 
@@ -165,7 +167,10 @@ class ImpactOfDependence:
                             from_init_sample)
 #        print self._input_sample[0, :]
         self._all_output_sample = self._modelFunction(self._input_sample)
-        self._output_sample = self._all_output_sample[:, out_ID]
+        if self._all_output_sample.shape[0] == self._all_output_sample.size:
+            self._output_sample = self._all_output_sample
+        else:
+            self._output_sample = self._all_output_sample[:, out_ID]
 
     def _create_sample(self, n_sample, fixed_grid, dep_measure, n_obs_sample,
                        from_init_sample):
@@ -451,7 +456,11 @@ class ImpactOfDependence:
 
         title = "Design Space with $n = %d$ observations" % len(id_corr)
         if corr_value is not None:
-            title += "\n $q_\\alpha = %.1f$ - $\\rho = " % (quant)
+            if display_quantile_value:
+                title += "\n$q_\\alpha = %.1f$ - $\\rho = " % (quant)
+            else:
+                title += "\n$\\rho = "
+
             if self._corr_dim == 1:
                 title += "%.1f$" % (corr_value)
             elif self._corr_dim == 3:
@@ -682,8 +691,8 @@ if __name__ == "__main__":
     var = ot.ComposedDistribution(marginals, copula)
 
     # Parameters
-    n_rho_dim = 50  # Number of correlation values per dimension
-    n_obs_sample = 5000  # Observation per rho
+    n_rho_dim = 10  # Number of correlation values per dimension
+    n_obs_sample = 20  # Observation per rho
     rho_dim = dim * (dim - 1)/2
     sample_size = (n_rho_dim**rho_dim + 1)*n_obs_sample
 #    sample_size = 100000  # Number of sample
@@ -691,7 +700,7 @@ if __name__ == "__main__":
     fixed_grid = True  # Fixed design sampling
     estimation_method = 1  # Used method
     measure = "PearsonRho"
-    n_output = 2
+    n_output = 1
     out_names = ["A", "B"]
     input_names = ["H", "L", "K"]
     out_names = []
@@ -701,6 +710,8 @@ if __name__ == "__main__":
         out = levy_function(x)
         if n_output > 1:
             output = np.asarray([out*(i+1) for i in range(n_output)]).T
+        else:
+            output = out
         return output
 
     impact = ImpactOfDependence(used_function, var)
