@@ -2,6 +2,7 @@
 import numpy as np
 import openturns as ot
 import sys
+import os
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.cm as cmx
@@ -10,6 +11,7 @@ import pandas as pd
 import nlopt
 import random
 sys.path.append("/netdata/D58174/gdrive/These/Scripts/library/randomForest")
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/randomForest")
 from quantForest import QuantileForest
 np.random.seed(0)
 
