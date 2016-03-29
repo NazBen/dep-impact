@@ -275,6 +275,17 @@ class ImpactOfDependence:
         self._quantForest = QuantileForest(self._list_param,
                                            self._output_sample, n_jobs=n_jobs)
 
+    def compute_probability(self, threshold):
+        """
+        """
+        out_sample = self._output_sample.reshape((self._n_param,
+                                                  self._n_obs_sample))
+
+        probability = ((out_sample < threshold)*1.).sum(axis=1) / self._n_obs_sample
+        print probability.shape
+
+        self._probability = probability
+
     def compute_quantiles(self, alpha, estimation_method):
         """
         """
@@ -692,7 +703,7 @@ if __name__ == "__main__":
 
     # Parameters
     n_rho_dim = 10  # Number of correlation values per dimension
-    n_obs_sample = 20  # Observation per rho
+    n_obs_sample = 5000  # Observation per rho
     rho_dim = dim * (dim - 1)/2
     sample_size = (n_rho_dim**rho_dim + 1)*n_obs_sample
 #    sample_size = 100000  # Number of sample
@@ -719,9 +730,14 @@ if __name__ == "__main__":
                dep_meas=measure, from_init_sample=True)
 
     rho_in = impact._list_param[0]
+    impact.compute_quantiles(alpha, estimation_method)
+    impact.compute_probability(2.)
+    print impact._probability
+
 #    impact.draw_design_space(rho_in, display_quantile_value=alpha)
-    impact.draw_quantiles(alpha, estimation_method, n_rho_dim,
-                          dep_meas=measure, saveFig=False)
+    #impact.draw_quantiles(alpha, estimation_method, n_rho_dim,
+    #                      dep_meas=measure, saveFig=False)
+    
 #    impact.draw_design_space(rho_in, input_names=input_names,
 #                             output_name=out_names[0])
 #    impact.save_all_data()
