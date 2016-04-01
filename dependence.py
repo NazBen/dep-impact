@@ -10,6 +10,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import pandas as pd
 import nlopt
 import random
+from correlation import create_random_correlation_param
 sys.path.append("/netdata/D58174/gdrive/These/Scripts/library/randomForest")
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) +
                 "/randomForest")
@@ -19,6 +20,8 @@ np.random.seed(0)
 COPULA_LIST = ["Normal", "Clayton", "Gumbel"]
 
 class ImpactOfDependence:
+    """
+    """
     _load_data = False
 
     def __init__(self, model_function=None, variable=None):
@@ -35,7 +38,7 @@ class ImpactOfDependence:
     @classmethod
     def from_data(cls, data_sample, dim, out_ID=0):
         """
-
+        Load from raw data.
         """
         obj = cls()
         corr_dim = dim*(dim-1)/2
@@ -55,31 +58,51 @@ class ImpactOfDependence:
     @classmethod
     def from_structured_data(cls, loaded_data="full_structured_data.csv"):
         """
+        Load from structured with labels.
+
+        loaded_data: a string, a DataFrame, a list of strings.
         """
+        # If its a string
         if isinstance(loaded_data, str):
             data = pd.read_csv(loaded_data)
+        # If it's a DataFrame
         elif isinstance(loaded_data, pd.DataFrame):
             data = loaded_data
+        # If it's a list of data to load
         elif isinstance(loaded_data, list):
-            labels = ""
+            labels = "" # Init labels
+            data = None # Init the data
+            # For each data sample
             for i, load_dat in enumerate(loaded_data):
+                # If it's a string
                 if isinstance(load_dat, str):
-                    dat = pd.read_csv(load_dat)
-                    if i > 0:
-                        assert (data.columns.values == labels).all(), \
-                            "Different data files"
-                        data = data.append(dat)
-                    else:
-                        data = dat
-                        labels = data.columns.values
+                    # Load it in a DataFrame
+                    dat_i = pd.read_csv(load_dat)
+                # If it's a DataFrame
+                elif isinstance(load_dat, pd.DataFrame):
+                    dat_i = load_dat
+                else:
+                    raise TypeError("Uncorrect type for data")
 
-        names = data.columns.values
-        rho_dim = 0
-        for name in names:
-            if "r_" in name:
-                rho_dim += 1
+                if i == 0: # For the first file
+                    data = dat_i  # Data
+                    labels = data.columns.values  # Labels
+                else: # For the other files
+                    # Check if the data have the sample features
+                    assert (data.columns.values == labels).all(), \
+                        "Different data files"
+                    # Append all
+                    data = data.append(dat_i) 
+        else:
+            raise TypeError("Uncorrect type for loaded_data")
+        
+        c_names = data.columns.values  # Column names
+        # We count the number of correlation parameters
+        corr_dim = ["r_" in name for name in c_names].count(True)
 
+        # Compute the problem dimension
         dim = int(np.roots([1, -1, -2*rho_dim])[0])
+
         return cls.from_data(data.values, dim)
 
     def run(self, n_sample, fixed_grid=True, dep_meas="KendallTau",
