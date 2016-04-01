@@ -12,8 +12,7 @@ import nlopt
 import random
 from correlation import create_random_correlation_param
 sys.path.append("/netdata/D58174/gdrive/These/Scripts/library/randomForest")
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) +
-                "/randomForest")
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/randomForest")
 from quantForest import QuantileForest
 np.random.seed(0)
 
@@ -41,13 +40,13 @@ class ImpactOfDependence:
         Load from raw data.
         """
         obj = cls()
-        corr_dim = dim*(dim-1)/2
+        corr_dim = dim * (dim - 1) / 2
         obj._input_dim = dim
         obj._corr_dim = corr_dim
         obj._list_param = data_sample[:, :corr_dim]
         obj._n_sample = obj._list_param.shape[0]
-        obj._input_sample = data_sample[:, corr_dim:corr_dim+dim]
-        obj._all_output_sample = data_sample[:, corr_dim+dim:]
+        obj._input_sample = data_sample[:, corr_dim:corr_dim + dim]
+        obj._all_output_sample = data_sample[:, corr_dim + dim:]
         obj._output_sample = obj._all_output_sample[:, out_ID]
         obj._params = pd.DataFrame(obj._list_param).drop_duplicates().values
         obj._n_param = obj._params.shape[0]
@@ -101,7 +100,7 @@ class ImpactOfDependence:
         corr_dim = ["r_" in name for name in c_names].count(True)
 
         # Compute the problem dimension
-        dim = int(np.roots([1, -1, -2*rho_dim])[0])
+        dim = int(np.roots([1, -1, -2 * rho_dim])[0])
 
         return cls.from_data(data.values, dim)
 
@@ -144,7 +143,7 @@ class ImpactOfDependence:
                 grid_tau = get_grid_tau(n_param, corr_dim, tauMin, tauMax)
                 listTau = np.vstack(grid_tau).reshape(corr_dim, -1).T
             else:  # Random grid
-                tmp = [ot.Uniform(tauMin, tauMax)]*corr_dim
+                tmp = [ot.Uniform(tauMin, tauMax)] * corr_dim
                 tmpVar = ot.ComposedDistribution(tmp)
                 listTau = np.array(tmpVar.getSample(n_param)).ravel()
 
@@ -165,7 +164,7 @@ class ImpactOfDependence:
                 # with the same number of parameters in each dim
                 n_param = list_rho.shape[0]
                 # TODO : The total number of param may certainly be different
-                # than the initial one. Find a way to adapt it...
+                # than the initial one.  Find a way to adapt it...
                 n_sample = n_param * n_obs_sample
             else:  # Random grid
                 list_rho = get_random_rho(n_param, corr_dim, rho_min, rho_max)
@@ -206,7 +205,7 @@ class ImpactOfDependence:
                     self._corr_matrix[0, 2] = param[1]
                     self._corr_matrix[1, 2] = param[2]
                 B = self._corr_matrix.computeCholesky()
-                tmp = np.asarray(init_sample*B)
+                tmp = np.asarray(init_sample * B)
             else:
                 tmp = self._get_sample(param, n_obs_sample)
 
@@ -215,10 +214,10 @@ class ImpactOfDependence:
                 tmp[:, 0] = -tmp[:, 0]
 
             # We save the input sample
-            self._input_sample[n_obs_sample*i:n_obs_sample*(i+1), :] = tmp
+            self._input_sample[n_obs_sample * i:n_obs_sample * (i + 1), :] = tmp
 
             # As well for the parameters (for dependence measure)
-            self._list_param[n_obs_sample*i:n_obs_sample*(i+1), :] = \
+            self._list_param[n_obs_sample * i:n_obs_sample * (i + 1), :] = \
                 list_param[i]
 
     def buildForest(self, n_jobs=8):
@@ -233,7 +232,7 @@ class ImpactOfDependence:
         out_sample = self._output_sample.reshape((self._n_param,
                                                   self._n_obs_sample))
 
-        probability = ((out_sample < threshold)*1.).sum(axis=1) / self._n_obs_sample
+        probability = ((out_sample < threshold) * 1.).sum(axis=1) / self._n_obs_sample
 
         self._probability = probability
 
@@ -250,7 +249,7 @@ class ImpactOfDependence:
                 out_sample = self._output_sample.reshape((self._n_param,
                                                           self._n_obs_sample))
 
-            self._quantiles = np.percentile(out_sample, alpha*100., axis=1)
+            self._quantiles = np.percentile(out_sample, alpha * 100., axis=1)
         elif estimation_method == 2:
             self.buildForest()
             self._quantiles = self._quantForest.compute_quantile(self._params, alpha)
@@ -278,15 +277,15 @@ class ImpactOfDependence:
         """
         labels = []
         for i in range(self._input_dim):
-            for j in range(i+1, self._input_dim):
-                labels.append("r_%d%d" % (i+1, j+1))
+            for j in range(i + 1, self._input_dim):
+                labels.append("r_%d%d" % (i + 1, j + 1))
         if input_names:
             assert len(input_names) == self._input_dim,\
                 "Dimension problem for input_names"
             labels.extend(input_names)
         else:
             for i in range(self._input_dim):
-                labels.append("x_%d" % (i+1))
+                labels.append("x_%d" % (i + 1))
 
         output_dim = self._all_output_sample.shape[1]
         if output_names:
@@ -295,7 +294,7 @@ class ImpactOfDependence:
             labels.extend(output_names)
         else:
             for i in range(output_dim):
-                labels.append("y_%d" % (i+1))
+                labels.append("y_%d" % (i + 1))
 
         full_fname = path + '/' + fname + ftype
         out = np.c_[self._list_param, self._input_sample,
@@ -326,7 +325,7 @@ class ImpactOfDependence:
         """
         TODO : think about any other method to compute quantiles
         """
-        return np.percentile(sample, alpha*100)
+        return np.percentile(sample, alpha * 100)
 
     def _computeEmpiricalQuantile(self, param, alpha, num_obs):
         """
@@ -363,7 +362,7 @@ class ImpactOfDependence:
         if input_names:
             param_name = input_names
         else:
-            param_name = ["$x_{%d}$" % (i+1) for i in range(self._input_dim)]
+            param_name = ["$x_{%d}$" % (i + 1) for i in range(self._input_dim)]
 
         if output_name:
             output_label = output_name
@@ -503,7 +502,7 @@ class ImpactOfDependence:
                 ax.plot(self._list_param, self._output_sample, 'k.')
 
             if print_indep:
-                ax.plot([listParam.min(), listParam.max()], [indep_quant]*2,
+                ax.plot([listParam.min(), listParam.max()], [indep_quant] * 2,
                         "r-")
             ax.set_xlabel("$%s_{12}$" % (param_name), fontsize=14)
             ax.set_ylabel("Quantile")
@@ -571,7 +570,7 @@ class ImpactOfDependence:
                                             n_obs_sample)
 
         dim = self._input_dim
-        rhoDim = dim*(dim-1)/2
+        rhoDim = dim * (dim - 1) / 2
         nloptMethod = nlopt.GN_DIRECT  # Object of the method
         opt = nlopt.opt(nloptMethod, rhoDim)
         opt.set_min_objective(self._nloptObjFunc)
@@ -606,7 +605,7 @@ class ImpactOfDependence:
         self._copula = variables.getCopula()
         self._copula_name = self._copula.getName()
         self._input_variables = variables
-        self._corr_dim = self._input_dim*(self._input_dim-1)/2
+        self._corr_dim = self._input_dim * (self._input_dim - 1) / 2
         if self._copula_name == "NormalCopula":
             self._corr_matrix = ot.CorrelationMatrix(self._input_dim)
 
@@ -614,7 +613,6 @@ class ImpactOfDependence:
 # =============================================================================
 #
 # =============================================================================
-
 if __name__ == "__main__":
     def add_function(x):
         return x.sum(axis=1)
@@ -622,7 +620,7 @@ if __name__ == "__main__":
     def levy_function(x, phase=1.):
         x = np.asarray(x)
 
-        w = 1 + (x - 1.)/4.
+        w = 1 + (x - 1.) / 4.
 
         if x.shape[0] == x.size:
             w1 = w[0]
@@ -636,15 +634,15 @@ if __name__ == "__main__":
             ax = 1
 
         w1 += phase  # Modification of the function
-        output = np.sin(np.pi*w1)**2
-        output += ((wi-1.)**2*(1.+10.*np.sin(np.pi*wi+1.)**2)).sum(axis=ax)
-        output += (wd - 1.)**2 * (1. + np.sin(2*np.pi*wd)**2)
+        output = np.sin(np.pi * w1) ** 2
+        output += ((wi - 1.) ** 2 * (1. + 10. * np.sin(np.pi * wi + 1.) ** 2)).sum(axis=ax)
+        output += (wd - 1.) ** 2 * (1. + np.sin(2 * np.pi * wd) ** 2)
         return output
 
     # Creation of the random variable
     dim = 2  # Input dimension
     copula_name = "NormalCopula"  # Name of the used copula
-    marginals = [ot.Normal()]*dim  # Marginals
+    marginals = [ot.Normal()] * dim  # Marginals
 
     # TODO : find a way to create a real InverseClaytonCopula
     if copula_name == "NormalCopula":
@@ -659,9 +657,9 @@ if __name__ == "__main__":
     # Parameters
     n_rho_dim = 10  # Number of correlation values per dimension
     n_obs_sample = 5000  # Observation per rho
-    rho_dim = dim * (dim - 1)/2
-    sample_size = (n_rho_dim**rho_dim + 1)*n_obs_sample
-#    sample_size = 100000  # Number of sample
+    rho_dim = dim * (dim - 1) / 2
+    sample_size = (n_rho_dim ** rho_dim + 1) * n_obs_sample
+#    sample_size = 100000 # Number of sample
     alpha = 0.01  # Quantile probability
     fixed_grid = True  # Fixed design sampling
     estimation_method = 1  # Used method
@@ -675,7 +673,7 @@ if __name__ == "__main__":
     def used_function(x):
         out = levy_function(x)
         if n_output > 1:
-            output = np.asarray([out*(i+1) for i in range(n_output)]).T
+            output = np.asarray([out * (i + 1) for i in range(n_output)]).T
         else:
             output = out
         return output
