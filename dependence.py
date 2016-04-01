@@ -28,9 +28,9 @@ class ImpactOfDependence:
         """
         """
         if model_function:
-            self.setModelFunction(model_function)
+            self.set_model_function(model_function)
         if variable:
-            self.setInputVariables(variable)
+            self.set_input_variables(variable)
 
         self._rhoMin, self._rhoMax = -1., 1.
         self._tauMin, self._tauMax = -1., 1.
@@ -109,9 +109,11 @@ class ImpactOfDependence:
             n_obs_sample=1, out_ID=0, seed=None, from_init_sample=False):
         """
         """
-        np.random.seed(seed)
+        # Set the seed for numpy and openturns
         if seed:
+            np.random.seed(seed)
             ot.RandomGenerator.SetSeed(seed)
+
         self._create_sample(n_sample, fixed_grid, dep_meas, n_obs_sample,
                             from_init_sample)
 #        print self._input_sample[0, :]
@@ -587,15 +589,19 @@ class ImpactOfDependence:
 # =============================================================================
 # Setters
 # =============================================================================
-    def setModelFunction(self, modelFunction):
+    def set_model_function(self, modelFunction):
         """
+        
         """
-        assert callable(modelFunction), "The model function is not callable"
+        assert callable(modelFunction),\
+            TypeError("The model function is not callable")
         self._modelFunction = modelFunction
 
-    def setInputVariables(self, variables):
+    def set_input_variables(self, variables):
         """
         """
+        assert isinstance(variables, ot.Distribution),\
+            TypeError("The variables must be openturns Distribution objects")
         self._input_dim = variables.getDimension()
         self._copula = variables.getCopula()
         self._copula_name = self._copula.getName()

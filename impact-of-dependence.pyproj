@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>3db500f2-2f10-4bf7-806d-3b3aaf6d83e9</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>dependence.py</StartupFile>
+    <StartupFile>correlation.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
