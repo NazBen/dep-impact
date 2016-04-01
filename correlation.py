@@ -1,8 +1,133 @@
 import numpy as np
 import random
 import openturns as ot
+from pyDOE import lhs
 
-def get_random_rho(size, dim, rho_min=-1., rho_max=1.):
+"""
+TODO :
+    - Make the classes in Cython for better performances??
+"""
+
+class SemiDefiniteMatrixError(Exception):
+    """
+    Specific exception for matrix which are not semi-definite positives
+    """
+    pass
+
+
+def create_corr_matrix(rho, dim=None, library="openturns"):
+    """
+    Create correlation matrices from a list of input parameters
+    """
+    rho = np.asarray(rho) # We convert the parameter in numpy array
+
+    # Check if the correlation parameter is correct
+    if (rho >= 1.).any() or (rho <= -1.).any():
+        raise ValueError("Correlation parameters not in [-1., 1.]")
+
+    # Dimenion of correlation parameter
+    corr_dim = len(rho)
+
+    # The dimension problem is computed if not specified
+    if not dim:
+        root = np.roots([1., -1., -2.*corr_dim])[0]
+        dim = int(root)
+
+    # Initialize the matrix
+    if library == "openturns":
+        corr_matrix = ot.CorrelationMatrix(dim)
+    elif library == "numpy":
+        corr_matrix = np.identity(dim, dtype=np.float)
+    else:
+        raise ValueError("Unknow value for library")
+
+    k = 0
+    for i in range(dim):
+        for j in range(i+1, dim):
+            corr_matrix[i, j] = rho[k]
+            if library == "numpy":
+                corr_matrix[j, i] = rho[k]
+            k += 1
+    
+    # Check if the matrix is Positive Definite
+    error = SemiDefiniteMatrixError("The matrix is not semi-positive definite")
+    if library == "openturns":
+        if corr_matrix.isPositiveDefinite():
+            raise error
+    elif library == "numpy":
+        if (np.linalg.eigvals(corr_matrix) <= 0.).any():
+            raise error
+
+    return corr_matrix
+
+
+def check_params(rho, dim=None):
+    """
+    Check is the matrix of a given 
+    """
+    rho = np.asarray(rho) # We convert the parameter in numpy array
+
+    # Check if the correlation parameter is correct
+    if (rho >= 1.).any() or (rho <= -1.).any():
+        raise ValueError("Correlation parameters not in [-1., 1.]")
+
+    # Dimenion of correlation parameter
+    corr_dim = len(rho)
+
+    # The dimension problem is computed if not specified
+    if not dim:
+        root = np.roots([1., -1., -2.*corr_dim])[0]
+        dim = int(root)
+
+    # Initialize the matrix
+    corr_matrix = ot.CorrelationMatrix(dim)
+    
+    k = 0
+    for i in range(dim):
+        for j in range(i+1, dim):
+            corr_matrix[i, j] = rho[k]
+            k += 1
+    
+    return corr_matrix.isPositiveDefinite()
+
+def create_random_correlation_param(dim, n=1, sampling="lhs"):
+    """
+    Using acceptation reject...
+    """
+    # Dimenion of correlation parameter
+    corr_dim = dim * (dim - 1) / 2
+
+    # Array of correlation parameters
+    list_rho = np.zeros((n, corr_dim), dtype=np.float)
+
+    for i in range(n): # For each parameter
+        condition = True
+        # Stop when the matrix is definit semi positive
+        while condition:
+            if sampling == "lhs":
+                rho = (lhs(corr_dim, samples=1)*2. - 1.).ravel()
+            else:
+                rho = np.random.uniform(-1., 1., corr_dim)
+
+            if check_params(rho, dim):
+                condition = False
+        list_rho[i, :] = rho
+        
+    if n == 1:
+        return list_rho.ravel()
+    else:
+        return list_rho
+
+
+if __name__ == "__main__":
+    dim = 4
+    n = 1
+    print create_random_correlation_param(dim, n)
+
+def get_random_rho_3d(size, dim, rho_min=-1., rho_max=1.):
+    """
+    Works in 1 and 3 dimension
+    """
     if dim == 1:
         list_rho = np.asarray(ot.Uniform(rho_min, rho_max).getSample(size))
     else:  # TODO : make it available in d dim
