@@ -26,6 +26,7 @@
     <PtvsTargetsFile>$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets</PtvsTargetsFile>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="correlation.py" />
     <Compile Include="dependence.py" />
     <Compile Include="__init__.py" />
   </ItemGroup>
