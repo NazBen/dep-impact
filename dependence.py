@@ -11,7 +11,8 @@ import pandas as pd
 import nlopt
 import random
 sys.path.append("/netdata/D58174/gdrive/These/Scripts/library/randomForest")
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/randomForest")
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) +
+                "/randomForest")
 from quantForest import QuantileForest
 np.random.seed(0)
 
@@ -89,8 +90,8 @@ def get_grid_rho(n_sample, dim=3, rho_min=-1., rho_max=1., all_sample=True):
                 list_rho[n*i+j, :] = tmp
 
         return list_rho
-      
-     
+
+
 class ImpactOfDependence:
     _load_data = False
 
@@ -282,7 +283,6 @@ class ImpactOfDependence:
                                                   self._n_obs_sample))
 
         probability = ((out_sample < threshold)*1.).sum(axis=1) / self._n_obs_sample
-        print probability.shape
 
         self._probability = probability
 
