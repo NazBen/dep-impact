@@ -1,4 +1,4 @@
-import numpy as np
+﻿import numpy as np
 import random
 import openturns as ot
 from pyDOE import lhs
@@ -90,7 +90,7 @@ def check_params(rho, dim=None):
     
     return corr_matrix.isPositiveDefinite()
 
-def create_random_correlation_param(dim, n=1, sampling="lhs"):
+def create_random_correlation_param(dim, n=1, sampling="monte-carlo"):
     """
     Using acceptation reject...
     """
@@ -104,11 +104,12 @@ def create_random_correlation_param(dim, n=1, sampling="lhs"):
         condition = True
         # Stop when the matrix is definit semi positive
         while condition:
-            if sampling == "lhs":
+            if sampling == "monte-carlo":
+                rho = np.random.uniform(-1., 1., corr_dim)
+            elif sampling == "lhs":
                 rho = (lhs(corr_dim, samples=1)*2. - 1.).ravel()
             else:
-                rho = np.random.uniform(-1., 1., corr_dim)
-
+                raise ValueError("Unknow sampling strategy")
             if check_params(rho, dim):
                 condition = False
         list_rho[i, :] = rho

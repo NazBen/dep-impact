@@ -10,7 +10,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import pandas as pd
 import nlopt
 import random
-from correlation import get_grid_rho
+from correlation import get_grid_rho, create_random_correlation_param
 sys.path.append("/netdata/D58174/gdrive/These/Scripts/library/randomForest")
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/randomForest")
 from quantForest import QuantileForest
@@ -176,7 +176,7 @@ class ImpactOfDependence(object):
                 # than the initial one.  Find a way to adapt it...
                 n_sample = n_param * n_obs_sample
             else:  # Random grid
-                list_rho = get_random_rho(n_param, corr_dim, rho_min, rho_max)
+                list_rho = create_random_correlation_param(dim, n_param)
 
             if self._copula_name == "NormalCopula":
                 list_param = list_rho
@@ -231,22 +231,27 @@ class ImpactOfDependence(object):
 
     def buildForest(self, n_jobs=8):
         """
+        Build a Quantile Random Forest to estimate conditional quantiles.
         """
         self._quantForest = QuantileForest(self._list_param,
                                            self._output_sample, n_jobs=n_jobs)
 
     def compute_probability(self, threshold):
         """
+        Compute the probability of the current sample for each dependence parameter.
         """
+        # Load the output sample and reshape it in a matrix
         out_sample = self._output_sample.reshape((self._n_param,
                                                   self._n_obs_sample))
 
+        # Compute the empirical probability of the sample
         probability = ((out_sample < threshold) * 1.).sum(axis=1) / self._n_obs_sample
 
         self._probability = probability
 
     def compute_quantiles(self, alpha, estimation_method):
         """
+        Compute the alpha-quantiles of the current sample for each dependence parameter.
         """
         if estimation_method == 1:
             if self._load_data:
@@ -556,6 +561,7 @@ class ImpactOfDependence(object):
         ax.set_title(title, fontsize=18)
         ax.axis("tight")
         fig.tight_layout()
+        plt.show(block=False)
         if saveFig:
             if type(saveFig) is str:
                 fname = saveFig + '/'
@@ -670,7 +676,7 @@ if __name__ == "__main__":
     sample_size = (n_rho_dim ** rho_dim + 1) * n_obs_sample
 #    sample_size = 100000 # Number of sample
     alpha = 0.01  # Quantile probability
-    fixed_grid = True  # Fixed design sampling
+    fixed_grid = False  # Fixed design sampling
     estimation_method = 1  # Used method
     measure = "PearsonRho"
     n_output = 1
@@ -697,8 +703,8 @@ if __name__ == "__main__":
     print impact._probability
 
 #    impact.draw_design_space(rho_in, display_quantile_value=alpha)
-    #impact.draw_quantiles(alpha, estimation_method, n_rho_dim,
-    #                      dep_meas=measure, saveFig=False)
+    impact.draw_quantiles(alpha, estimation_method, n_rho_dim,
+                          dep_meas=measure, saveFig=False)
     
 #    impact.draw_design_space(rho_in, input_names=input_names,
 #                             output_name=out_names[0])
