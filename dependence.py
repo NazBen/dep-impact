@@ -509,7 +509,9 @@ class ImpactOfDependence(object):
 
         if self._corr_dim == 1:  # If correlation dimension is 1
             ax = fig.add_subplot(111)  # Creat the ax object
-            ax.plot(listParam, quantiles, 'b',
+            id_sorted_params = np.argsort(listParam, axis=0).ravel()
+            print listParam[id_sorted_params]
+            ax.plot(listParam[id_sorted_params], quantiles[id_sorted_params], 'b',
                     label="Conditional %.2f %% quantiles" % (alpha),
                     linewidth=2)
             if with_sample:
@@ -670,7 +672,7 @@ if __name__ == "__main__":
     var = ot.ComposedDistribution(marginals, copula)
 
     # Parameters
-    n_rho_dim = 10  # Number of correlation values per dimension
+    n_rho_dim = 50  # Number of correlation values per dimension
     n_obs_sample = 5000  # Observation per rho
     rho_dim = dim * (dim - 1) / 2
     sample_size = (n_rho_dim ** rho_dim + 1) * n_obs_sample
