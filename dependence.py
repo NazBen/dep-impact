@@ -10,7 +10,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import pandas as pd
 import nlopt
 import random
-from correlation import create_random_correlation_param
+from correlation import get_grid_rho
 sys.path.append("/netdata/D58174/gdrive/These/Scripts/library/randomForest")
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/randomForest")
 from quantForest import QuantileForest
@@ -608,7 +608,7 @@ class ImpactOfDependence(object):
     def set_input_variables(self, variables):
         """
         """
-        assert isinstance(variables, ot.Distribution),\
+        assert isinstance(variables, (ot.Distribution, ot.ComposedDistribution)),\
             TypeError("The variables must be openturns Distribution objects")
         self._input_dim = variables.getDimension()
         self._copula = variables.getCopula()
