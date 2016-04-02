@@ -18,7 +18,7 @@ np.random.seed(0)
 
 COPULA_LIST = ["Normal", "Clayton", "Gumbel"]
 
-class ImpactOfDependence:
+class ImpactOfDependence(object):
     """
     """
     _load_data = False
@@ -33,6 +33,10 @@ class ImpactOfDependence:
 
         self._rhoMin, self._rhoMax = -1., 1.
         self._tauMin, self._tauMax = -1., 1.
+
+        # Initialize the variables
+        self._all_output_sample = None
+        self._output_sample = None
 
     @classmethod
     def from_data(cls, data_sample, dim, out_ID=0):
@@ -105,22 +109,27 @@ class ImpactOfDependence:
         return cls.from_data(data.values, dim)
 
     def run(self, n_sample, fixed_grid=True, dep_meas="KendallTau",
-            n_obs_sample=1, out_ID=0, seed=None, from_init_sample=False):
+            n_obs_sample=1, output_ID=0, seed=None, from_init_sample=False):
         """
+            Run the problem. It creates the sample and evaluate it.
         """
         # Set the seed for numpy and openturns
         if seed:
             np.random.seed(seed)
             ot.RandomGenerator.SetSeed(seed)
 
+        # Creation of the sample for all the correlation parameters
         self._create_sample(n_sample, fixed_grid, dep_meas, n_obs_sample,
                             from_init_sample)
-#        print self._input_sample[0, :]
+
+        # Evaluation of the input sample
         self._all_output_sample = self._modelFunction(self._input_sample)
+
+        # If the output dimension is one
         if self._all_output_sample.shape[0] == self._all_output_sample.size:
             self._output_sample = self._all_output_sample
         else:
-            self._output_sample = self._all_output_sample[:, out_ID]
+            self._output_sample = self._all_output_sample[:, output_ID]
 
     def _create_sample(self, n_sample, fixed_grid, dep_measure, n_obs_sample,
                        from_init_sample):
