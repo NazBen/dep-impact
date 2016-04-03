@@ -236,7 +236,7 @@ class ImpactOfDependence(object):
         self._quantForest = QuantileForest(self._list_param,
                                            self._output_sample, n_jobs=n_jobs)
 
-    def compute_probability(self, threshold):
+    def compute_probability(self, threshold, confidence_level=0.95):
         """
         Compute the probability of the current sample for each dependence parameter.
         """
@@ -247,7 +247,17 @@ class ImpactOfDependence(object):
         # Compute the empirical probability of the sample
         probability = ((out_sample < threshold) * 1.).sum(axis=1) / self._n_obs_sample
 
+        # Confidence interval by TCL theorem.
+        tmp = np.sqrt(probability * (1. - probability) / self._n_obs_sample)
+
+        # Quantile of a Gaussian distribution
+        q_normal = np.asarray(ot.Normal().computeQuantile(confidence_level/2.))
+
+        # Half interval
+        interval = q_alpha_normal*tmp
+
         self._probability = probability
+        self._probability_interval = interval
 
     def compute_quantiles(self, alpha, estimation_method):
         """
@@ -510,7 +520,6 @@ class ImpactOfDependence(object):
         if self._corr_dim == 1:  # If correlation dimension is 1
             ax = fig.add_subplot(111)  # Creat the ax object
             id_sorted_params = np.argsort(listParam, axis=0).ravel()
-            print listParam[id_sorted_params]
             ax.plot(listParam[id_sorted_params], quantiles[id_sorted_params], 'b',
                     label="Conditional %.2f %% quantiles" % (alpha),
                     linewidth=2)
