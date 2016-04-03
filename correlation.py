@@ -6,6 +6,8 @@ from pyDOE import lhs
 """
 TODO :
     - Make the classes in Cython for better performances??
+    - Change the functions to create a sample for custom number of correlation inputs
+    and not conditionally to the parameters dimension.
 """
 
 class SemiDefiniteMatrixError(Exception):
@@ -90,7 +92,7 @@ def check_params(rho, dim=None):
     
     return corr_matrix.isPositiveDefinite()
 
-def create_random_correlation_param(dim, n=1, sampling="monte-carlo"):
+def create_random_correlation_param_previous(dim, n=1, sampling="monte-carlo"):
     """
     Using acceptation reject...
     """
@@ -119,11 +121,67 @@ def create_random_correlation_param(dim, n=1, sampling="monte-carlo"):
     else:
         return list_rho
 
+def create_random_correlation_param(corr_variables, n=1, sampling="monte-carlo"):
+    """
+    Using acceptation reject...
+
+    corr_variables: the matrix to defined the variables that are correlated
+    """
+
+    # Dimension problem
+    dim = corr_variables.shape[0]    
+    # Number of correlation parameters
+    corr_dim = dim * (dim - 1) / 2
+    # Correlated variables
+    corr_vars = []
+    k = 0
+    for i in range(dim):
+        for j in range(i+1, dim):
+            # If the variables are correlated,
+            # we add the correlation ID in the list
+            if corr_variables[i, j] == True:
+                corr_vars.append(k)
+            k += 1
+    n_corr_vars = len(corr_vars)
+    # Array of correlation parameters
+    list_rho = np.zeros((n, corr_dim), dtype=np.float)
+
+    for i in range(n): # For each parameter
+        condition = True
+        # Stop when the matrix is definit semi positive
+        while condition:
+            if sampling == "monte-carlo":
+                u = np.random.uniform(-1., 1., n_corr_vars)
+            elif sampling == "lhs":
+                u = (lhs(n_corr_vars, samples=1)*2. - 1.).ravel()
+            else:
+                raise ValueError("Unknow sampling strategy")
+
+            if n_corr_vars == corr_dim:
+                rho = u
+            else:
+                rho = np.zeros(corr_dim)
+                rho[corr_vars] = u
+
+            if check_params(rho, dim):
+                condition = False
+        list_rho[i, :] = rho
+        
+    if n == 1:
+        return list_rho.ravel()
+    else:
+        return list_rho
+
 
 if __name__ == "__main__":
-    dim = 4
+    dim = 3
     n = 1
-    print create_random_correlation_param(dim, n)
+    corr_variables = np.ones((dim, dim), dtype=bool)
+    corr_variables[0, 2] = False
+    corr_variables[2, 0] = False
+    corr_variables[0, 1] = False
+    corr_variables[1, 0] = False
+    print create_random_correlation_param(corr_variables, n)
 
 def get_random_rho_3d(size, dim, rho_min=-1., rho_max=1.):
     """
@@ -153,23 +211,26 @@ def get_list_rho3(rho1, rho2, n):
     return list_rho3
 
 
-def get_grid_rho(n_sample, dim=3, rho_min=-1., rho_max=1., all_sample=True):
+def get_grid_rho(n_sample, dim=3, corr_dim=None, all_sample=True):
     """
+    TODO: think about how to build a sample when not all the variables are correlated.
+    Get the grid of rho parameters
     """
-    if dim == 1:
-        return np.linspace(rho_min, rho_max, n_sample + 1,
-                           endpoint=False)[1:]
+    if not corr_dim:
+        corr_dim = dim * (dim - 1) / 2
+    if all_sample:
+        n = int(np.floor(n_sample**(1./corr_dim)))
     else:
-        if all_sample:
-            n = int(np.floor(n_sample**(1./dim)))
-        else:
-            n = n_sample
-        v_rho_1 = [np.linspace(rho_min, rho_max, n + 1,
-                               endpoint=False)[1:]]*(dim - 1)
-        grid_rho_1 = np.meshgrid(*v_rho_1)
-        list_rho_1 = np.vstack(grid_rho_1).reshape(dim - 1, -1).T
+        n = n_sample
 
-        list_rho = np.zeros((n**dim, dim))
+    if corr_dim == 1: # Easy
+        return np.linspace(rho_min, rho_max, n + 1, endpoint=False)[1:]
+    else: # Not that easy...
+        v_rho = [np.linspace(-1., 1., n + 1, endpoint=False)[1:]]*(corr_dim - 1)
+        grid_rho = np.meshgrid(*v_rho)
+        list_rho = np.vstack(grid_rho).reshape(corr_dim - 1, -1).T
+
+        list_rho = np.zeros((n**corr_dim, corr_dim))
         for i, rho_1 in enumerate(list_rho_1):
             a1 = rho_1[0]
             a2 = rho_1[1]

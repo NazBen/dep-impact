@@ -23,13 +23,13 @@ class ImpactOfDependence(object):
     """
     _load_data = False
 
-    def __init__(self, model_function=None, variable=None):
+    def __init__(self, model_function=None, variable=None, correlation=None):
         """
         """
         if model_function:
             self.set_model_function(model_function)
         if variable:
-            self.set_input_variables(variable)
+            self.set_input_variables(variable, correlation)
 
         self._rhoMin, self._rhoMax = -1., 1.
         self._tauMin, self._tauMax = -1., 1.
@@ -168,6 +168,7 @@ class ImpactOfDependence(object):
             rho_min, rho_max = self._rhoMin, self._rhoMax
 
             if fixed_grid:  # Fixed grid
+                #TODO: fix that shit!
                 list_rho = get_grid_rho(n_param, corr_dim, rho_min, rho_max)
                 # Once again, we change the number of param to have a grid
                 # with the same number of parameters in each dim
@@ -176,7 +177,7 @@ class ImpactOfDependence(object):
                 # than the initial one.  Find a way to adapt it...
                 n_sample = n_param * n_obs_sample
             else:  # Random grid
-                list_rho = create_random_correlation_param(dim, n_param)
+                list_rho = create_random_correlation_param(self._corr_matrix_bool, n_param)
 
             if self._copula_name == "NormalCopula":
                 list_param = list_rho
@@ -500,6 +501,7 @@ class ImpactOfDependence(object):
                                   param_max, all_sample=False)
             quantiles = self._quantForest.computeQuantile(listParam, alpha)
 
+
         # Find the almost independent configuration
         max_eps = 1.E-1
         if self._corr_dim == 1:
@@ -517,9 +519,10 @@ class ImpactOfDependence(object):
 
         fig = plt.figure(figsize=figsize)  # Create the fig object
 
-        if self._corr_dim == 1:  # If correlation dimension is 1
+        if self._n_corr_vars == 1:  # If correlation dimension is 1
             ax = fig.add_subplot(111)  # Creat the ax object
-            id_sorted_params = np.argsort(listParam, axis=0).ravel()
+            print listParam[:, 0]
+            id_sorted_params = np.argsort(listParam[:, self._corr_vars], axis=0).ravel()
             ax.plot(listParam[id_sorted_params], quantiles[id_sorted_params], 'b',
                     label="Conditional %.2f %% quantiles" % (alpha),
                     linewidth=2)
@@ -532,7 +535,7 @@ class ImpactOfDependence(object):
             ax.set_xlabel("$%s_{12}$" % (param_name), fontsize=14)
             ax.set_ylabel("Quantile")
             ax.legend(loc="best")
-        elif self._corr_dim == 3:  # If correlation dimension is 3
+        elif self._n_corr_vars == 3:  # If correlation dimension is 3
             color_scale = quantiles
             cm = plt.get_cmap(color_map)
             c_min, c_max = min(color_scale), max(color_scale)
@@ -622,7 +625,7 @@ class ImpactOfDependence(object):
             TypeError("The model function is not callable")
         self._modelFunction = modelFunction
 
-    def set_input_variables(self, variables):
+    def set_input_variables(self, variables, correlation=None):
         """
         Set of the variable distribution. They must be OpenTURNS distribution 
         with a defined copula in it.
@@ -634,28 +637,48 @@ class ImpactOfDependence(object):
         self._copula_name = self._copula.getName()
         self._input_variables = variables
         self._corr_dim = self._input_dim * (self._input_dim - 1) / 2
+
+        # All variables are correlated
+        if not correlation:
+            self._n_corr_vars = self._corr_dim
+        # Some variables are correlated
+        else:
+            if isinstance(correlation, np.ndarray):
+                corr_bool = correlation
+                k = 0
+                corr_vars = []
+                for i in range(self._input_dim):
+                    for j in range(i+1, self._input_dim):
+                        if corr_bool[i, j] == True:
+                            corr_vars.append(k)
+                        k += 1
+            elif isinstance(correlation, list):
+                n_corr = len(correlation)  # Number of correlated variables
+                # Matrix of correlated variables
+                corr_bool = np.identity(self._input_dim, dtype=bool)
+                # For each couple of correlated variables
+                for corr_i in correlation:
+                    # Verify if it's a couple
+                    assert len(corr_i) == 2,\
+                        ValueError("Correlation is between 2 variables...")
+                    # Make it true in the matrix
+                    corr_bool[corr_i[0], corr_i[1]] = True
+                    corr_bool[corr_i[1], corr_i[0]] = True
+
+                k = 0
+                corr_vars = []
+                for i in range(self._input_dim):
+                    for j in range(i+1, self._input_dim):
+                        if corr_bool[i, j] == True:
+                            n_corr += 1
+                            corr_vars.append(k)
+                        k += 1
+            self._corr_matrix_bool = corr_bool
+            self._corr_vars = corr_vars
+            self._n_corr_vars = len(corr_vars)
+
         if self._copula_name == "NormalCopula":
             self._corr_matrix = ot.CorrelationMatrix(self._input_dim)
-
-    def set_correlated_variables(self, correlation):
-        """
-        Set of the possible correlated variables.
-
-        corr_matrix: a 2d matrix 
-        """
-        if isinstance(correlation, np.ndarray):
-            raise EnvironmentError("Not implemented yet")
-        elif isinstance(correlation, list):
-            n_corr = len(correlation)  # Number of correlated variables
-            corr_bool = np.identity(self._input_dim, dtype=bool)
-            for corr_i in correlation:
-                assert len(corr_i) == 2, ValueError("Correlation is between 2 variables...")
-                corr_bool[corr_i[0], corr_i[1]] = True
-                corr_bool[corr_i[1], corr_i[0]] = True
-
-            self._n_corr_variables = n_corr
-            self._corr_matrix_bool = corr_bool
-
 
 # =============================================================================
 #
@@ -701,14 +724,18 @@ if __name__ == "__main__":
     # Variable object
     var = ot.ComposedDistribution(marginals, copula)
 
+    # Set the correlated variables
+    corr_vars = [[0, 1]]
+    n_corr_vars = len(corr_vars)
+
     # Parameters
-    n_rho_dim = 10  # Number of correlation values per dimension
-    n_obs_sample = 500  # Observation per rho
+    n_rho_dim = 100  # Number of correlation values per dimension
+    n_obs_sample = 5000  # Observation per rho
     rho_dim = dim * (dim - 1) / 2
-    sample_size = (n_rho_dim ** rho_dim + 1) * n_obs_sample
+    sample_size = (n_rho_dim ** n_corr_vars + 1) * n_obs_sample
 #    sample_size = 100000 # Number of sample
     alpha = 0.01  # Quantile probability
-    fixed_grid = True  # Fixed design sampling
+    fixed_grid = False  # Fixed design sampling
     estimation_method = 1  # Used method
     measure = "PearsonRho"
     n_output = 1
@@ -725,13 +752,14 @@ if __name__ == "__main__":
             output = out
         return output
 
-    impact = ImpactOfDependence(used_function, var)
-    impact.set_correlated_variables([[0, 1]])
+    impact = ImpactOfDependence(used_function, var, corr_vars)
+    
     impact.run(sample_size, fixed_grid, n_obs_sample=n_obs_sample,
-               dep_meas=measure, from_init_sample=True)
+               dep_meas=measure, from_init_sample=False)
 
     impact.compute_quantiles(alpha, estimation_method)
     impact.compute_probability(2.)
+    print impact._quantiles.shape
     #print impact._probability
 
 #    impact.draw_design_space(rho_in, display_quantile_value=alpha)
