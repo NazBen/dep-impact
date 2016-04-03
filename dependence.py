@@ -254,7 +254,7 @@ class ImpactOfDependence(object):
         q_normal = np.asarray(ot.Normal().computeQuantile(confidence_level/2.))
 
         # Half interval
-        interval = q_alpha_normal*tmp
+        interval = q_normal*tmp
 
         self._probability = probability
         self._probability_interval = interval
@@ -624,6 +624,8 @@ class ImpactOfDependence(object):
 
     def set_input_variables(self, variables):
         """
+        Set of the variable distribution. They must be OpenTURNS distribution 
+        with a defined copula in it.
         """
         assert isinstance(variables, (ot.Distribution, ot.ComposedDistribution)),\
             TypeError("The variables must be openturns Distribution objects")
@@ -634,6 +636,25 @@ class ImpactOfDependence(object):
         self._corr_dim = self._input_dim * (self._input_dim - 1) / 2
         if self._copula_name == "NormalCopula":
             self._corr_matrix = ot.CorrelationMatrix(self._input_dim)
+
+    def set_correlated_variables(self, correlation):
+        """
+        Set of the possible correlated variables.
+
+        corr_matrix: a 2d matrix 
+        """
+        if isinstance(correlation, np.ndarray):
+            raise EnvironmentError("Not implemented yet")
+        elif isinstance(correlation, list):
+            n_corr = len(correlation)  # Number of correlated variables
+            corr_bool = np.identity(self._input_dim, dtype=bool)
+            for corr_i in correlation:
+                assert len(corr_i) == 2, ValueError("Correlation is between 2 variables...")
+                corr_bool[corr_i[0], corr_i[1]] = True
+                corr_bool[corr_i[1], corr_i[0]] = True
+
+            self._n_corr_variables = n_corr
+            self._corr_matrix_bool = corr_bool
 
 
 # =============================================================================
@@ -666,7 +687,7 @@ if __name__ == "__main__":
         return output
 
     # Creation of the random variable
-    dim = 2  # Input dimension
+    dim = 3  # Input dimension
     copula_name = "NormalCopula"  # Name of the used copula
     marginals = [ot.Normal()] * dim  # Marginals
 
@@ -681,13 +702,13 @@ if __name__ == "__main__":
     var = ot.ComposedDistribution(marginals, copula)
 
     # Parameters
-    n_rho_dim = 50  # Number of correlation values per dimension
-    n_obs_sample = 5000  # Observation per rho
+    n_rho_dim = 10  # Number of correlation values per dimension
+    n_obs_sample = 500  # Observation per rho
     rho_dim = dim * (dim - 1) / 2
     sample_size = (n_rho_dim ** rho_dim + 1) * n_obs_sample
 #    sample_size = 100000 # Number of sample
     alpha = 0.01  # Quantile probability
-    fixed_grid = False  # Fixed design sampling
+    fixed_grid = True  # Fixed design sampling
     estimation_method = 1  # Used method
     measure = "PearsonRho"
     n_output = 1
@@ -705,13 +726,13 @@ if __name__ == "__main__":
         return output
 
     impact = ImpactOfDependence(used_function, var)
+    impact.set_correlated_variables([[0, 1]])
     impact.run(sample_size, fixed_grid, n_obs_sample=n_obs_sample,
                dep_meas=measure, from_init_sample=True)
 
-    rho_in = impact._list_param[0]
     impact.compute_quantiles(alpha, estimation_method)
     impact.compute_probability(2.)
-    print impact._probability
+    #print impact._probability
 
 #    impact.draw_design_space(rho_in, display_quantile_value=alpha)
     impact.draw_quantiles(alpha, estimation_method, n_rho_dim,
