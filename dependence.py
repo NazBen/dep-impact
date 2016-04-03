@@ -138,6 +138,7 @@ class ImpactOfDependence(object):
         """
         dim = self._input_dim  # Dimension of input variables
         corr_dim = self._corr_dim  # Dimension of correlation parameters
+        n_corr_vars = self._n_corr_vars
 
         # We need the same number of observation for each sample
         n_sample -= n_sample % n_obs_sample  # We take off the rest
@@ -180,11 +181,11 @@ class ImpactOfDependence(object):
                 list_rho = create_random_correlation_param(self._corr_matrix_bool, n_param)
 
             if self._copula_name == "NormalCopula":
-                list_param = list_rho
+                params = list_rho
 
             elif self._copula_name == "InverseClaytonCopula":
                 # TODO : check that shit
-                list_param = Conversion.\
+                params = Conversion.\
                     ClaytonCopula.fromPearsonToKendall(list_rho)
         else:
             raise Exception("Other dependence measures not yet implemented")
@@ -192,7 +193,7 @@ class ImpactOfDependence(object):
         self._n_param = n_param
         self._n_sample = n_sample
         self._n_obs_sample = n_obs_sample
-        self._params = list_param
+        self._params = params
         self._input_sample = np.empty((n_sample, dim))  # Input sample
         self._list_param = np.empty((n_sample, corr_dim))  # Input Corr sample
 
@@ -205,7 +206,7 @@ class ImpactOfDependence(object):
             self._sample_init = init_sample
 
         # We loop for each copula param and create observations for each
-        for i, param in enumerate(list_param):  # For each copula parameter
+        for i, param in enumerate(params):  # For each copula parameter
             # TODO : do it better
             if from_init_sample:
                 if self._corr_dim == 1:
@@ -228,7 +229,7 @@ class ImpactOfDependence(object):
 
             # As well for the parameters (for dependence measure)
             self._list_param[n_obs_sample * i:n_obs_sample * (i + 1), :] = \
-                list_param[i]
+                params[i]
 
     def buildForest(self, n_jobs=8):
         """
@@ -333,18 +334,24 @@ class ImpactOfDependence(object):
         """
         # TODO: change it when the new ot released is out
         if self._copula_name == "NormalCopula":
+            k = 0
+            for i in range(self._input_dim):
+                for j in range(i+1, self._input_dim):
+                    self._corr_matrix[i, j] = param[k]
+                    k += 1
             if self._corr_dim == 1:
                 self._corr_matrix[0, 1] = param
             elif self._corr_dim == 3:
                 self._corr_matrix[0, 1] = param[0]
                 self._corr_matrix[0, 2] = param[1]
                 self._corr_matrix[1, 2] = param[2]
+            #print self._corr_matrix
             self._copula = ot.NormalCopula(self._corr_matrix)
         else:
             self._copula.setParametersCollection([param])
 
         self._input_variables.setCopula(self._copula)
-        return np.array(self._input_variables.getSample(n_obs))
+        return np.asarray(self._input_variables.getSample(n_obs))
 
     def _empQuantileFunction(self, sample, alpha):
         """
@@ -521,7 +528,6 @@ class ImpactOfDependence(object):
 
         if self._n_corr_vars == 1:  # If correlation dimension is 1
             ax = fig.add_subplot(111)  # Creat the ax object
-            print listParam[:, 0]
             id_sorted_params = np.argsort(listParam[:, self._corr_vars], axis=0).ravel()
             ax.plot(listParam[id_sorted_params], quantiles[id_sorted_params], 'b',
                     label="Conditional %.2f %% quantiles" % (alpha),
@@ -725,16 +731,17 @@ if __name__ == "__main__":
     var = ot.ComposedDistribution(marginals, copula)
 
     # Set the correlated variables
-    corr_vars = [[0, 1]]
+    corr_vars = [[0, 2]]
     n_corr_vars = len(corr_vars)
 
     # Parameters
-    n_rho_dim = 100  # Number of correlation values per dimension
-    n_obs_sample = 5000  # Observation per rho
+    n_rho_dim = 50  # Number of correlation values per dimension
+    n_obs_sample = 10000  # Observation per rho
     rho_dim = dim * (dim - 1) / 2
     sample_size = (n_rho_dim ** n_corr_vars + 1) * n_obs_sample
 #    sample_size = 100000 # Number of sample
-    alpha = 0.01  # Quantile probability
+    alpha = 0.05  # Quantile probability
+
     fixed_grid = False  # Fixed design sampling
     estimation_method = 1  # Used method
     measure = "PearsonRho"
@@ -759,7 +766,6 @@ if __name__ == "__main__":
 
     impact.compute_quantiles(alpha, estimation_method)
     impact.compute_probability(2.)
-    print impact._quantiles.shape
     #print impact._probability
 
 #    impact.draw_design_space(rho_in, display_quantile_value=alpha)
