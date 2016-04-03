@@ -483,7 +483,7 @@ class ImpactOfDependence(object):
         """
 
         """
-        assert self._corr_dim in [1, 3], "Cannot draw quantiles for dim > 3"
+        assert self._n_corr_vars in [1, 3], "Cannot draw quantiles for dim > 3"
 
         self.compute_quantiles(alpha, estimation_method)
 
@@ -499,26 +499,34 @@ class ImpactOfDependence(object):
         else:
             raise("Undefined param")
 
+        # If t's empirical
         if estimation_method == 1:
-            listParam = self._params
+            # We take only the used correlated variables
+            listParam = self._params[self._corr_vars]
+            # And all the associated quantiles
             quantiles = self._quantiles
 
+        # Quantile Random forest
         elif estimation_method == 2:
+            # We recreate a grid for the regression
             listParam = grid_func(n_per_dim, self._corr_dim, param_min,
                                   param_max, all_sample=False)
+            # And we compute the quantiles for each point of the grid
             quantiles = self._quantForest.computeQuantile(listParam, alpha)
 
 
         # Find the almost independent configuration
-        max_eps = 1.E-1
-        if self._corr_dim == 1:
+        max_eps = 1.E-1 # Tolerence for the independence param
+        if self._n_corr_vars == 1:
             id_indep = (np.abs(listParam)).argmin()
-        elif self._corr_dim == 3:
+        else:
             id_indep = np.abs(listParam).sum(axis=1).argmin()
 
+        # Independent parameter and quantile
         indep_param = listParam[id_indep]
         indep_quant = quantiles[id_indep]
 
+        # If it's greater than the tolerence, no need to show it
         if np.sum(indep_param) > max_eps:
             print_indep = False
         else:
@@ -526,22 +534,33 @@ class ImpactOfDependence(object):
 
         fig = plt.figure(figsize=figsize)  # Create the fig object
 
-        if self._n_corr_vars == 1:  # If correlation dimension is 1
-            ax = fig.add_subplot(111)  # Creat the ax object
+        if self._n_corr_vars == 1:  # One used correlation parameter
+            ax = fig.add_subplot(111)  # Create the axis object
+
+            # Ids of the sorted parameters for the plot
             id_sorted_params = np.argsort(listParam[:, self._corr_vars], axis=0).ravel()
+
+            # Plot of the quantile conditionally to the correlation parameter
             ax.plot(listParam[id_sorted_params], quantiles[id_sorted_params], 'b',
                     label="Conditional %.2f %% quantiles" % (alpha),
                     linewidth=2)
+
+            # Add the sample (warning: it can be costly if too many points)
             if with_sample:
                 ax.plot(self._list_param, self._output_sample, 'k.')
 
+            # Print a line to distinguish the difference with the independence case
             if print_indep:
                 ax.plot([listParam.min(), listParam.max()], [indep_quant] * 2,
                         "r-")
+            
             ax.set_xlabel("$%s_{12}$" % (param_name), fontsize=14)
             ax.set_ylabel("Quantile")
             ax.legend(loc="best")
-        elif self._n_corr_vars == 3:  # If correlation dimension is 3
+        elif self._n_corr_vars == 2:  # For 2 correlation parameters
+            raise Exception("Not yet implemented")
+
+        elif self._n_corr_vars == 3:  # For 2 correlation parameters
             color_scale = quantiles
             cm = plt.get_cmap(color_map)
             c_min, c_max = min(color_scale), max(color_scale)
@@ -576,12 +595,15 @@ class ImpactOfDependence(object):
             ax.set_ylabel("$%s_{13}$" % (param_name), fontsize=14)
             ax.set_zlabel("$%s_{23}$" % (param_name), fontsize=14)
 
+        # Other figure stuffs
         title = r"$\hat q_{\alpha, n}(%s)$ with $\alpha=%.1e$, $n = %d$" % \
             (param_name, alpha, self._n_sample)
         ax.set_title(title, fontsize=18)
         ax.axis("tight")
         fig.tight_layout()
         plt.show(block=False)
+
+        # Saving the figure
         if saveFig:
             if type(saveFig) is str:
                 fname = saveFig + '/'
@@ -716,7 +738,7 @@ if __name__ == "__main__":
         return output
 
     # Creation of the random variable
-    dim = 3  # Input dimension
+    dim = 4  # Input dimension
     copula_name = "NormalCopula"  # Name of the used copula
     marginals = [ot.Normal()] * dim  # Marginals
 
@@ -735,7 +757,7 @@ if __name__ == "__main__":
     n_corr_vars = len(corr_vars)
 
     # Parameters
-    n_rho_dim = 50  # Number of correlation values per dimension
+    n_rho_dim = 10  # Number of correlation values per dimension
     n_obs_sample = 10000  # Observation per rho
     rho_dim = dim * (dim - 1) / 2
     sample_size = (n_rho_dim ** n_corr_vars + 1) * n_obs_sample
@@ -768,7 +790,9 @@ if __name__ == "__main__":
     impact.compute_probability(2.)
     #print impact._probability
 
-#    impact.draw_design_space(rho_in, display_quantile_value=alpha)
+    id_min_quant = impact._quantiles.min()
+    rho_in = impact._params[id_min_quant]
+    #impact.draw_design_space(rho_in, display_quantile_value=alpha)
     impact.draw_quantiles(alpha, estimation_method, n_rho_dim,
                           dep_meas=measure, saveFig=False)
     
