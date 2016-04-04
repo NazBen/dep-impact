@@ -242,6 +242,40 @@ class ImpactOfDependence(object):
         self._quantForest = QuantileForest(self._list_param,
                                            self._output_sample, n_jobs=n_jobs)
 
+    def compute_quantity(self, quantity_func="quantile", options=(0.05, 1)):
+        """
+        Compute the output quantity of interest.
+        quantity_func: can be many things
+            - a callable function that compute the quantity of interest
+            given the output sample,
+            - "quantile" to compute the quantiles,
+            - "probability" to compute the probability,
+            - "variance" to compute the output variance,
+            - "mean" to compute the output mean,
+            - "super-quantile" to compute the super quantile.
+        """
+        if isinstance(quantity_func, str):
+            if quantity_func == "quantile":
+                self.compute_quantiles(*options)
+                self._output_quantity = self._quantiles
+                self._output_quantity_interval = None
+            if quantity_func == "probability":
+                self.compute_probability(*options)
+                self._output_quantity = self._probability
+                self._output_quantity_interval = self._probability_interval
+        elif callable(quantity_func):
+            out_sample = self._output_sample.reshape((self._n_param,
+                                                      self._n_obs_sample))
+            result = quantity_func(out_sample)
+            if isinstance(result, tuple):
+                self._output_quantity = result[0]
+                self._output_quantity_interval = result[1]
+            else:
+                self._output_quantity = result[0]
+                self._output_quantity_interval = None
+        else:
+            raise TypeError("Unknow input variable quantity_func")
+
     def compute_probability(self, threshold, confidence_level=0.05,
                             operator="greater"):
         """
@@ -251,6 +285,7 @@ class ImpactOfDependence(object):
         # Load the output sample and reshape it in a matrix
         out_sample = self._output_sample.reshape((self._n_param,
                                                   self._n_obs_sample))
+
         # Compute the empirical probability of the sample
         if operator == "greater":
             probability = ((out_sample >= threshold) *
@@ -753,16 +788,17 @@ if __name__ == "__main__":
     impact.run(sample_size, fixed_grid, n_obs_sample=n_obs_sample,
                dep_meas=measure, from_init_sample=False)
 
-    impact.compute_quantiles(alpha, estimation_method)
-    impact.compute_probability(2.)
-    print impact._probability
-    print impact._probability_interval
+    impact.compute_quantity()
+#    impact.compute_quantiles(alpha, estimation_method)
+#    impact.compute_probability(2.)
+#    print impact._probability
+#    print impact._probability_interval
 
-    id_min_quant = impact._quantiles.min()
+#    id_min_quant = impact._quantiles.min()
     #rho_in = impact._params[id_min_quant]
     #impact.draw_design_space(rho_in, display_quantile_value=alpha)
-    impact.draw_quantiles(alpha, estimation_method, n_rho_dim,
-                          dep_meas=measure, saveFig=False)
+#    impact.draw_quantiles(alpha, estimation_method, n_rho_dim,
+#                          dep_meas=measure, saveFig=False)
 
 #    impact.draw_design_space(rho_in, input_names=input_names,
 #                             output_name=out_names[0])
