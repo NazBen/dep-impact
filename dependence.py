@@ -361,20 +361,6 @@ class ImpactOfDependence(object):
         self._input_variables.setCopula(self._copula)
         return np.asarray(self._input_variables.getSample(n_obs))
 
-    def _empQuantileFunction(self, sample, alpha):
-        """
-        TODO : think about any other method to compute quantiles
-        """
-        return np.percentile(sample, alpha * 100)
-
-    def _computeEmpiricalQuantile(self, param, alpha, num_obs):
-        """
-        must be copula parameter
-        """
-        input_sample = self._get_sample(param, num_obs)
-        output_sample = self._modelFunction(input_sample)
-        return self._empQuantileFunction(output_sample, alpha)
-
     def get_corresponding_sample(self, corr_value):
         """
         """
@@ -621,34 +607,6 @@ class ImpactOfDependence(object):
             fig.savefig(fname + ".pdf")
             fig.savefig(fname + ".png")
 
-    def _nloptObjFunc(self, x, grad):
-        """
-        """
-        return -self._quantFunc(x)
-
-    def optimize(self, method, alpha, x0, maxEvaluation=100000,
-                 n_obs_sample=None, tol=1.E-8):
-        """
-
-        """
-        self._quantFunc = self.getQuantFunc(method, alpha, maxEvaluation,
-                                            n_obs_sample)
-
-        dim = self._input_dim
-        rhoDim = dim * (dim - 1) / 2
-        nloptMethod = nlopt.GN_DIRECT  # Object of the method
-        opt = nlopt.opt(nloptMethod, rhoDim)
-        opt.set_min_objective(self._nloptObjFunc)
-        opt.set_stopval(tol)
-        opt.set_ftol_rel(tol)
-        opt.set_ftol_abs(tol)
-        opt.set_xtol_rel(tol)
-        opt.set_xtol_abs(tol)
-        opt.set_lower_bounds([-.9])
-        opt.set_upper_bounds([0.9])
-        opt.set_maxeval(maxEvaluation)
-        self._optimalPoint = opt.optimize(x0)
-        return self._optimalPoint
 
 # =============================================================================
 # Setters
