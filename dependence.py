@@ -523,7 +523,7 @@ class ImpactOfDependence(object):
         """
         The quantity must be compute before
         """
-        assert self._n_corr_vars in [1, 3],\
+        assert self._n_corr_vars in [1, 2, 3],\
             EnvironmentError("Cannot draw quantiles for dim > 3")
         assert self._output_quantity is not None,\
             Exception("Quantity must be computed first")
@@ -575,6 +575,7 @@ class ImpactOfDependence(object):
             ax.plot(params[id_sorted_params], quantity[id_sorted_params],
                     '-b', label=quantity_name, linewidth=2)
 
+            # Plot the confidence bounds
             if low_bound is not None:
                 ax.plot(params[id_sorted_params], up_bound[id_sorted_params],
                         '--b', label=quantity_name+" confidence", linewidth=2)
@@ -597,10 +598,51 @@ class ImpactOfDependence(object):
             ax.legend(loc="best")
 
         elif self._n_corr_vars == 2:  # For 2 correlation parameters
-            raise Exception("Not yet implemented")
+            view = "3d"
+            if view == "3d":
+                # Dependence parameters values
+                r1, r2 = params[:, 0], params[:, 1]
+
+                # 3d ax
+                ax = fig.add_subplot(111, projection='3d')
+                # Draw the point with the colors
+                ax.scatter(r1, r2, quantity, s=40)
+
+                # Plot the confidence bounds
+                if low_bound is not None:
+                    ax.plot_trisurf(r1, r2, low_bound, color="red", alpha=0.05, linewidth=1)
+                    ax.plot_trisurf(r1, r2, up_bound, color="red", alpha=0.05, linewidth=1)
+                    #ax.plot(r1, r2, up_bound, 'r.')
+                    #ax.plot(r1, r2, low_bound, 'r.')
+
+                # Print a line to distinguish the difference with the independence
+                # case
+                if print_indep:
+                    p1_min, p1_max = r1.min(), r1.max()
+                    p2_min, p2_max = r2.min(), r2.max()
+                    p1_ = np.linspace(p1_min, p1_max, 3)
+                    p2_ = np.linspace(p2_min, p2_max, 3)
+                    p1, p2 = np.meshgrid(p1_, p2_)
+                    q = np.zeros(p1.shape) + indep_quant
+                    ax.plot_wireframe(p1, p2, q, color="red")
+
+                    if low_bound is not None:
+                        q_l = np.zeros(p1.shape) + indep_quant_l_bound
+                        q_u = np.zeros(p1.shape) + indep_quant_u_bound
+                        ax.plot_wireframe(p1, p2, q_l, color="red")
+                        ax.plot_wireframe(p1, p2, q_u, color="red")
+                    #    ax.plot([p_min, p_max], [indep_quant_l_bound] * 2, "r--")
+                    #    ax.plot([p_min, p_max], [indep_quant_u_bound] * 2, "r--")
+                # Labels
+                i, j = self._corr_vars_ids[0][0], self._corr_vars_ids[0][1]
+                ax.set_xlabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
+                i, j = self._corr_vars_ids[1][0], self._corr_vars_ids[1][1]
+                ax.set_ylabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
+
+                ax.set_zlabel(quantity_name)
 
         elif self._n_corr_vars == 3:  # For 2 correlation parameters
-            #Colormap configuration
+            # Colormap configuration
             color_scale = quantity
             cm = plt.get_cmap(color_map)
             c_min, c_max = min(color_scale), max(color_scale)
@@ -638,9 +680,13 @@ class ImpactOfDependence(object):
                 ax2.set_yticks([indep_quant])
                 ax2.set_yticklabels(["Indep"])
 
-            ax.set_xlabel("$%s_{12}$" % (param_name), fontsize=14)
-            ax.set_ylabel("$%s_{13}$" % (param_name), fontsize=14)
-            ax.set_zlabel("$%s_{23}$" % (param_name), fontsize=14)
+            # Labels
+            i, j = self._corr_vars_ids[0][0], self._corr_vars_ids[0][1]
+            ax.set_xlabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
+            i, j = self._corr_vars_ids[1][0], self._corr_vars_ids[1][1]
+            ax.set_ylabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
+            i, j = self._corr_vars_ids[2][0], self._corr_vars_ids[2][1]
+            ax.set_zlabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
 
         # Other figure stuffs
         title = r"%s - $n = %d$" % (quantity_name, self._n_sample)
@@ -895,7 +941,7 @@ if __name__ == "__main__":
         return output
 
     # Creation of the random variable
-    dim = 4  # Input dimension
+    dim = 3  # Input dimension
     copula_name = "NormalCopula"  # Name of the used copula
     marginals = [ot.Normal()] * dim  # Marginals
 
@@ -911,11 +957,12 @@ if __name__ == "__main__":
 
     # Set the correlated variables
     corr_vars = [[0, 2]]
+    corr_vars = [[0, 1], [0, 2]]
     n_corr_vars = len(corr_vars)
 
     # Parameters
-    n_rho_dim = 50  # Number of correlation values per dimension
-    n_obs_sample = 20000  # Observation per rho
+    n_rho_dim = 20  # Number of correlation values per dimension
+    n_obs_sample = 1000  # Observation per rho
     rho_dim = dim * (dim - 1) / 2
     sample_size = (n_rho_dim ** n_corr_vars + 1) * n_obs_sample
 #    sample_size = 100000 # Number of sample
