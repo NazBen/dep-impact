@@ -39,6 +39,8 @@ class ImpactOfDependence(object):
         # Initialize the variables
         self._all_output_sample = None
         self._output_sample = None
+        self._output_quantity = None
+        self._output_quantity_interval = None
 
     @classmethod
     def from_data(cls, data_sample, dim, out_ID=0):
@@ -242,7 +244,7 @@ class ImpactOfDependence(object):
         self._quantForest = QuantileForest(self._list_param,
                                            self._output_sample, n_jobs=n_jobs)
 
-    def compute_quantity(self, quantity_func="quantile", options=(0.05, 1)):
+    def compute_quantity(self, quantity_func, options):
         """
         Compute the output quantity of interest.
         quantity_func: can be many things
@@ -259,23 +261,31 @@ class ImpactOfDependence(object):
                 self.compute_quantiles(*options)
                 self._output_quantity = self._quantiles
                 self._output_quantity_interval = None
+                self._output_quantity_up_bound = None
+                self._output_quantity_low_bound = None
             if quantity_func == "probability":
                 self.compute_probability(*options)
                 self._output_quantity = self._probability
                 self._output_quantity_interval = self._probability_interval
+                self._output_quantity_up_bound = self._probability + self._probability_interval/2.
+                self._output_quantity_low_bound = self._probability - self._probability_interval/2.
         elif callable(quantity_func):
             out_sample = self._output_sample.reshape((self._n_param,
                                                       self._n_obs_sample))
-            result = quantity_func(out_sample)
+            result = quantity_func(out_sample, *options)
             if isinstance(result, tuple):
                 self._output_quantity = result[0]
                 self._output_quantity_interval = result[1]
+                self._output_quantity_up_bound = result[0] + result[1]/2.
+                self._output_quantity_low_bound = result[0] - result[1]/2.
             else:
                 self._output_quantity = result[0]
                 self._output_quantity_interval = None
+                self._output_quantity_up_bound = None
+                self._output_quantity_low_bound = None
         else:
             raise TypeError("Unknow input variable quantity_func")
-
+        
     def compute_probability(self, threshold, confidence_level=0.05,
                             operator="greater"):
         """
@@ -507,6 +517,148 @@ class ImpactOfDependence(object):
         else:
             return None
 
+    def draw_quantity(self, quantity_name="Quantity", 
+                      dep_meas="PearsonRho", figsize=(10, 6), 
+                      saveFig=False, color_map="jet"):
+        """
+        The quantity must be compute before
+        """
+        assert self._n_corr_vars in [1, 3],\
+            EnvironmentError("Cannot draw quantiles for dim > 3")
+        assert self._output_quantity is not None,\
+            Exception("Quantity must be computed first")
+
+        if dep_meas == "KendallTau":
+            param_name = "\\tau"
+
+        elif dep_meas == "PearsonRho":
+            param_name = "\\rho"
+        else:
+            raise("Undefined param")
+
+        # Dependence parameters
+        params = self._params[:, self._corr_vars]
+        # Output quantities of interest
+        quantity = self._output_quantity
+        # Output quantities of interest confidence intervals
+        low_bound = self._output_quantity_low_bound
+        up_bound = self._output_quantity_up_bound
+
+        # Find the almost independent configuration
+        max_eps = 1.E-1  # Tolerence for the independence param
+        if self._n_corr_vars == 1:
+            id_indep = (np.abs(params)).argmin()
+        else:
+            id_indep = np.abs(params).sum(axis=1).argmin()
+
+        # Independent parameter and quantile
+        indep_param = params[id_indep]
+        indep_quant = quantity[id_indep]
+        indep_quant_l_bound = low_bound[id_indep]
+        indep_quant_u_bound = up_bound[id_indep]
+
+        # If it's greater than the tolerence, no need to show it
+        if np.sum(indep_param) > max_eps:
+            print_indep = False
+        else:
+            print_indep = True
+
+        fig = plt.figure(figsize=figsize)  # Create the fig object
+        
+        if self._n_corr_vars == 1:  # One used correlation parameter
+            ax = fig.add_subplot(111)  # Create the axis object
+
+            # Ids of the sorted parameters for the plot
+            id_sorted_params = np.argsort(params, axis=0).ravel()
+
+            # Plot of the quantile conditionally to the correlation parameter
+            ax.plot(params[id_sorted_params], quantity[id_sorted_params],
+                    '-b', label=quantity_name, linewidth=2)
+
+            if low_bound is not None:
+                ax.plot(params[id_sorted_params], up_bound[id_sorted_params],
+                        '--b', label=quantity_name+" confidence", linewidth=2)
+                ax.plot(params[id_sorted_params], low_bound[id_sorted_params],
+                        '--b', linewidth=2)
+
+            # Print a line to distinguish the difference with the independence
+            # case
+            if print_indep:
+                p_min, p_max = params.min(), params.max()
+                ax.plot([p_min, p_max], [indep_quant] * 2, "r-", 
+                        label="Independence")
+                if low_bound is not None:
+                    ax.plot([p_min, p_max], [indep_quant_l_bound] * 2, "r--")
+                    ax.plot([p_min, p_max], [indep_quant_u_bound] * 2, "r--")
+
+            i, j = self._corr_vars_ids[0][0], self._corr_vars_ids[0][1]
+            ax.set_xlabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
+            ax.set_ylabel(quantity_name)
+            ax.legend(loc="best")
+
+        elif self._n_corr_vars == 2:  # For 2 correlation parameters
+            raise Exception("Not yet implemented")
+
+        elif self._n_corr_vars == 3:  # For 2 correlation parameters
+            #Colormap configuration
+            color_scale = quantity
+            cm = plt.get_cmap(color_map)
+            c_min, c_max = min(color_scale), max(color_scale)
+            c_norm = matplotlib.colors.Normalize(vmin=c_min, vmax=c_max)
+            scalarMap = cmx.ScalarMappable(norm=c_norm, cmap=cm)
+
+            # Dependence parameters values
+            r1, r2, r3 = params[:, 0], params[:, 1], params[:, 2]
+
+            # 3d ax
+            ax = fig.add_subplot(111, projection='3d')
+
+            # Draw the point with the colors
+            ax.scatter(r1, r2, r3, c=scalarMap.to_rgba(color_scale), s=40)
+
+            # Create colorbar
+            scalarMap.set_array(color_scale)
+            cbar = fig.colorbar(scalarMap)
+
+            # If we print the independence values value on the colorbar
+            if print_indep:
+                pos = cbar.ax.get_position()
+                cbar.ax.set_aspect('auto')
+                ax2 = cbar.ax.twinx()
+                ax2.set_ylim([c_min, c_max])
+                width = 0.05
+                pos.x0 = pos.x1 - width
+                ax2.set_position(pos)
+                cbar.ax.set_position(pos)
+                n_label = 5
+                labels_val = np.linspace(c_min, c_max, n_label).tolist()
+                labels = [str(round(labels_val[i], 2)) for i in range(n_label)]
+                labels_val.append(indep_quant)
+                labels.append("Indep=%.2f" % indep_quant)
+                ax2.set_yticks([indep_quant])
+                ax2.set_yticklabels(["Indep"])
+
+            ax.set_xlabel("$%s_{12}$" % (param_name), fontsize=14)
+            ax.set_ylabel("$%s_{13}$" % (param_name), fontsize=14)
+            ax.set_zlabel("$%s_{23}$" % (param_name), fontsize=14)
+
+        # Other figure stuffs
+        title = r"%s - $n = %d$" % (quantity_name, self._n_sample)
+        ax.set_title(title, fontsize=18)
+        ax.axis("tight")
+        fig.tight_layout()
+        plt.show(block=False)
+
+        # Saving the figure
+        if saveFig:
+            if type(saveFig) is str:
+                fname = saveFig + '/'
+            else:
+                fname = "./"
+            fname += "fig" + quantity_name
+            fig.savefig(fname + ".pdf")
+            fig.savefig(fname + ".png")
+
     def draw_quantiles(self, alpha, estimation_method, n_per_dim=10,
                        dep_meas="KendallTau", with_sample=False,
                        figsize=(10, 6), saveFig=False, color_map="jet"):
@@ -642,7 +794,6 @@ class ImpactOfDependence(object):
             fig.savefig(fname + ".pdf")
             fig.savefig(fname + ".png")
 
-
 # =============================================================================
 # Setters
 # =============================================================================
@@ -677,13 +828,16 @@ class ImpactOfDependence(object):
                 corr_bool = correlation
                 k = 0
                 corr_vars = []
+                corr_vars_id = []
                 for i in range(self._input_dim):
                     for j in range(i + 1, self._input_dim):
                         if corr_bool[i, j]:
                             corr_vars.append(k)
+                            corr_vars_id.append([i, j])
                         k += 1
             elif isinstance(correlation, list):
                 n_corr = len(correlation)  # Number of correlated variables
+                corr_vars_id = correlation
                 # Matrix of correlated variables
                 corr_bool = np.identity(self._input_dim, dtype=bool)
                 # For each couple of correlated variables
@@ -705,6 +859,7 @@ class ImpactOfDependence(object):
                         k += 1
             self._corr_matrix_bool = corr_bool
             self._corr_vars = corr_vars
+            self._corr_vars_ids = corr_vars_id
             self._n_corr_vars = len(corr_vars)
 
         if self._copula_name == "NormalCopula":
@@ -760,7 +915,7 @@ if __name__ == "__main__":
 
     # Parameters
     n_rho_dim = 50  # Number of correlation values per dimension
-    n_obs_sample = 1000  # Observation per rho
+    n_obs_sample = 20000  # Observation per rho
     rho_dim = dim * (dim - 1) / 2
     sample_size = (n_rho_dim ** n_corr_vars + 1) * n_obs_sample
 #    sample_size = 100000 # Number of sample
@@ -788,7 +943,10 @@ if __name__ == "__main__":
     impact.run(sample_size, fixed_grid, n_obs_sample=n_obs_sample,
                dep_meas=measure, from_init_sample=False)
 
-    impact.compute_quantity()
+    threshold = 5.
+    c_level = 0.01
+    impact.compute_quantity("probability", (threshold, c_level))
+    impact.draw_quantity("Probability")
 #    impact.compute_quantiles(alpha, estimation_method)
 #    impact.compute_probability(2.)
 #    print impact._probability
