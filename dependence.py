@@ -19,7 +19,15 @@ np.random.seed(0)
 
 COPULA_LIST = ["Normal", "Clayton", "Gumbel"]
 
-
+def bootstrap(data, num_samples, statistic, alpha, args):
+    """Returns bootstrap estimate of 100.0*(1-alpha) CI for statistic."""
+    n = len(data)
+    idx = np.random.randint(0, n, (num_samples, n))
+    samples = data[idx]
+    stat = np.sort(statistic(samples, 1, *args))
+    return (stat[int((alpha/2.0)*num_samples)],
+            stat[int((1-alpha/2.0)*num_samples)])
+            
 class ImpactOfDependence(object):
     """
     """
@@ -135,6 +143,12 @@ class ImpactOfDependence(object):
         else:
             self._output_sample = self._all_output_sample[:, output_ID]
 
+    def get_reshaped_output_sample(self):
+        """
+        """
+        # Load the output sample and reshape it in a matrix
+        return self._output_sample.reshape((self._n_param, self._n_obs_sample))
+
     def _create_sample(self, n_sample, fixed_grid, dep_measure, n_obs_sample,
                        from_init_sample):
         """
@@ -142,7 +156,6 @@ class ImpactOfDependence(object):
         """
         dim = self._input_dim  # Dimension of input variables
         corr_dim = self._corr_dim  # Dimension of correlation parameters
-        n_corr_vars = self._n_corr_vars
 
         # We need the same number of observation for each sample
         n_sample -= n_sample % n_obs_sample  # We take off the rest
@@ -203,10 +216,10 @@ class ImpactOfDependence(object):
         self._list_param = np.empty((n_sample, corr_dim))  # Input Corr sample
 
         if from_init_sample:
-#            var_unif = ot.ComposedDistribution([ot.Uniform(0, 1)]*dim)
-#            unif_sample = np.asarray(var_unif.getSample(n_obs_sample))
-#            for i, var in enumerate(self._input_variables):
-#                var.compute
+            #            var_unif = ot.ComposedDistribution([ot.Uniform(0, 1)]*dim)
+            #            unif_sample = np.asarray(var_unif.getSample(n_obs_sample))
+            #            for i, var in enumerate(self._input_variables):
+            #                var.compute
             init_sample = self._input_variables.getSample(n_obs_sample)
             self._sample_init = init_sample
 
@@ -244,7 +257,7 @@ class ImpactOfDependence(object):
         self._quantForest = QuantileForest(self._list_param,
                                            self._output_sample, n_jobs=n_jobs)
 
-    def compute_quantity(self, quantity_func, options):
+    def compute_quantity(self, quantity_func, options, boostrap=True):
         """
         Compute the output quantity of interest.
         quantity_func: can be many things
@@ -260,15 +273,19 @@ class ImpactOfDependence(object):
             if quantity_func == "quantile":
                 self.compute_quantiles(*options)
                 self._output_quantity = self._quantiles
-                self._output_quantity_interval = None
-                self._output_quantity_up_bound = None
-                self._output_quantity_low_bound = None
+                if boostrap:
+                    raise Exception("Not implemented yet")
+                else:
+                    self._output_quantity_interval = None
+                    self._output_quantity_up_bound = None
+                    self._output_quantity_low_bound = None
             if quantity_func == "probability":
                 self.compute_probability(*options)
                 self._output_quantity = self._probability
                 self._output_quantity_interval = self._probability_interval
-                self._output_quantity_up_bound = self._probability + self._probability_interval/2.
-                self._output_quantity_low_bound = self._probability - self._probability_interval/2.
+                self._output_quantity_up_bound = self._probability + self._probability_interval / 2.
+                self._output_quantity_low_bound = self._probability - \
+                    self._probability_interval / 2.
         elif callable(quantity_func):
             out_sample = self._output_sample.reshape((self._n_param,
                                                       self._n_obs_sample))
@@ -276,8 +293,8 @@ class ImpactOfDependence(object):
             if isinstance(result, tuple):
                 self._output_quantity = result[0]
                 self._output_quantity_interval = result[1]
-                self._output_quantity_up_bound = result[0] + result[1]/2.
-                self._output_quantity_low_bound = result[0] - result[1]/2.
+                self._output_quantity_up_bound = result[0] + result[1] / 2.
+                self._output_quantity_low_bound = result[0] - result[1] / 2.
             else:
                 self._output_quantity = result[0]
                 self._output_quantity_interval = None
@@ -285,7 +302,7 @@ class ImpactOfDependence(object):
                 self._output_quantity_low_bound = None
         else:
             raise TypeError("Unknow input variable quantity_func")
-        
+
     def compute_probability(self, threshold, confidence_level=0.05,
                             operator="greater"):
         """
@@ -517,8 +534,8 @@ class ImpactOfDependence(object):
         else:
             return None
 
-    def draw_quantity(self, quantity_name="Quantity", 
-                      dep_meas="PearsonRho", figsize=(10, 6), 
+    def draw_quantity(self, quantity_name="Quantity",
+                      dep_meas="PearsonRho", figsize=(10, 6),
                       saveFig=False, color_map="jet"):
         """
         The quantity must be compute before
@@ -554,8 +571,9 @@ class ImpactOfDependence(object):
         # Independent parameter and quantile
         indep_param = params[id_indep]
         indep_quant = quantity[id_indep]
-        indep_quant_l_bound = low_bound[id_indep]
-        indep_quant_u_bound = up_bound[id_indep]
+        if low_bound is not None:
+            indep_quant_l_bound = low_bound[id_indep]
+            indep_quant_u_bound = up_bound[id_indep]
 
         # If it's greater than the tolerence, no need to show it
         if np.sum(indep_param) > max_eps:
@@ -564,7 +582,7 @@ class ImpactOfDependence(object):
             print_indep = True
 
         fig = plt.figure(figsize=figsize)  # Create the fig object
-        
+
         if self._n_corr_vars == 1:  # One used correlation parameter
             ax = fig.add_subplot(111)  # Create the axis object
 
@@ -578,7 +596,8 @@ class ImpactOfDependence(object):
             # Plot the confidence bounds
             if low_bound is not None:
                 ax.plot(params[id_sorted_params], up_bound[id_sorted_params],
-                        '--b', label=quantity_name+" confidence", linewidth=2)
+                        '--b', label=quantity_name + " confidence", 
+                        linewidth=2)
                 ax.plot(params[id_sorted_params], low_bound[id_sorted_params],
                         '--b', linewidth=2)
 
@@ -586,7 +605,7 @@ class ImpactOfDependence(object):
             # case
             if print_indep:
                 p_min, p_max = params.min(), params.max()
-                ax.plot([p_min, p_max], [indep_quant] * 2, "r-", 
+                ax.plot([p_min, p_max], [indep_quant] * 2, "r-",
                         label="Independence")
                 if low_bound is not None:
                     ax.plot([p_min, p_max], [indep_quant_l_bound] * 2, "r--")
@@ -610,8 +629,10 @@ class ImpactOfDependence(object):
 
                 # Plot the confidence bounds
                 if low_bound is not None:
-                    ax.plot_trisurf(r1, r2, low_bound, color="red", alpha=0.05, linewidth=1)
-                    ax.plot_trisurf(r1, r2, up_bound, color="red", alpha=0.05, linewidth=1)
+                    ax.plot_trisurf(r1, r2, low_bound,
+                                    color="red", alpha=0.05, linewidth=1)
+                    ax.plot_trisurf(r1, r2, up_bound, color="red",
+                                    alpha=0.05, linewidth=1)
                     #ax.plot(r1, r2, up_bound, 'r.')
                     #ax.plot(r1, r2, low_bound, 'r.')
 
@@ -936,7 +957,8 @@ if __name__ == "__main__":
 
         w1 += phase  # Modification of the function
         output = np.sin(np.pi * w1) ** 2
-        output += ((wi-1.)**2*(1.+10.*np.sin(np.pi*wi+1.)**2)).sum(axis=ax)
+        output += ((wi - 1.)**2 * (1. + 10. *
+                                   np.sin(np.pi * wi + 1.)**2)).sum(axis=ax)
         output += (wd - 1.) ** 2 * (1. + np.sin(2 * np.pi * wd) ** 2)
         return output
 
