@@ -11,10 +11,10 @@ import pandas as pd
 import nlopt
 from correlation import get_grid_rho, create_random_correlation_param
 from conversion import Conversion
-sys.path.append("/netdata/D58174/gdrive/These/Scripts/library/randomForest")
+sys.path.append("/netdata/D58174/gdrive/These/Scripts/library/pyquantregForest")
 sys.path.append(os.path.dirname(os.path.dirname(
-    os.path.abspath(__file__))) + "/randomForest")
-from quantForest import QuantileForest
+    os.path.abspath(__file__))) + "/pyquantregForest")
+from pyquantregForest import QuantileForest
 np.random.seed(0)
 
 COPULA_LIST = ["Normal", "Clayton", "Gumbel"]
@@ -257,7 +257,7 @@ class ImpactOfDependence(object):
         self._quantForest = QuantileForest(self._list_param,
                                            self._output_sample, n_jobs=n_jobs)
 
-    def compute_quantity(self, quantity_func, options, boostrap=True):
+    def compute_quantity(self, quantity_func, options, boostrap=False):
         """
         Compute the output quantity of interest.
         quantity_func: can be many things
@@ -591,7 +591,7 @@ class ImpactOfDependence(object):
 
             # Plot of the quantile conditionally to the correlation parameter
             ax.plot(params[id_sorted_params], quantity[id_sorted_params],
-                    '-b', label=quantity_name, linewidth=2)
+                    'ob', label=quantity_name, linewidth=2)
 
             # Plot the confidence bounds
             if low_bound is not None:
@@ -710,7 +710,7 @@ class ImpactOfDependence(object):
             ax.set_zlabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
 
         # Other figure stuffs
-        title = r"%s - $n = %d$" % (quantity_name, self._n_sample)
+        title = r"%s - $n = %d$" % (quantity_name, self._n_obs_sample)
         ax.set_title(title, fontsize=18)
         ax.axis("tight")
         fig.tight_layout()
