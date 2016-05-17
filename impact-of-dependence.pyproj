@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>3db500f2-2f10-4bf7-806d-3b3aaf6d83e9</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>dependence.py</StartupFile>
+    <StartupFile>dependence\dependence.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -26,12 +26,18 @@
     <PtvsTargetsFile>$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets</PtvsTargetsFile>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="conversion.py">
+    <Compile Include="dependence\conversion.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="correlation.py" />
-    <Compile Include="dependence.py" />
+    <Compile Include="dependence\correlation.py" />
+    <Compile Include="dependence\dependence.py" />
+    <Compile Include="dependence\__init__.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="__init__.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="dependence\" />
   </ItemGroup>
   <Import Condition="Exists($(PtvsTargetsFile))" Project="$(PtvsTargetsFile)" />
   <Import Condition="!Exists($(PtvsTargetsFile))" Project="$(MSBuildToolsPath)\Microsoft.Common.targets" />
