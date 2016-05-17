@@ -1,21 +1,14 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 import openturns as ot
-import sys
-import os
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.cm as cmx
 from mpl_toolkits.mplot3d import Axes3D
 import pandas as pd
-import nlopt
 from correlation import get_grid_rho, create_random_correlation_param
 from conversion import Conversion
-sys.path.append("/netdata/D58174/gdrive/These/Scripts/library/pyquantregForest")
-sys.path.append(os.path.dirname(os.path.dirname(
-    os.path.abspath(__file__))) + "/pyquantregForest")
 from pyquantregForest import QuantileForest
-np.random.seed(0)
 
 COPULA_LIST = ["Normal", "Clayton", "Gumbel"]
 
@@ -283,9 +276,9 @@ class ImpactOfDependence(object):
                 self.compute_probability(*options)
                 self._output_quantity = self._probability
                 self._output_quantity_interval = self._probability_interval
-                self._output_quantity_up_bound = self._probability + self._probability_interval / 2.
+                self._output_quantity_up_bound = self._probability + self._probability_interval
                 self._output_quantity_low_bound = self._probability - \
-                    self._probability_interval / 2.
+                    self._probability_interval
         elif callable(quantity_func):
             out_sample = self._output_sample.reshape((self._n_param,
                                                       self._n_obs_sample))
@@ -303,7 +296,7 @@ class ImpactOfDependence(object):
         else:
             raise TypeError("Unknow input variable quantity_func")
 
-    def compute_probability(self, threshold, confidence_level=0.05,
+    def compute_probability(self, threshold, confidence_level=0.95,
                             operator="greater"):
         """
         Compute the probability of the current sample for each dependence
@@ -325,7 +318,7 @@ class ImpactOfDependence(object):
         tmp = np.sqrt(probability * (1. - probability) / self._n_obs_sample)
         # Quantile of a Gaussian distribution
         q_normal = np.asarray(
-            ot.Normal().computeQuantile(confidence_level / 2.))
+            ot.Normal().computeQuantile( (1 + confidence_level) / 2.))
 
         # Half interval
         interval = q_normal * tmp
@@ -432,7 +425,7 @@ class ImpactOfDependence(object):
         return x, y
 
     def draw_design_space(self, corr_value=None, figsize=(10, 6),
-                          saveFig=False, color_map="jet", output_name=None,
+                          savefig=False, color_map="jet", output_name=None,
                           input_names=None, return_fig=False, color_lims=None,
                           display_quantile_value=None):
         """
@@ -520,9 +513,9 @@ class ImpactOfDependence(object):
         ax.axis("tight")
         fig.tight_layout()
 
-        if saveFig:
-            if type(saveFig) is str:
-                fname = saveFig + '/'
+        if savefig:
+            if type(savefig) is str:
+                fname = savefig + '/'
             else:
                 fname = "./"
             fname += "sample_space"
@@ -536,7 +529,7 @@ class ImpactOfDependence(object):
 
     def draw_quantity(self, quantity_name="Quantity",
                       dep_meas="PearsonRho", figsize=(10, 6),
-                      saveFig=False, color_map="jet"):
+                      savefig=False, color_map="jet"):
         """
         The quantity must be compute before
         """
@@ -717,9 +710,9 @@ class ImpactOfDependence(object):
         plt.show(block=False)
 
         # Saving the figure
-        if saveFig:
-            if type(saveFig) is str:
-                fname = saveFig + '/'
+        if savefig:
+            if type(savefig) is str:
+                fname = savefig + '/'
             else:
                 fname = "./"
             fname += "fig" + quantity_name
@@ -728,7 +721,7 @@ class ImpactOfDependence(object):
 
     def draw_quantiles(self, alpha, estimation_method, n_per_dim=10,
                        dep_meas="KendallTau", with_sample=False,
-                       figsize=(10, 6), saveFig=False, color_map="jet"):
+                       figsize=(10, 6), savefig=False, color_map="jet"):
         """
 
         """
@@ -852,9 +845,9 @@ class ImpactOfDependence(object):
         plt.show(block=False)
 
         # Saving the figure
-        if saveFig:
-            if type(saveFig) is str:
-                fname = saveFig + '/'
+        if savefig:
+            if type(savefig) is str:
+                fname = savefig + '/'
             else:
                 fname = "./"
             fname += "condQuantiles"
