@@ -35,10 +35,10 @@ setup(
 
     keywords='sklearn randomforest quantile',
     
-    packages=['impact-of-dependence'],  # Python packages to install
+    packages=['dependence'],  # Python packages to install
     # (If we have individual .py modules we can use the py_module argument instead)
     # This is the full name of the script "simcluster"; this will be installed to a
     # bin/ directory
 
-    install_requires=['numpy', 'scipy', 'pandas', 'matplotlib', 'pyquantregForest', pyDOE],
+    install_requires=['numpy', 'scipy', 'pandas', 'matplotlib', 'pyquantregForest', 'pyDOE'],
 )
