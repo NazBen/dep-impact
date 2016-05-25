@@ -6,8 +6,9 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cmx
 from mpl_toolkits.mplot3d import Axes3D
 import pandas as pd
-from correlation import get_grid_rho, create_random_correlation_param
+
 from conversion import Conversion
+from correlation import get_grid_rho, create_random_correlation_param
 from pyquantregForest import QuantileForest
 
 COPULA_LIST = ["Normal", "Clayton", "Gumbel"]
@@ -33,9 +34,6 @@ class ImpactOfDependence(object):
             self.set_model_function(model_function)
         if variable:
             self.set_input_variables(variable, correlation)
-
-        self._rhoMin, self._rhoMax = -1., 1.
-        self._tauMin, self._tauMax = -1., 1.
 
         # Initialize the variables
         self._all_output_sample = None
@@ -113,7 +111,7 @@ class ImpactOfDependence(object):
 
         return cls.from_data(data.values, dim)
 
-    def run(self, n_sample, fixed_grid=True, dep_meas="KendallTau",
+    def run(self, n_sample, fixed_grid=True, dep_meas="PearsonRho",
             n_obs_sample=1, output_ID=0, seed=None, from_init_sample=False):
         """
             Run the problem. It creates the sample and evaluate it.
@@ -142,6 +140,19 @@ class ImpactOfDependence(object):
         # Load the output sample and reshape it in a matrix
         return self._output_sample.reshape((self._n_param, self._n_obs_sample))
 
+    def _to_copula_params(measure_param, dep_measure):
+        """
+        """
+        if dep_measure == "KendallTau":
+            if self._copula_name == "NormalCopula":
+                copula_param = Conversion.\
+                    NormalCopula.fromKendallToPearson(measure_param)
+
+            elif self._copula_name == "InverseClaytonCopula":
+                copula_param = Conversion.\
+                    ClaytonCopula.fromKendallToPearson(measure_param)
+
+        return copula_param
     def _create_sample(self, n_sample, fixed_grid, dep_measure, n_obs_sample,
                        from_init_sample):
         """
@@ -156,24 +167,16 @@ class ImpactOfDependence(object):
 
         # We convert the dependence measure to the copula parameter
         if dep_measure == "KendallTau":
-            # TODO : Work on it
-            tauMin, tauMax = self._tauMin, self._tauMax
-
             if fixed_grid:  # Fixed grid
                 grid_tau = get_grid_tau(n_param, corr_dim, tauMin, tauMax)
-                listTau = np.vstack(grid_tau).reshape(corr_dim, -1).T
+                list_tau = np.vstack(grid_tau).reshape(corr_dim, -1).T
             else:  # Random grid
                 tmp = [ot.Uniform(tauMin, tauMax)] * corr_dim
                 tmpVar = ot.ComposedDistribution(tmp)
-                listTau = np.array(tmpVar.getSample(n_param)).ravel()
+                list_tau = np.array(tmpVar.getSample(n_param)).ravel()
 
-            if self._copula_name == "NormalCopula":
-                list_param = Conversion.\
-                    NormalCopula.fromKendallToPearson(listTau)
+            list_param = self._to_copula_params(list_tau, dep_measure)
 
-            elif self._copula_name == "InverseClaytonCopula":
-                list_param = Conversion.\
-                    ClaytonCopula.fromKendallToPearson(listTau)
 
         elif dep_measure == "PearsonRho":
 
@@ -924,104 +927,3 @@ class ImpactOfDependence(object):
 
         if self._copula_name == "NormalCopula":
             self._corr_matrix = ot.CorrelationMatrix(self._input_dim)
-
-# =============================================================================
-#
-# =============================================================================
-if __name__ == "__main__":
-    def add_function(x):
-        return x.sum(axis=1)
-
-    def levy_function(x, phase=1.):
-        x = np.asarray(x)
-
-        w = 1 + (x - 1.) / 4.
-
-        if x.shape[0] == x.size:
-            w1 = w[0]
-            wi = w[:-1]
-            wd = w[-1]
-            ax = 0
-        else:
-            w1 = w[:, 0]
-            wi = w[:, :-1]
-            wd = w[:, -1]
-            ax = 1
-
-        w1 += phase  # Modification of the function
-        output = np.sin(np.pi * w1) ** 2
-        output += ((wi - 1.)**2 * (1. + 10. *
-                                   np.sin(np.pi * wi + 1.)**2)).sum(axis=ax)
-        output += (wd - 1.) ** 2 * (1. + np.sin(2 * np.pi * wd) ** 2)
-        return output
-
-    # Creation of the random variable
-    dim = 3  # Input dimension
-    copula_name = "NormalCopula"  # Name of the used copula
-    marginals = [ot.Normal()] * dim  # Marginals
-
-    # TODO : find a way to create a real InverseClaytonCopula
-    if copula_name == "NormalCopula":
-        copula = ot.NormalCopula(dim)
-    elif copula_name == "InverseClaytonCopula":
-        copula = ot.ClaytonCopula(dim)
-        copula.setName(copula_name)
-
-    # Variable object
-    var = ot.ComposedDistribution(marginals, copula)
-
-    # Set the correlated variables
-    corr_vars = [[0, 2]]
-    corr_vars = [[0, 1], [0, 2]]
-    n_corr_vars = len(corr_vars)
-
-    # Parameters
-    n_rho_dim = 20  # Number of correlation values per dimension
-    n_obs_sample = 1000  # Observation per rho
-    rho_dim = dim * (dim - 1) / 2
-    sample_size = (n_rho_dim ** n_corr_vars + 1) * n_obs_sample
-#    sample_size = 100000 # Number of sample
-    alpha = 0.05  # Quantile probability
-
-    fixed_grid = False  # Fixed design sampling
-    estimation_method = 1  # Used method
-    measure = "PearsonRho"
-    n_output = 1
-    out_names = ["A", "B"]
-    input_names = ["H", "L", "K"]
-    out_names = []
-    input_names = []
-
-    def used_function(x):
-        out = levy_function(x)
-        if n_output > 1:
-            output = np.asarray([out * (i + 1) for i in range(n_output)]).T
-        else:
-            output = out
-        return output
-
-    impact = ImpactOfDependence(used_function, var, corr_vars)
-
-    impact.run(sample_size, fixed_grid, n_obs_sample=n_obs_sample,
-               dep_meas=measure, from_init_sample=False)
-
-    threshold = 5.
-    c_level = 0.01
-    impact.compute_quantity("probability", (threshold, c_level))
-    impact.draw_quantity("Probability")
-#    impact.compute_quantiles(alpha, estimation_method)
-#    impact.compute_probability(2.)
-#    print impact._probability
-#    print impact._probability_interval
-
-#    id_min_quant = impact._quantiles.min()
-    #rho_in = impact._params[id_min_quant]
-    #impact.draw_design_space(rho_in, display_quantile_value=alpha)
-#    impact.draw_quantiles(alpha, estimation_method, n_rho_dim,
-#                          dep_meas=measure, saveFig=False)
-
-#    impact.draw_design_space(rho_in, input_names=input_names,
-#                             output_name=out_names[0])
-#    impact.save_all_data()
-#    impact.save_structured_all_data(input_names, out_names)
-#    del impact

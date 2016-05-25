@@ -173,16 +173,6 @@ def create_random_correlation_param(corr_variables, n=1, sampling="monte-carlo")
         return list_rho
 
 
-if __name__ == "__main__":
-    dim = 3
-    n = 1
-    corr_variables = np.ones((dim, dim), dtype=bool)
-    corr_variables[0, 2] = False
-    corr_variables[2, 0] = False
-    corr_variables[0, 1] = False
-    corr_variables[1, 0] = False
-    print create_random_correlation_param(corr_variables, n)
-
 def get_random_rho_3d(size, dim, rho_min=-1., rho_max=1.):
     """
     Works in 1 and 3 dimension
