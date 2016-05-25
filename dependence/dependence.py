@@ -140,7 +140,7 @@ class ImpactOfDependence(object):
         # Load the output sample and reshape it in a matrix
         return self._output_sample.reshape((self._n_param, self._n_obs_sample))
 
-    def _to_copula_params(measure_param, dep_measure):
+    def _to_copula_params(self, measure_param, dep_measure):
         """
         """
         if dep_measure == "KendallTau":
@@ -151,8 +151,18 @@ class ImpactOfDependence(object):
             elif self._copula_name == "InverseClaytonCopula":
                 copula_param = Conversion.\
                     ClaytonCopula.fromKendallToPearson(measure_param)
+        elif dep_measure == "PearsonRho":
+            if self._copula_name == "NormalCopula":
+                copula_param = measure_param
+            elif self._copula_name == "InverseClaytonCopula":
+                copula_param = Conversion.\
+                    ClaytonCopula.fromPearsonToKendall(measure_param)
+        else:
+            raise ValueError("Unknow Dependence Measure")
 
         return copula_param
+
+
     def _create_sample(self, n_sample, fixed_grid, dep_measure, n_obs_sample,
                        from_init_sample):
         """
@@ -167,42 +177,29 @@ class ImpactOfDependence(object):
 
         # We convert the dependence measure to the copula parameter
         if dep_measure == "KendallTau":
-            if fixed_grid:  # Fixed grid
+            if fixed_grid:
                 grid_tau = get_grid_tau(n_param, corr_dim, tauMin, tauMax)
-                list_tau = np.vstack(grid_tau).reshape(corr_dim, -1).T
+                meas_param = np.vstack(grid_tau).reshape(corr_dim, -1).T
             else:  # Random grid
-                tmp = [ot.Uniform(tauMin, tauMax)] * corr_dim
+                tmp = [ot.Uniform(-1., 1.)] * corr_dim
                 tmpVar = ot.ComposedDistribution(tmp)
-                list_tau = np.array(tmpVar.getSample(n_param)).ravel()
-
-            list_param = self._to_copula_params(list_tau, dep_measure)
-
-
+                meas_param = np.array(tmpVar.getSample(n_param))
+                
         elif dep_measure == "PearsonRho":
-
             if fixed_grid:  # Fixed grid
                 assert self._n_corr_vars == 1,  "Fixed Grid does not work for high dim"
                 # TODO: fix that shit!
-                list_rho = get_grid_rho(self._corr_matrix_bool, n_param)
+                meas_param = get_grid_rho(self._corr_matrix_bool, n_param)
                 # Once again, we change the number of param to have a grid
                 # with the same number of parameters in each dim
-                n_param = list_rho.shape[0]
+                n_param = meas_param.shape[0]
                 # TODO : The total number of param may certainly be different
                 # than the initial one.  Find a way to adapt it...
                 n_sample = n_param * n_obs_sample
             else:  # Random grid
-                list_rho = create_random_correlation_param(
+                meas_param = create_random_correlation_param(
                     self._corr_matrix_bool, n_param)
-
-            if self._copula_name == "NormalCopula":
-                params = list_rho
-
-            elif self._copula_name == "InverseClaytonCopula":
-                # TODO : check that shit
-                params = Conversion.\
-                    ClaytonCopula.fromPearsonToKendall(list_rho)
-        else:
-            raise Exception("Other dependence measures not yet implemented")
+        params = self._to_copula_params(meas_param, dep_measure)
 
         self._n_param = n_param
         self._n_sample = n_sample
@@ -235,8 +232,8 @@ class ImpactOfDependence(object):
                 tmp = self._get_sample(param, n_obs_sample)
 
             # TODO : find a way to create a "real" class InverseClayton...
-            if self._copula_name == "InverseClaytonCopula":
-                tmp[:, 0] = -tmp[:, 0]
+            #if self._copula_name == "InverseClaytonCopula":
+                #tmp[:, 0] = -tmp[:, 0]
 
             # We save the input sample
             self._input_sample[n_obs_sample *
@@ -414,7 +411,7 @@ class ImpactOfDependence(object):
                     k += 1
             self._copula = ot.NormalCopula(self._corr_matrix)
         else:
-            self._copula.setParametersCollection([param])
+            self._copula.setParametersCollection(param)
 
         self._input_variables.setCopula(self._copula)
         return np.asarray(self._input_variables.getSample(n_obs))
