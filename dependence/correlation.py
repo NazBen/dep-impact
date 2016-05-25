@@ -139,7 +139,7 @@ def create_random_correlation_param(corr_variables, n=1, sampling="monte-carlo")
         for j in range(i+1, dim):
             # If the variables are correlated,
             # we add the correlation ID in the list
-            if corr_variables[i, j] == True:
+            if corr_variables[i, j]:
                 corr_vars.append(k)
             k += 1
     n_corr_vars = len(corr_vars)
@@ -211,7 +211,41 @@ def get_list_rho3(rho1, rho2, n):
     return list_rho3
 
 
-def get_grid_rho(n_sample, dim=3, corr_dim=None, all_sample=True):
+def get_grid_rho(corr_variables, n):
+    """
+    TODO: think about how to build a sample when not all the variables
+    Get the grid of rho parameters
+    """
+    # Dimension problem
+    dim = corr_variables.shape[0]
+    # Number of correlation parameters
+    corr_dim = dim * (dim - 1) / 2
+    # Correlated variables
+    corr_vars = []
+    k = 0
+    for i in range(dim):
+        for j in range(i+1, dim):
+            # If the variables are correlated,
+            # we add the correlation ID in the list
+            if corr_variables[i, j]:
+                corr_vars.append(k)
+            k += 1
+
+    n_corr_vars = len(corr_vars)
+    # Array of correlation parameters
+    list_rho = np.zeros((n, corr_dim), dtype=np.float)
+
+    if n_corr_vars == 1:  # Easy
+        grid = np.linspace(-1., 1., n + 1, endpoint=False)[1:].reshape(n, 1)
+    else:  # Not that easy...
+        raise Exception('Not implemented for dim > 1')
+
+    list_rho[:, corr_vars] = grid
+    
+    return list_rho
+
+
+def get_grid_rho_prev(n_sample, dim=3, corr_dim=None, all_sample=True):
     """
     TODO: think about how to build a sample when not all the variables are correlated.
     Get the grid of rho parameters
@@ -223,10 +257,10 @@ def get_grid_rho(n_sample, dim=3, corr_dim=None, all_sample=True):
     else:
         n = n_sample
 
-    if corr_dim == 1: # Easy
-        return np.linspace(rho_min, rho_max, n + 1, endpoint=False)[1:]
-    else: # Not that easy...
-        v_rho = [np.linspace(-1., 1., n + 1, endpoint=False)[1:]]*(corr_dim - 1)
+    if corr_dim == 1:  # Easy
+        return np.linspace(-1., 1., n + 1, endpoint=False)[1:]
+    else:  # Not that easy...
+        v_rho = [np.linspace(-1., 1., n+1, endpoint=False)[1:]]*(corr_dim - 1)
         grid_rho = np.meshgrid(*v_rho)
         list_rho = np.vstack(grid_rho).reshape(corr_dim - 1, -1).T
 

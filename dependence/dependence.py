@@ -176,11 +176,11 @@ class ImpactOfDependence(object):
                     ClaytonCopula.fromKendallToPearson(listTau)
 
         elif dep_measure == "PearsonRho":
-            rho_min, rho_max = self._rhoMin, self._rhoMax
 
             if fixed_grid:  # Fixed grid
+                assert self._n_corr_vars == 1,  "Fixed Grid does not work for high dim"
                 # TODO: fix that shit!
-                list_rho = get_grid_rho(n_param, corr_dim, rho_min, rho_max)
+                list_rho = get_grid_rho(self._corr_matrix_bool, n_param)
                 # Once again, we change the number of param to have a grid
                 # with the same number of parameters in each dim
                 n_param = list_rho.shape[0]
