@@ -6,12 +6,14 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cmx
 from mpl_toolkits.mplot3d import Axes3D
 import pandas as pd
+from itertools import combinations
 
 from conversion import Conversion
 from correlation import get_grid_rho, create_random_correlation_param
 from pyquantregForest import QuantileForest
 
-COPULA_LIST = ["Normal", "Clayton", "Gumbel"]
+COPULA_LIST = ["NormalCopula", "ClaytonCopula", "GumbelCopula"]
+
 
 def bootstrap(data, num_samples, statistic, alpha, args):
     """Returns bootstrap estimate of 100.0*(1-alpha) CI for statistic."""
@@ -19,21 +21,37 @@ def bootstrap(data, num_samples, statistic, alpha, args):
     idx = np.random.randint(0, n, (num_samples, n))
     samples = data[idx]
     stat = np.sort(statistic(samples, 1, *args))
+
     return (stat[int((alpha/2.0)*num_samples)],
             stat[int((1-alpha/2.0)*num_samples)])
-            
+
+
 class ImpactOfDependence(object):
     """
+    Quantify the impact of dependencies.
+
+    This class study the impact of eventual dependencies of random variables on
+    a quantity of interest of the output distribution. Different forms of
+    dependencies, using the notion of copulas, are availaible to study the
+    relation between the output and the dependencies.
+
+    Parameters
+    ----------
+    model_func : callable
+        The evaluation model such as :math:`Y = g(\mathbf X)`.
+    rand_vars : :class:`~openturns.ComposedDistribution`
+        The random variable :math:`\mathbf X` describing the marginals and
+        the copula.
     """
     _load_data = False
 
-    def __init__(self, model_function=None, variable=None, correlation=None):
-        """
-        """
-        if model_function:
-            self.set_model_function(model_function)
-        if variable:
-            self.set_input_variables(variable, correlation)
+    def __init__(self, model_func, margins, copula_name="NormalCopula"):
+        self.model_func = model_func
+        self.margins = margins
+        self.copula_name = copula_name
+        
+        self.rand_vars = ot.ComposedDistribution(self._margins, self._copula)
+        self.set_correlated_variables()
 
         # Initialize the variables
         self._all_output_sample = None
@@ -41,12 +59,75 @@ class ImpactOfDependence(object):
         self._output_quantity = None
         self._output_quantity_interval = None
 
+    @property
+    def model_func(self):
+        return self._model_func
+
+    @model_func.setter
+    def model_func(self, func):
+        if callable(func):
+            self._model_func = func
+        elif func is None:
+            self._model_func = None
+        else:
+            raise TypeError("The model function must be callable.")
+
+    @property
+    def margins(self):
+        return self._margins
+
+    @margins.setter
+    def margins(self, list_margins):
+        assert isinstance(list_margins, list), \
+            TypeError("Wrong parameter type")
+
+        for marginal in list_margins:
+            assert isinstance(marginal, ot.DistributionImplementation), \
+                TypeError("Wrong parameter type")
+
+        self._margins = list_margins
+        self._input_dim = len(list_margins)
+        self._corr_dim = self._input_dim * (self._input_dim - 1) / 2
+
+    @property
+    def copula_name(self):
+        return self._copula_name
+
+    @copula_name.setter
+    def copula_name(self, name):
+        assert isinstance(name, str), \
+            TypeError("Copula name must be a string type.")
+        assert (name in COPULA_LIST), \
+            KeyError("Unknow copula")
+
+        self._copula_name = name
+        copula = getattr(ot, name)
+        self._copula = copula(self._input_dim)
+
+        # TODO: Find another way
+        if name == "NormalCopula":
+            self._corr_matrix = ot.CorrelationMatrix(self._input_dim)
+        else:
+            self._corr_matrix = None
+
+    @property
+    def rand_vars(self):
+        return self._rand_vars
+
+    @rand_vars.setter
+    def rand_vars(self, rand_vars):
+        assert isinstance(rand_vars, ot.ComposedDistribution), \
+            TypeError("The variables must be OpenTURNS Distributions.")
+
+        self._rand_vars = rand_vars
+
     @classmethod
     def from_data(cls, data_sample, dim, out_ID=0):
         """
         Load from raw data.
         """
-        obj = cls()
+        def foo(): return None
+        obj = cls(foo, ot.ComposedDistribution())
         corr_dim = dim * (dim - 1) / 2
         obj._input_dim = dim
         obj._corr_dim = corr_dim
@@ -68,15 +149,12 @@ class ImpactOfDependence(object):
 
         loaded_data: a string, a DataFrame, a list of strings.
         """
-        # If its a string
         if isinstance(loaded_data, str):
             data = pd.read_csv(loaded_data)
-        # If it's a DataFrame
         elif isinstance(loaded_data, pd.DataFrame):
             data = loaded_data
-        # If it's a list of data to load
         elif isinstance(loaded_data, list):
-            labels = ""  # Init labels
+            labels = ""
             data = None  # Init the data
             # For each data sample
             for i, load_dat in enumerate(loaded_data):
@@ -161,7 +239,6 @@ class ImpactOfDependence(object):
             raise ValueError("Unknow Dependence Measure")
 
         return copula_param
-
 
     def _create_sample(self, n_sample, fixed_grid, dep_measure, n_obs_sample,
                        from_init_sample):
@@ -556,6 +633,7 @@ class ImpactOfDependence(object):
 
         # Find the almost independent configuration
         max_eps = 1.E-1  # Tolerence for the independence param
+        
         if self._n_corr_vars == 1:
             id_indep = (np.abs(params)).argmin()
         else:
@@ -589,7 +667,7 @@ class ImpactOfDependence(object):
             # Plot the confidence bounds
             if low_bound is not None:
                 ax.plot(params[id_sorted_params], up_bound[id_sorted_params],
-                        '--b', label=quantity_name + " confidence", 
+                        '--b', label=quantity_name + " confidence",
                         linewidth=2)
                 ax.plot(params[id_sorted_params], low_bound[id_sorted_params],
                         '--b', linewidth=2)
@@ -857,70 +935,57 @@ class ImpactOfDependence(object):
 # =============================================================================
 # Setters
 # =============================================================================
-    def set_model_function(self, modelFunction):
-        """
-
-        """
-        assert callable(modelFunction),\
-            TypeError("The model function is not callable")
-        self._modelFunction = modelFunction
-
-    def set_input_variables(self, variables, correlation=None):
+    def set_correlated_variables(self, list_vars=None, matrix_bool=None):
         """
         Set of the variable distribution. They must be OpenTURNS distribution
         with a defined copula in it.
         """
-        assert isinstance(variables, (ot.Distribution,
-                                      ot.ComposedDistribution)),\
-            TypeError("The variables must be openturns Distribution objects")
-        self._input_dim = variables.getDimension()
-        self._copula = variables.getCopula()
-        self._copula_name = self._copula.getName()
-        self._input_variables = variables
-        self._corr_dim = self._input_dim * (self._input_dim - 1) / 2
+        if list_vars:
+            assert isinstance(list_vars, (list, np.ndarray)), \
+                TypeError('Unsupported type')
+            # Matrix of correlated variables
+            matrix_bool = np.identity(self._input_dim, dtype=bool)
 
-        # All variables are correlated
-        if not correlation:
-            self._n_corr_vars = self._corr_dim
-        # Some variables are correlated
-        else:
-            if isinstance(correlation, np.ndarray):
-                corr_bool = correlation
-                k = 0
-                corr_vars = []
-                corr_vars_id = []
-                for i in range(self._input_dim):
-                    for j in range(i + 1, self._input_dim):
-                        if corr_bool[i, j]:
-                            corr_vars.append(k)
-                            corr_vars_id.append([i, j])
-                        k += 1
-            elif isinstance(correlation, list):
-                n_corr = len(correlation)  # Number of correlated variables
-                corr_vars_id = correlation
-                # Matrix of correlated variables
-                corr_bool = np.identity(self._input_dim, dtype=bool)
-                # For each couple of correlated variables
-                for corr_i in correlation:
-                    # Verify if it's a couple
-                    assert len(corr_i) == 2,\
-                        ValueError("Correlation is between 2 variables...")
-                    # Make it true in the matrix
-                    corr_bool[corr_i[0], corr_i[1]] = True
-                    corr_bool[corr_i[1], corr_i[0]] = True
+            # For each couple of correlated variables
+            for corr_i in list_vars:
+                assert len(corr_i) == 2, \
+                    ValueError("Wrong number: %d obtained" % len(corr_i))
 
-                k = 0
-                corr_vars = []
-                for i in range(self._input_dim):
-                    for j in range(i + 1, self._input_dim):
-                        if corr_bool[i, j]:
-                            n_corr += 1
-                            corr_vars.append(k)
-                        k += 1
-            self._corr_matrix_bool = corr_bool
+                # Make it true in the matrix
+                matrix_bool[corr_i[0], corr_i[1]] = True
+                matrix_bool[corr_i[1], corr_i[0]] = True
+
+            k = 0
+            corr_vars = []
+            for i in range(self._input_dim):
+                for j in range(i + 1, self._input_dim):
+                    if matrix_bool[i, j]:
+                        corr_vars.append(k)
+                    k += 1
+
+            self._corr_matrix_bool = matrix_bool
             self._corr_vars = corr_vars
-            self._corr_vars_ids = corr_vars_id
+            self._corr_vars_ids = list_vars
             self._n_corr_vars = len(corr_vars)
+        elif matrix_bool:
+            assert isinstance(matrix_bool, np.ndarray), \
+                TypeError('Unsupported type')
+            k = 0
+            corr_vars = []
+            list_vars = []
+            for i in range(self._input_dim):
+                for j in range(i + 1, self._input_dim):
+                    if matrix_bool[i, j]:
+                        corr_vars.append(k)
+                        list_vars.append([i, j])
+                    k += 1
 
-        if self._copula_name == "NormalCopula":
-            self._corr_matrix = ot.CorrelationMatrix(self._input_dim)
+            self._corr_matrix_bool = matrix_bool
+            self._corr_vars = corr_vars
+            self._corr_vars_ids = list_vars
+            self._n_corr_vars = len(corr_vars)
+        else:  # All random variables are correlated
+            self._corr_matrix_bool = np.ones(self._input_dim, dtype=bool)
+            self._corr_vars = range(self._corr_dim)
+            self._corr_vars_ids = list(combinations(self._corr_vars, 2))
+            self._n_corr_vars = self._corr_dim
