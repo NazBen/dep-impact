@@ -15,6 +15,7 @@ n_dep_param = 100
 impact = ImpactOfDependence(add_function, marginals)
 impact.run(n_dep_param, n_input_sample=10)
 
-impact.compute_quantity("quantile", (0.05, 1))
+impact.compute_quantity("quantile", (0.05, "empirical"))
 
-print impact._output_quantity
+print impact.output_sample_.shape
+print impact.reshaped_output_sample_.shape

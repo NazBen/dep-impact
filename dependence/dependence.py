@@ -73,74 +73,6 @@ class ImpactOfDependence(object):
         self._output_quantity = None
         self._output_quantity_interval = None
 
-    @property
-    def model_func(self):
-        """The model function. Must be a callable.
-        """
-        return self._model_func
-
-    @model_func.setter
-    def model_func(self, func):
-        if callable(func):
-            self._model_func = func
-        else:
-            raise TypeError("The model function must be callable.")
-
-    @property
-    def margins(self):
-        """The PDF margins. List of :class:`~openturns.Distribution` objects.
-        """
-        return self._margins
-
-    @margins.setter
-    def margins(self, list_margins):
-        assert isinstance(list_margins, list), \
-            TypeError("Wrong parameter type")
-
-        for marginal in list_margins:
-            assert isinstance(marginal, ot.DistributionImplementation), \
-                TypeError("Wrong parameter type")
-
-        self._margins = list_margins
-        self._input_dim = len(list_margins)
-        self._corr_dim = self._input_dim * (self._input_dim - 1) / 2
-
-    @property
-    def copula_name(self):
-        """The copula name. Must be a string.
-        """
-        return self._copula_name
-
-    @copula_name.setter
-    def copula_name(self, name):
-        assert isinstance(name, str), \
-            TypeError("Copula name must be a string type.")
-        assert (name in COPULA_LIST), \
-            KeyError("Unknow copula")
-
-        self._copula_name = name
-        copula = getattr(ot, name)
-        self._copula = copula(self._input_dim)
-
-        # TODO: Find another way
-        if name == "NormalCopula":
-            self._corr_matrix = ot.CorrelationMatrix(self._input_dim)
-        else:
-            self._corr_matrix = None
-
-    @property
-    def rand_vars(self):
-        """The random variable describing the input joint density of the problem.
-        """
-        return self._rand_vars
-
-    @rand_vars.setter
-    def rand_vars(self, rand_vars):
-        assert isinstance(rand_vars, ot.ComposedDistribution), \
-            TypeError("The variables must be OpenTURNS Distributions.")
-
-        self._rand_vars = rand_vars
-
     @classmethod
     def from_data(cls, data_sample, dim, out_ID=0):
         """Load from data.
@@ -254,6 +186,17 @@ class ImpactOfDependence(object):
 
         from_init_sample : bool, optional (default=None)
             Not yet functionable. 
+
+        Attributes
+        ----------
+        input_sample_ : :class:`~numpy.ndarray`
+            The input sample
+
+        output_sample_ : :class:`~numpy.ndarray`
+            The output sample from the model.
+
+        all_params_ : :class:`~numpy.ndarray`
+            The dependence parameters associated to each output observation.
         """
         if seed: # Initialises the seed
             np.random.seed(seed)
@@ -261,6 +204,8 @@ class ImpactOfDependence(object):
 
         # Creates the sample of dependence parameters
         self._build_corr_sample(n_dep_param, fixed_grid, dep_measure)
+
+        # Creates the sample of input parameters
         self._build_input_sample(n_input_sample, from_init_sample)
 
         # Evaluates the input sample
@@ -273,8 +218,21 @@ class ImpactOfDependence(object):
             self._output_sample = self._all_output_sample[:, output_ID]
 
     def _build_corr_sample(self, n_param, fixed_grid, dep_measure):
-        """
-            Creates the sample of dependence parameters.
+        """Creates the sample of dependence parameters.
+        
+        Parameters
+        ----------
+        n_param : int
+            The number of dependence parameters.
+
+        fixed_grid : bool
+            The sampling of :math:`\mathbf X` is fixed or random.
+
+        dep_measure : string, optional (default="PearsonRho")
+            The dependence measure used in the problem to explore the dependence 
+            structures. Available dependence measures: 
+            - "PearsonRho": The Pearson Rho parameter. Also called linear correlation parameter.
+            - "KendallTau": The Tau Kendall parameter.
         """
         corr_dim = self._corr_dim
 
@@ -302,19 +260,26 @@ class ImpactOfDependence(object):
         else:
             raise NotImplementedError("Unkown dependence parameter")
 
-        self._params = Conversion.to_copula_parameter(self.copula_name, 
-                                                      meas_param, dep_measure)
         self._n_param = n_param
+        self._params = Conversion.to_copula_parameter(self.copula_name, 
+                                                      meas_param, dep_measure)        
 
     def _build_input_sample(self, n_input_sample, from_init_sample):
-        """
-            Create the observations for differents dependence parameters
+        """Creates the observations for differents dependence parameters.
+
+        Parameters
+        ----------        
+        n_input_sample : int
+            The number of observations in the sampling of :math:`\mathbf X`.
+        
+        from_init_sample : bool, optional (default=None)
+            Not yet functionable. 
         """
         n_sample = n_input_sample * self._n_param
         self._n_sample = n_sample
         self._n_input_sample = n_input_sample
         self._input_sample = np.empty((n_sample, self._input_dim))
-        self._list_param = np.empty((n_sample, self._corr_dim))
+        self._all_params = np.empty((n_sample, self._corr_dim))
 
         if from_init_sample:
             #            var_unif = ot.ComposedDistribution([ot.Uniform(0,
@@ -348,25 +313,17 @@ class ImpactOfDependence(object):
             self._input_sample[n_input_sample * i:n_input_sample * (i + 1), :] = tmp
 
             # As well for the dependence parameter
-            self._list_param[n_input_sample * i:n_input_sample * (i + 1), :] = \
+            self._all_params[n_input_sample * i:n_input_sample * (i + 1), :] = \
                 param
 
-    def get_reshaped_output_sample(self):
-        """
-        """
-        # Load the output sample and reshape it in a matrix
-        return self._output_sample.reshape((self._n_param, self._n_input_sample))
-
     def buildForest(self, n_jobs=8):
+        """Build a Quantile Random Forest to estimate conditional quantiles.
         """
-        Build a Quantile Random Forest to estimate conditional quantiles.
-        """
-        self._quantForest = QuantileForest(self._list_param,
+        self._quantForest = QuantileForest(self._all_params,
                                            self._output_sample, n_jobs=n_jobs)
 
     def compute_quantity(self, quantity_func, options, boostrap=False):
-        """
-        Compute the output quantity of interest.
+        """Compute the output quantity of interest.
         quantity_func: can be many things
             - a callable function that compute the quantity of interest
             given the output sample,
@@ -412,8 +369,7 @@ class ImpactOfDependence(object):
 
     def compute_probability(self, threshold, confidence_level=0.95,
                             operator="greater"):
-        """
-        Compute the probability of the current sample for each dependence
+        """Compute the probability of the current sample for each dependence
         parameter.
         """
         # Load the output sample and reshape it in a matrix
@@ -437,42 +393,50 @@ class ImpactOfDependence(object):
         self._probability = probability
         self._probability_interval = interval
 
-    def compute_quantiles(self, alpha, estimation_method):
-        """
+    def compute_quantiles(self, alpha, estimation_method="empirical"):
+        """Computes conditional quantiles.
+
         Compute the alpha-quantiles of the current sample for each dependence
         parameter.
+
+        Parameters
+        ----------
+        alpha : float
+            Probability of the quantile.
+
         """
-        # Empirical quantile
-        if estimation_method == 1:
-            # Loaded data
+        assert isinstance(estimation_method, str), \
+            TypeError("Method is not a string")
+
+        if estimation_method == "empirical":
             if self._load_data:
                 out_sample = np.zeros((self._n_param, self._n_input_sample))
                 for i, param in enumerate(self._params):
-                    id_param = np.where((self._list_param == param).all(axis=1))[0]
+                    id_param = np.where((self._all_params == param).all(axis=1))[0]
                     out_sample[i, :] = self._output_sample[id_param]
             else:
                 out_sample = self._output_sample.reshape((self._n_param,
                                                           self._n_input_sample))
+
             self._quantiles = np.percentile(out_sample, alpha * 100., axis=1)
-        # Quantile Random Forest
-        elif estimation_method == 2:
+        elif estimation_method == "randomforest":
             self.buildForest()
             self._quantiles = self._quantForest.compute_quantile(self._params, alpha)
         else:
-            raise Exception("Not done yet")
+            raise AttributeError("Unknow estimation method: %s" % estimation_method)
 
     def save_input_data(self, path=".", fname="inputSampleCop", ftype=".csv"):
         """
         """
         full_fname = path + '/' + fname + ftype
-        np.savetxt(full_fname, self._list_param)
+        np.savetxt(full_fname, self._all_params)
 
     def save_all_data(self, path=".", fname="full_data", ftype=".csv"):
         """
 
         """
         full_fname = path + '/' + fname + ftype
-        out = np.c_[self._list_param, self._input_sample, self._output_sample]
+        out = np.c_[self._all_params, self._input_sample, self._output_sample]
         np.savetxt(full_fname, out)
 
     def save_structured_all_data(self, input_names=[], output_names=[],
@@ -502,7 +466,7 @@ class ImpactOfDependence(object):
                 labels.append("y_%d" % (i + 1))
 
         full_fname = path + '/' + fname + ftype
-        out = np.c_[self._list_param, self._input_sample,
+        out = np.c_[self._all_params, self._input_sample,
                     self._all_output_sample]
         out_df = pd.DataFrame(out, columns=labels)
         out_df.to_csv(full_fname, index=False)
@@ -528,7 +492,7 @@ class ImpactOfDependence(object):
     def get_corresponding_sample(self, corr_value):
         """
         """
-        id_corr = np.where((self._list_param == corr_value).all(axis=1))[0]
+        id_corr = np.where((self._all_params == corr_value).all(axis=1))[0]
         x = self._input_sample[id_corr]
         y = self._output_sample[id_corr]
         return x, y
@@ -547,7 +511,7 @@ class ImpactOfDependence(object):
             id_corr = np.ones(self._n_sample, dtype=bool)
 
         else:
-            id_corr = np.where((self._list_param == corr_value).all(axis=1))[0]
+            id_corr = np.where((self._all_params == corr_value).all(axis=1))[0]
 
         if input_names:
             param_name = input_names
@@ -900,7 +864,7 @@ class ImpactOfDependence(object):
 
             # Add the sample (warning: it can be costly if too many points)
             if with_sample:
-                ax.plot(self._list_param, self._output_sample, 'k.')
+                ax.plot(self._all_params, self._output_sample, 'k.')
 
             # Print a line to distinguish the difference with the independence
             # case
@@ -1023,3 +987,101 @@ class ImpactOfDependence(object):
             self._corr_vars = range(self._corr_dim)
             self._corr_vars_ids = list(combinations(self._corr_vars, 2))
             self._n_corr_vars = self._corr_dim
+
+    @property
+    def model_func(self):
+        """The model function. Must be a callable.
+        """
+        return self._model_func
+
+    @model_func.setter
+    def model_func(self, func):
+        if callable(func):
+            self._model_func = func
+        else:
+            raise TypeError("The model function must be callable.")
+
+    @property
+    def margins(self):
+        """The PDF margins. List of :class:`~openturns.Distribution` objects.
+        """
+        return self._margins
+
+    @margins.setter
+    def margins(self, list_margins):
+        assert isinstance(list_margins, list), \
+            TypeError("Wrong parameter type")
+
+        for marginal in list_margins:
+            assert isinstance(marginal, ot.DistributionImplementation), \
+                TypeError("Wrong parameter type")
+
+        self._margins = list_margins
+        self._input_dim = len(list_margins)
+        self._corr_dim = self._input_dim * (self._input_dim - 1) / 2
+
+    @property
+    def copula_name(self):
+        """The copula name. Must be a string.
+        """
+        return self._copula_name
+
+    @copula_name.setter
+    def copula_name(self, name):
+        assert isinstance(name, str), \
+            TypeError("Copula name must be a string type.")
+        assert (name in COPULA_LIST), \
+            KeyError("Unknow copula")
+
+        self._copula_name = name
+        copula = getattr(ot, name)
+        self._copula = copula(self._input_dim)
+
+        # TODO: Find another way
+        if name == "NormalCopula":
+            self._corr_matrix = ot.CorrelationMatrix(self._input_dim)
+        else:
+            self._corr_matrix = None
+
+    @property
+    def rand_vars(self):
+        """The random variable describing the input joint density of the problem.
+        """
+        return self._rand_vars
+
+    @rand_vars.setter
+    def rand_vars(self, rand_vars):
+        assert isinstance(rand_vars, ot.ComposedDistribution), \
+            TypeError("The variables must be OpenTURNS Distributions.")
+
+        self._rand_vars = rand_vars
+    @property
+    def output_sample_(self):
+        return self._output_sample
+
+    @output_sample_.setter
+    def output_sample_(self, value):
+        raise EnvironmentError("You cannot set this variable")
+
+    @property
+    def input_sample_(self):
+        return self._input_sample
+
+    @input_sample_.setter
+    def input_sample_(self, value):
+        raise EnvironmentError("You cannot set this variable")
+
+    @property
+    def all_params_(self):
+        return self._all_params
+    @all_params_.setter
+    def all_params_(self, value):
+        raise EnvironmentError("You cannot set this variable")
+    
+    @property
+    def reshaped_output_sample_(self):
+        return self._output_sample.reshape((self._n_param, self._n_input_sample))
+
+    @reshaped_output_sample_.setter
+    def reshaped_output_sample_(self, value):
+        raise EnvironmentError("You cannot set this variable")
