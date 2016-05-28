@@ -273,7 +273,8 @@ class ImpactOfDependence(object):
         else:
             raise NotImplementedError("Unkown dependence parameter")
 
-        self._params = self._to_copula_params(meas_param, dep_measure)
+        self._params = Conversion.to_copula_parameter(self.copula_name, 
+                                                      meas_param, dep_measure)
         self._n_param = n_param
 
     def _build_input_sample(self, n_input_sample, from_init_sample):
@@ -326,29 +327,6 @@ class ImpactOfDependence(object):
         """
         # Load the output sample and reshape it in a matrix
         return self._output_sample.reshape((self._n_param, self._n_input_sample))
-
-    def _to_copula_params(self, measure_param, dep_measure):
-        """
-        """
-        if dep_measure == "KendallTau":
-            if self._copula_name == "NormalCopula":
-                copula_param = Conversion.\
-                    NormalCopula.fromKendallToPearson(measure_param)
-
-            elif self._copula_name == "InverseClaytonCopula":
-                copula_param = Conversion.\
-                    ClaytonCopula.fromKendallToPearson(measure_param)
-        elif dep_measure == "PearsonRho":
-            if self._copula_name == "NormalCopula":
-                copula_param = measure_param
-            elif self._copula_name == "InverseClaytonCopula":
-                copula_param = Conversion.\
-                    ClaytonCopula.fromPearsonToKendall(measure_param)
-        else:
-            raise ValueError("Unknow Dependence Measure")
-
-        return copula_param
-
 
     def buildForest(self, n_jobs=8):
         """
