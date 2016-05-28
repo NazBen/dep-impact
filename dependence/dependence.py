@@ -43,8 +43,10 @@ class ImpactOfDependence(object):
     ----------
     model_func : callable
         The evaluation model such as :math:`Y = g(\mathbf X)`.
+
     margins : list of :class:`~openturns.Distribution`
-        The probabilistic distribution :math:`f_{X_i}` for :math:`i \in 1 \dots d` of the margins
+        The probabilistic distribution :math:`f_{X_i}` for :math:`i \in 1 \dots d` of the margins.
+
     copula_name : string, optional (default="NormalCopula")
         The copula name $C$ to describes the dependence structure.
         The copula name must be supported and in the list of available copulas.
@@ -221,10 +223,37 @@ class ImpactOfDependence(object):
 
         return cls.from_data(data.values, dim)
 
-    def run(self, n_dep_param, n_input_sample=1, fixed_grid=False, 
+    def run(self, n_dep_param, n_input_sample, fixed_grid=False, 
             dep_measure="PearsonRho", output_ID=0, seed=None, from_init_sample=False):
-        """
-            Run the problem. It creates the sample and evaluate it.
+        """Run the problem. It creates and evaluates the sample from different
+        dependence parameter values.
+        
+        Parameters
+        ----------
+        n_dep_param : int
+            The number of dependence parameters.
+
+        n_input_sample : int
+            The number of observations in the sampling of :math:`\mathbf X`.
+
+        fixed_grid : bool, optional (default=False)
+            The sampling of :math:`\mathbf X` is fixed or random.
+
+        dep_measure : string, optional (default="PearsonRho")
+            The dependence measure used in the problem to explore the dependence 
+            structures. Available dependence measures: 
+            - "PearsonRho": The Pearson Rho parameter. Also called linear correlation parameter.
+            - "KendallTau": The Tau Kendall parameter.
+
+        output_ID : int, optional (default=0)
+            The index of the output if the output is multidimensional.
+
+        seed : int or None, optional (default=None)
+            If int, ``seed`` is the seed used by the random number generator;
+            If None, ``seed`` is the seed is random.
+
+        from_init_sample : bool, optional (default=None)
+            Not yet functionable. 
         """
         if seed: # Initialises the seed
             np.random.seed(seed)
