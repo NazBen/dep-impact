@@ -14,6 +14,10 @@ from pyquantregForest import QuantileForest
 
 COPULA_LIST = ["NormalCopula", "ClaytonCopula", "GumbelCopula"]
 
+"""
+TODO: Makes the load and save available for custom number of correlated variables.
+"""
+
 
 def bootstrap(data, num_samples, statistic, alpha, args):
     """Returns bootstrap estimate of 100.0*(1-alpha) CI for statistic."""
@@ -22,8 +26,8 @@ def bootstrap(data, num_samples, statistic, alpha, args):
     samples = data[idx]
     stat = np.sort(statistic(samples, 1, *args))
 
-    return (stat[int((alpha/2.0)*num_samples)],
-            stat[int((1-alpha/2.0)*num_samples)])
+    return (stat[int((alpha / 2.0) * num_samples)],
+            stat[int((1 - alpha / 2.0) * num_samples)])
 
 
 class ImpactOfDependence(object):
@@ -39,6 +43,14 @@ class ImpactOfDependence(object):
     ----------
     model_func : callable
         The evaluation model such as :math:`Y = g(\mathbf X)`.
+    margins : list of :class:`~openturns.Distribution`
+        The probabilistic distribution :math:`f_{X_i}` for :math:`i \in 1 \dots d` of the margins
+    copula_name : string, optional (default="NormalCopula")
+        The copula name $C$ to describes the dependence structure.
+        The copula name must be supported and in the list of available copulas.
+
+    Attributes
+    ----------
     rand_vars : :class:`~openturns.ComposedDistribution`
         The random variable :math:`\mathbf X` describing the marginals and
         the copula.
@@ -61,19 +73,21 @@ class ImpactOfDependence(object):
 
     @property
     def model_func(self):
+        """The model function. Must be a callable.
+        """
         return self._model_func
 
     @model_func.setter
     def model_func(self, func):
         if callable(func):
             self._model_func = func
-        elif func is None:
-            self._model_func = None
         else:
             raise TypeError("The model function must be callable.")
 
     @property
     def margins(self):
+        """The PDF margins. List of :class:`~openturns.Distribution` objects.
+        """
         return self._margins
 
     @margins.setter
@@ -91,6 +105,8 @@ class ImpactOfDependence(object):
 
     @property
     def copula_name(self):
+        """The copula name. Must be a string.
+        """
         return self._copula_name
 
     @copula_name.setter
@@ -112,6 +128,8 @@ class ImpactOfDependence(object):
 
     @property
     def rand_vars(self):
+        """The random variable describing the input joint density of the problem.
+        """
         return self._rand_vars
 
     @rand_vars.setter
@@ -123,14 +141,27 @@ class ImpactOfDependence(object):
 
     @classmethod
     def from_data(cls, data_sample, dim, out_ID=0):
+        """Load from data.
+
+        This method initialise the class using built data from previous simulations.
+       
+        Parameters
+        ----------
+        data_sample : :class:`~numpy.ndarray`
+            The sample of built data.
+        dim : int
+            The input dimension.
+        out_ID : int, optional (default=0)
+            The output ID to take care of when multiple output are available.
         """
-        Load from raw data.
-        """
+        # Creates the class object from ghost parameters.
         def foo(): return None
         obj = cls(foo, ot.ComposedDistribution())
+        
         corr_dim = dim * (dim - 1) / 2
-        obj._input_dim = dim
         obj._corr_dim = corr_dim
+        obj._input_dim = dim
+
         obj._list_param = data_sample[:, :corr_dim]
         obj._n_sample = obj._list_param.shape[0]
         obj._input_sample = data_sample[:, corr_dim:corr_dim + dim]
@@ -138,8 +169,9 @@ class ImpactOfDependence(object):
         obj._output_sample = obj._all_output_sample[:, out_ID]
         obj._params = pd.DataFrame(obj._list_param).drop_duplicates().values
         obj._n_param = obj._params.shape[0]
-        obj._n_obs_sample = obj._n_sample / obj._n_param
+        obj._n_input_sample = obj._n_sample / obj._n_param
         obj._load_data = True
+
         return obj
 
     @classmethod
@@ -189,22 +221,21 @@ class ImpactOfDependence(object):
 
         return cls.from_data(data.values, dim)
 
-    def run(self, n_sample, fixed_grid=True, dep_meas="PearsonRho",
-            n_obs_sample=1, output_ID=0, seed=None, from_init_sample=False):
+    def run(self, n_dep_param, n_input_sample=1, fixed_grid=False, 
+            dep_measure="PearsonRho", output_ID=0, seed=None, from_init_sample=False):
         """
             Run the problem. It creates the sample and evaluate it.
         """
-        # Set the seed for numpy and openturns
-        if seed:
+        if seed: # Initialises the seed
             np.random.seed(seed)
             ot.RandomGenerator.SetSeed(seed)
 
-        # Creation of the sample for all the correlation parameters
-        self._create_sample(n_sample, fixed_grid, dep_meas, n_obs_sample,
-                            from_init_sample)
+        # Creates the sample of dependence parameters
+        self._build_corr_sample(n_dep_param, fixed_grid, dep_measure)
+        self._build_input_sample(n_input_sample, from_init_sample)
 
-        # Evaluation of the input sample
-        self._all_output_sample = self._modelFunction(self._input_sample)
+        # Evaluates the input sample
+        self._all_output_sample = self.model_func(self._input_sample)
 
         # If the output dimension is one
         if self._all_output_sample.shape[0] == self._all_output_sample.size:
@@ -212,11 +243,89 @@ class ImpactOfDependence(object):
         else:
             self._output_sample = self._all_output_sample[:, output_ID]
 
+    def _build_corr_sample(self, n_param, fixed_grid, dep_measure):
+        """
+            Creates the sample of dependence parameters.
+        """
+        corr_dim = self._corr_dim
+
+        # We convert the dependence measure to the copula parameter
+        if dep_measure == "KendallTau":
+            if fixed_grid:
+                grid_tau = get_grid_tau(n_param, corr_dim, -1., 1.)
+                meas_param = np.vstack(grid_tau).reshape(corr_dim, -1).T
+            else:  # Random grid
+                tmp_margs = [ot.Uniform(-1., 1.)] * corr_dim
+                tmp_otvar = ot.ComposedDistribution(tmp_margs)
+                meas_param = np.array(tmp_otvar.getSample(n_param))
+                
+        elif dep_measure == "PearsonRho":
+            if fixed_grid:
+                assert self._n_corr_vars == 1, \
+                    NotImplementedError("Fixed Grid does not work for high dim")
+                # TODO: fix that shit!
+                meas_param = get_grid_rho(self._corr_matrix_bool, n_param)
+                # Once again, we change the number of param to have a grid
+                # with the same number of parameters in each dim
+                n_param = meas_param.shape[0]
+            else:  # Random grid
+                meas_param = create_random_correlation_param(self._corr_matrix_bool, n_param)
+        else:
+            raise NotImplementedError("Unkown dependence parameter")
+
+        self._params = self._to_copula_params(meas_param, dep_measure)
+        self._n_param = n_param
+
+    def _build_input_sample(self, n_input_sample, from_init_sample):
+        """
+            Create the observations for differents dependence parameters
+        """
+        n_sample = n_input_sample * self._n_param
+        self._n_sample = n_sample
+        self._n_input_sample = n_input_sample
+        self._input_sample = np.empty((n_sample, self._input_dim))
+        self._list_param = np.empty((n_sample, self._corr_dim))
+
+        if from_init_sample:
+            #            var_unif = ot.ComposedDistribution([ot.Uniform(0,
+            #            1)]*dim)
+            #            unif_sample =
+            #            np.asarray(var_unif.getSample(n_obs_sample))
+            #            for i, var in enumerate(self._input_variables):
+            #                var.compute
+            init_sample = self._input_variables.getSample(n_input_sample)
+            self._sample_init = init_sample
+
+        # We loop for each copula param and create observations for each
+        for i, param in enumerate(self._params):  # For each copula parameter
+            if from_init_sample:
+                # TODO : do it better
+                if self._corr_dim == 1:
+                    self._corr_matrix[0, 1] = param
+                elif self._corr_dim == 3:
+                    self._corr_matrix[0, 1] = param[0]
+                    self._corr_matrix[0, 2] = param[1]
+                    self._corr_matrix[1, 2] = param[2]
+                B = self._corr_matrix.computeCholesky()
+                tmp = np.asarray(init_sample * B)
+            else:
+                tmp = self._get_sample(param, n_input_sample)
+
+            if self._copula_name == "InverseClaytonCopula":
+                tmp[:, 0] = -tmp[:, 0]
+
+            # We save the input sample
+            self._input_sample[n_input_sample * i:n_input_sample * (i + 1), :] = tmp
+
+            # As well for the dependence parameter
+            self._list_param[n_input_sample * i:n_input_sample * (i + 1), :] = \
+                param
+
     def get_reshaped_output_sample(self):
         """
         """
         # Load the output sample and reshape it in a matrix
-        return self._output_sample.reshape((self._n_param, self._n_obs_sample))
+        return self._output_sample.reshape((self._n_param, self._n_input_sample))
 
     def _to_copula_params(self, measure_param, dep_measure):
         """
@@ -240,85 +349,6 @@ class ImpactOfDependence(object):
 
         return copula_param
 
-    def _create_sample(self, n_sample, fixed_grid, dep_measure, n_obs_sample,
-                       from_init_sample):
-        """
-            Create the observations for differents dependence parameters
-        """
-        dim = self._input_dim  # Dimension of input variables
-        corr_dim = self._corr_dim  # Dimension of correlation parameters
-
-        # We need the same number of observation for each sample
-        n_sample -= n_sample % n_obs_sample  # We take off the rest
-        n_param = n_sample / n_obs_sample  # Number of correlation parameters
-
-        # We convert the dependence measure to the copula parameter
-        if dep_measure == "KendallTau":
-            if fixed_grid:
-                grid_tau = get_grid_tau(n_param, corr_dim, tauMin, tauMax)
-                meas_param = np.vstack(grid_tau).reshape(corr_dim, -1).T
-            else:  # Random grid
-                tmp = [ot.Uniform(-1., 1.)] * corr_dim
-                tmpVar = ot.ComposedDistribution(tmp)
-                meas_param = np.array(tmpVar.getSample(n_param))
-                
-        elif dep_measure == "PearsonRho":
-            if fixed_grid:  # Fixed grid
-                assert self._n_corr_vars == 1,  "Fixed Grid does not work for high dim"
-                # TODO: fix that shit!
-                meas_param = get_grid_rho(self._corr_matrix_bool, n_param)
-                # Once again, we change the number of param to have a grid
-                # with the same number of parameters in each dim
-                n_param = meas_param.shape[0]
-                # TODO : The total number of param may certainly be different
-                # than the initial one.  Find a way to adapt it...
-                n_sample = n_param * n_obs_sample
-            else:  # Random grid
-                meas_param = create_random_correlation_param(
-                    self._corr_matrix_bool, n_param)
-        params = self._to_copula_params(meas_param, dep_measure)
-
-        self._n_param = n_param
-        self._n_sample = n_sample
-        self._n_obs_sample = n_obs_sample
-        self._params = params
-        self._input_sample = np.empty((n_sample, dim))  # Input sample
-        self._list_param = np.empty((n_sample, corr_dim))  # Input Corr sample
-
-        if from_init_sample:
-            #            var_unif = ot.ComposedDistribution([ot.Uniform(0, 1)]*dim)
-            #            unif_sample = np.asarray(var_unif.getSample(n_obs_sample))
-            #            for i, var in enumerate(self._input_variables):
-            #                var.compute
-            init_sample = self._input_variables.getSample(n_obs_sample)
-            self._sample_init = init_sample
-
-        # We loop for each copula param and create observations for each
-        for i, param in enumerate(params):  # For each copula parameter
-            # TODO : do it better
-            if from_init_sample:
-                if self._corr_dim == 1:
-                    self._corr_matrix[0, 1] = param
-                elif self._corr_dim == 3:
-                    self._corr_matrix[0, 1] = param[0]
-                    self._corr_matrix[0, 2] = param[1]
-                    self._corr_matrix[1, 2] = param[2]
-                B = self._corr_matrix.computeCholesky()
-                tmp = np.asarray(init_sample * B)
-            else:
-                tmp = self._get_sample(param, n_obs_sample)
-
-            # TODO : find a way to create a "real" class InverseClayton...
-            #if self._copula_name == "InverseClaytonCopula":
-                #tmp[:, 0] = -tmp[:, 0]
-
-            # We save the input sample
-            self._input_sample[n_obs_sample *
-                               i:n_obs_sample * (i + 1), :] = tmp
-
-            # As well for the parameters (for dependence measure)
-            self._list_param[n_obs_sample * i:n_obs_sample * (i + 1), :] = \
-                params[i]
 
     def buildForest(self, n_jobs=8):
         """
@@ -358,7 +388,7 @@ class ImpactOfDependence(object):
                     self._probability_interval
         elif callable(quantity_func):
             out_sample = self._output_sample.reshape((self._n_param,
-                                                      self._n_obs_sample))
+                                                      self._n_input_sample))
             result = quantity_func(out_sample, *options)
             if isinstance(result, tuple):
                 self._output_quantity = result[0]
@@ -381,21 +411,18 @@ class ImpactOfDependence(object):
         """
         # Load the output sample and reshape it in a matrix
         out_sample = self._output_sample.reshape((self._n_param,
-                                                  self._n_obs_sample))
+                                                  self._n_input_sample))
 
         # Compute the empirical probability of the sample
         if operator == "greater":
-            probability = ((out_sample >= threshold) *
-                           1.).sum(axis=1) / self._n_obs_sample
+            probability = ((out_sample >= threshold) * 1.).sum(axis=1) / self._n_input_sample
         elif operator == "lower":
-            probability = ((out_sample < threshold) *
-                           1.).sum(axis=1) / self._n_obs_sample
+            probability = ((out_sample < threshold) * 1.).sum(axis=1) / self._n_input_sample
 
         # Confidence interval by TCL theorem.
-        tmp = np.sqrt(probability * (1. - probability) / self._n_obs_sample)
+        tmp = np.sqrt(probability * (1. - probability) / self._n_input_sample)
         # Quantile of a Gaussian distribution
-        q_normal = np.asarray(
-            ot.Normal().computeQuantile( (1 + confidence_level) / 2.))
+        q_normal = np.asarray(ot.Normal().computeQuantile((1 + confidence_level) / 2.))
 
         # Half interval
         interval = q_normal * tmp
@@ -412,20 +439,18 @@ class ImpactOfDependence(object):
         if estimation_method == 1:
             # Loaded data
             if self._load_data:
-                out_sample = np.zeros((self._n_param, self._n_obs_sample))
+                out_sample = np.zeros((self._n_param, self._n_input_sample))
                 for i, param in enumerate(self._params):
-                    id_param = np.where(
-                        (self._list_param == param).all(axis=1))[0]
+                    id_param = np.where((self._list_param == param).all(axis=1))[0]
                     out_sample[i, :] = self._output_sample[id_param]
             else:
                 out_sample = self._output_sample.reshape((self._n_param,
-                                                          self._n_obs_sample))
+                                                          self._n_input_sample))
             self._quantiles = np.percentile(out_sample, alpha * 100., axis=1)
         # Quantile Random Forest
         elif estimation_method == 2:
             self.buildForest()
-            self._quantiles = self._quantForest.compute_quantile(
-                self._params, alpha)
+            self._quantiles = self._quantForest.compute_quantile(self._params, alpha)
         else:
             raise Exception("Not done yet")
 
@@ -490,8 +515,8 @@ class ImpactOfDependence(object):
         else:
             self._copula.setParametersCollection(param)
 
-        self._input_variables.setCopula(self._copula)
-        return np.asarray(self._input_variables.getSample(n_obs))
+        self._rand_vars.setCopula(self._copula)
+        return np.asarray(self._rand_vars.getSample(n_obs))
 
     def get_corresponding_sample(self, corr_value):
         """
@@ -543,8 +568,7 @@ class ImpactOfDependence(object):
             if self._input_dim == 2:
                 id_quant = np.where(self._params == corr_value)[0]
             else:
-                id_quant = np.where(
-                    (self._params == corr_value).all(axis=1))[0]
+                id_quant = np.where((self._params == corr_value).all(axis=1))[0]
             quant = self._quantiles[id_quant]
 
         if self._input_dim == 2:  # If input dimension is 2
@@ -707,7 +731,8 @@ class ImpactOfDependence(object):
                     #ax.plot(r1, r2, up_bound, 'r.')
                     #ax.plot(r1, r2, low_bound, 'r.')
 
-                # Print a line to distinguish the difference with the independence
+                # Print a line to distinguish the difference with the
+                # independence
                 # case
                 if print_indep:
                     p1_min, p1_max = r1.min(), r1.max()
@@ -723,8 +748,10 @@ class ImpactOfDependence(object):
                         q_u = np.zeros(p1.shape) + indep_quant_u_bound
                         ax.plot_wireframe(p1, p2, q_l, color="red")
                         ax.plot_wireframe(p1, p2, q_u, color="red")
-                    #    ax.plot([p_min, p_max], [indep_quant_l_bound] * 2, "r--")
-                    #    ax.plot([p_min, p_max], [indep_quant_u_bound] * 2, "r--")
+                    #    ax.plot([p_min, p_max], [indep_quant_l_bound] * 2,
+                    #    "r--")
+                    #    ax.plot([p_min, p_max], [indep_quant_u_bound] * 2,
+                    #    "r--")
                 # Labels
                 i, j = self._corr_vars_ids[0][0], self._corr_vars_ids[0][1]
                 ax.set_xlabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
@@ -781,7 +808,7 @@ class ImpactOfDependence(object):
             ax.set_zlabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
 
         # Other figure stuffs
-        title = r"%s - $n = %d$" % (quantity_name, self._n_obs_sample)
+        title = r"%s - $n = %d$" % (quantity_name, self._n_input_sample)
         ax.set_title(title, fontsize=18)
         ax.axis("tight")
         fig.tight_layout()
@@ -985,7 +1012,7 @@ class ImpactOfDependence(object):
             self._corr_vars_ids = list_vars
             self._n_corr_vars = len(corr_vars)
         else:  # All random variables are correlated
-            self._corr_matrix_bool = np.ones(self._input_dim, dtype=bool)
+            self._corr_matrix_bool = np.ones((self._input_dim, self._input_dim), dtype=bool)
             self._corr_vars = range(self._corr_dim)
             self._corr_vars_ids = list(combinations(self._corr_vars, 2))
             self._n_corr_vars = self._corr_dim
