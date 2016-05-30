@@ -10,6 +10,7 @@ from itertools import combinations
 
 from conversion import Conversion
 from correlation import get_grid_rho, create_random_correlation_param
+from result import DependenceResult
 from pyquantregForest import QuantileForest
 
 COPULA_LIST = ["NormalCopula", "ClaytonCopula", "GumbelCopula"]
@@ -371,7 +372,22 @@ class ImpactOfDependence(object):
         """Compute the probability of the current sample for each dependence
         parameter.
         """
+        assert isinstance(threshold, float), \
+            TypeError("Threshold should be a float")
+        assert isinstance(confidence_level, float), \
+            TypeError("Confidence Level should be a float")
+        if confidence_level <= 0. or confidence_level >= 1.:
+            raise ValueError("Confidence level should be a probability")
+        assert isinstance(estimation_method, str), \
+            TypeError("Method name should be a string")
+
         out_sample = self.reshaped_output_sample_
+        params = {'Quantity Name': 'probability',
+                  'Threshold': threshold,
+                  'Confidence Level': confidence_level,
+                  'Estimation Method': estimation_method,
+                  'Operator': operator
+                  }
 
         if estimation_method == "empirical":
             # Compute the empirical probability of the sample
@@ -383,18 +399,13 @@ class ImpactOfDependence(object):
             tmp = np.sqrt(probability * (1. - probability) / self._n_input_sample)
             # Quantile of a Gaussian distribution
             q_normal = np.asarray(ot.Normal().computeQuantile((1 + confidence_level) / 2.))
-
-            # Confidence interval
-            interval = q_normal * tmp
+            interval = q_normal * tmp  # Confidence interval
         else:
             raise AttributeError("Method does not exist")
 
-        self._probability = probability
-        self._probability_interval = interval
-        self._probability_confidence_level = confidence_level
-        self._quantity_name = "probability"
+        return DependenceResult(params, self, probability, interval)
 
-    def compute_quantiles(self, alpha, estimation_method="empirical"):
+    def compute_quantiles(self, alpha, confidence_level=0.95, estimation_method="empirical"):
         """Computes conditional quantiles.
 
         Compute the alpha-quantiles of the current sample for each dependence
@@ -407,6 +418,17 @@ class ImpactOfDependence(object):
         """
         assert isinstance(estimation_method, str), \
             TypeError("Method name should be a string")
+        assert isinstance(alpha, float), \
+            TypeError("Method name should be a float")
+        if alpha <= 0. or alpha >= 1.:
+            raise ValueError("Quantile probability should be a probability")
+
+        params = {'Quantity Name': 'quantile',
+                  'Quantile Probability': alpha,
+                  'Confidence Level': confidence_level,
+                  'Estimation Method': estimation_method
+                  }
+        interval = None
 
         if estimation_method == "empirical":
             if self._load_data:
@@ -415,15 +437,16 @@ class ImpactOfDependence(object):
                     id_param = np.where((self._all_params == param).all(axis=1))[0]
                     out_sample[i, :] = self._output_sample[id_param]
             else:
-                out_sample = self._output_sample.reshape((self._n_param,
-                                                          self._n_input_sample))
+                out_sample = self.reshaped_output_sample_
 
-            self._quantiles = np.percentile(out_sample, alpha * 100., axis=1)
+            quantiles = np.percentile(out_sample, alpha * 100., axis=1)
         elif estimation_method == "randomforest":
             self.buildForest()
             self._quantiles = self._quantForest.compute_quantile(self._params, alpha)
         else:
             raise AttributeError("Unknow estimation method: %s" % estimation_method)
+
+        return DependenceResult(params, self, quantiles, interval)
 
     def save_input_data(self, path=".", fname="inputSampleCop", ftype=".csv"):
         """

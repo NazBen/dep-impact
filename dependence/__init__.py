@@ -1,3 +1,3 @@
-from .dependence import ImpactOfDependence
+﻿from .dependence import ImpactOfDependence, DependenceResult
 
-__all__ = ["ImpactOfDependence"]
+__all__ = ["ImpactOfDependence", "DependenceResult"]
