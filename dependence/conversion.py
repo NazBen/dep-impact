@@ -14,13 +14,13 @@ class Conversion:
                 copula_param = Conversion.\
                     NormalCopula.fromKendallToPearson(measure_param)
 
-            elif copula_name == "InverseClaytonCopula":
+            elif copula_name in ['ClaytonCopula', 'InverseClaytonCopula']:
                 copula_param = Conversion.\
                     ClaytonCopula.fromKendallToPearson(measure_param)
         elif dep_measure == "PearsonRho":
             if copula_name == "NormalCopula":
                 copula_param = measure_param
-            elif copula_name == "InverseClaytonCopula":
+            elif copula_name in ['ClaytonCopula', 'InverseClaytonCopula']:
                 copula_param = Conversion.\
                     ClaytonCopula.fromPearsonToKendall(measure_param)
         else:

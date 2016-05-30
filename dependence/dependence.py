@@ -252,6 +252,7 @@ class ImpactOfDependence(object):
                     NotImplementedError("Fixed Grid does not work for high dim")
                 # TODO: fix that shit!
                 meas_param = get_grid_rho(self._corr_matrix_bool, n_param)
+                print meas_param.max()
                 # Once again, we change the number of param to have a grid
                 # with the same number of parameters in each dim
                 n_param = meas_param.shape[0]
@@ -972,9 +973,9 @@ class DependenceResult(object):
         if dep_meas == "KendallTau":
             param_name = "\\tau"
         elif dep_meas == "PearsonRho":
-            param_name = "\\rho"
+            param_name = "\\rho^{Pearson}"
         elif dep_meas == "CopulaParam":
-            param_name = "Copula Parameter"
+            param_name = "\\rho"
         else:
             raise("Undefined param")
 
@@ -1093,6 +1094,39 @@ class DependenceResult(object):
 
                 ax.set_zlabel(quantity_name)
 
+        elif n_corr_vars == 3:  # For 2 correlation parameters
+            color_scale = quantity
+            cm = plt.get_cmap(color_map)
+            c_min, c_max = min(color_scale), max(color_scale)
+            cNorm = matplotlib.colors.Normalize(vmin=c_min, vmax=c_max)
+            scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=cm)
+
+            x, y, z = params[:, 0], params[:, 1], params[:, 2]
+
+            ax = fig.add_subplot(111, projection='3d')
+            ax.scatter(x, y, z, c=scalarMap.to_rgba(color_scale), s=40)
+            scalarMap.set_array(color_scale)
+            cbar = fig.colorbar(scalarMap)
+            if print_indep:
+                pos = cbar.ax.get_position()
+                cbar.ax.set_aspect('auto')
+                ax2 = cbar.ax.twinx()
+                ax2.set_ylim([c_min, c_max])
+                width = 0.05
+                pos.x0 = pos.x1 - width
+                ax2.set_position(pos)
+                cbar.ax.set_position(pos)
+                n_label = 5
+                labels_val = np.linspace(c_min, c_max, n_label).tolist()
+                labels = [str(round(labels_val[i], 2)) for i in range(n_label)]
+                labels_val.append(indep_quant)
+                labels.append("Indep=%.2f" % indep_quant)
+                ax2.set_yticks([indep_quant])
+                ax2.set_yticklabels(["Indep"])
+
+            ax.set_xlabel("$%s_{12}$" % (param_name), fontsize=14)
+            ax.set_ylabel("$%s_{13}$" % (param_name), fontsize=14)
+            ax.set_zlabel("$%s_{23}$" % (param_name), fontsize=14)
         # Other figure stuffs
         title = r"%s - $n = %d$" % (quantity_name, obj._n_input_sample)
         ax.set_title(title, fontsize=18)
@@ -1102,10 +1136,10 @@ class DependenceResult(object):
 
         # Saving the figure
         if savefig:
+            fname = './'
             if type(savefig) is str:
-                fname = savefig + '/'
+                fname += savefig
             else:
-                fname = "./"
-            fname += "fig" + quantity_name
+                fname += "fig" + quantity_name
             fig.savefig(fname + ".pdf")
             fig.savefig(fname + ".png")
