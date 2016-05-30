@@ -70,8 +70,8 @@ class ImpactOfDependence(object):
         # Initialize the variables
         self._all_output_sample = None
         self._output_sample = None
-        self._output_quantity = None
-        self._output_quantity_interval = None
+        self._quantity = None
+        self._quantity_interval = None
 
     @classmethod
     def from_data(cls, data_sample, dim, out_ID=0):
@@ -319,7 +319,7 @@ class ImpactOfDependence(object):
     def buildForest(self, n_jobs=8):
         """Build a Quantile Random Forest to estimate conditional quantiles.
         """
-        self._quantForest = QuantileForest(self._all_params,
+        self._quantForest = QuantileForest(self._all_params, 
                                            self._output_sample, n_jobs=n_jobs)
 
     def compute_quantity(self, quantity_func, options, boostrap=False):
@@ -336,62 +336,63 @@ class ImpactOfDependence(object):
         if isinstance(quantity_func, str):
             if quantity_func == "quantile":
                 self.compute_quantiles(*options)
-                self._output_quantity = self._quantiles
+                self._quantity = self._quantiles
                 if boostrap:
                     raise Exception("Not implemented yet")
                 else:
-                    self._output_quantity_interval = None
-                    self._output_quantity_up_bound = None
-                    self._output_quantity_low_bound = None
+                    self._quantity_interval = None
+                    self._quantity_up_bound = None
+                    self._quantity_low_bound = None
             if quantity_func == "probability":
                 self.compute_probability(*options)
-                self._output_quantity = self._probability
-                self._output_quantity_interval = self._probability_interval
-                self._output_quantity_up_bound = self._probability + self._probability_interval
-                self._output_quantity_low_bound = self._probability - \
+                self._quantity = self._probability
+                self._quantity_interval = self._probability_interval
+                self._quantity_up_bound = self._probability + self._probability_interval
+                self._quantity_low_bound = self._probability - \
                     self._probability_interval
-        elif callable(quantity_func):
-            out_sample = self._output_sample.reshape((self._n_param,
-                                                      self._n_input_sample))
+        elif callable(quantity_func):            
+            out_sample = self.reshaped_output_sample_
             result = quantity_func(out_sample, *options)
             if isinstance(result, tuple):
-                self._output_quantity = result[0]
-                self._output_quantity_interval = result[1]
-                self._output_quantity_up_bound = result[0] + result[1] / 2.
-                self._output_quantity_low_bound = result[0] - result[1] / 2.
+                self._quantity = result[0]
+                self._quantity_interval = result[1]
+                self._quantity_up_bound = result[0] + result[1] / 2.
+                self._quantity_low_bound = result[0] - result[1] / 2.
             else:
-                self._output_quantity = result[0]
-                self._output_quantity_interval = None
-                self._output_quantity_up_bound = None
-                self._output_quantity_low_bound = None
+                self._quantity = result[0]
+                self._quantity_interval = None
+                self._quantity_up_bound = None
+                self._quantity_low_bound = None
         else:
             raise TypeError("Unknow input variable quantity_func")
 
-    def compute_probability(self, threshold, confidence_level=0.95,
-                            operator="greater"):
+    def compute_probability(self, threshold, confidence_level=0.95, 
+                            estimation_method="empirical", operator="greater"):
         """Compute the probability of the current sample for each dependence
         parameter.
         """
-        # Load the output sample and reshape it in a matrix
-        out_sample = self._output_sample.reshape((self._n_param,
-                                                  self._n_input_sample))
+        out_sample = self.reshaped_output_sample_
 
-        # Compute the empirical probability of the sample
-        if operator == "greater":
-            probability = ((out_sample >= threshold) * 1.).sum(axis=1) / self._n_input_sample
-        elif operator == "lower":
-            probability = ((out_sample < threshold) * 1.).sum(axis=1) / self._n_input_sample
+        if estimation_method == "empirical":
+            # Compute the empirical probability of the sample
+            if operator == "greater":
+                probability = ((out_sample >= threshold).astype(float)).mean(axis=1)
+            elif operator == "lower":
+                probability = ((out_sample < threshold).astype(float)).mean(axis=1)
 
-        # Confidence interval by TCL theorem.
-        tmp = np.sqrt(probability * (1. - probability) / self._n_input_sample)
-        # Quantile of a Gaussian distribution
-        q_normal = np.asarray(ot.Normal().computeQuantile((1 + confidence_level) / 2.))
+            tmp = np.sqrt(probability * (1. - probability) / self._n_input_sample)
+            # Quantile of a Gaussian distribution
+            q_normal = np.asarray(ot.Normal().computeQuantile((1 + confidence_level) / 2.))
 
-        # Half interval
-        interval = q_normal * tmp
+            # Confidence interval
+            interval = q_normal * tmp
+        else:
+            raise AttributeError("Method does not exist")
 
         self._probability = probability
         self._probability_interval = interval
+        self._probability_confidence_level = confidence_level
+        self._quantity_name = "probability"
 
     def compute_quantiles(self, alpha, estimation_method="empirical"):
         """Computes conditional quantiles.
@@ -403,10 +404,9 @@ class ImpactOfDependence(object):
         ----------
         alpha : float
             Probability of the quantile.
-
         """
         assert isinstance(estimation_method, str), \
-            TypeError("Method is not a string")
+            TypeError("Method name should be a string")
 
         if estimation_method == "empirical":
             if self._load_data:
@@ -599,32 +599,33 @@ class ImpactOfDependence(object):
         else:
             return None
 
-    def draw_quantity(self, quantity_name="Quantity",
-                      dep_meas="PearsonRho", figsize=(10, 6),
+    def draw_quantity(self, dep_meas="CopulaParam", figsize=(10, 6),
                       savefig=False, color_map="jet"):
         """
         The quantity must be compute before
         """
         assert self._n_corr_vars in [1, 2, 3],\
             EnvironmentError("Cannot draw quantiles for dim > 3")
-        assert self._output_quantity is not None,\
+        assert self._quantity is not None,\
             Exception("Quantity must be computed first")
 
         if dep_meas == "KendallTau":
             param_name = "\\tau"
-
         elif dep_meas == "PearsonRho":
             param_name = "\\rho"
+        elif dep_meas == "CopulaParam":
+            param_name = "Copula Parameter"
         else:
             raise("Undefined param")
 
         # Dependence parameters
         params = self._params[:, self._corr_vars]
         # Output quantities of interest
-        quantity = self._output_quantity
+        quantity = self._quantity
+        quantity_name = self._quantity_name
         # Output quantities of interest confidence intervals
-        low_bound = self._output_quantity_low_bound
-        up_bound = self._output_quantity_up_bound
+        low_bound = self._quantity_low_bound
+        up_bound = self._quantity_up_bound
 
         # Find the almost independent configuration
         max_eps = 1.E-1  # Tolerence for the independence param
