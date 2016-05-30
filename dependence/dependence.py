@@ -7,11 +7,10 @@ import matplotlib.cm as cmx
 from mpl_toolkits.mplot3d import Axes3D
 import pandas as pd
 from itertools import combinations
-
-from conversion import Conversion
-from correlation import get_grid_rho, create_random_correlation_param
-from result import DependenceResult
 from pyquantregForest import QuantileForest
+
+from .conversion import Conversion
+from .correlation import get_grid_rho, create_random_correlation_param
 
 COPULA_LIST = ["NormalCopula", "ClaytonCopula", "GumbelCopula"]
 
@@ -382,7 +381,7 @@ class ImpactOfDependence(object):
             TypeError("Method name should be a string")
 
         out_sample = self.reshaped_output_sample_
-        params = {'Quantity Name': 'probability',
+        params = {'Quantity Name': 'Probability',
                   'Threshold': threshold,
                   'Confidence Level': confidence_level,
                   'Estimation Method': estimation_method,
@@ -423,7 +422,7 @@ class ImpactOfDependence(object):
         if alpha <= 0. or alpha >= 1.:
             raise ValueError("Quantile probability should be a probability")
 
-        params = {'Quantity Name': 'quantile',
+        params = {'Quantity Name': 'Quantile',
                   'Quantile Probability': alpha,
                   'Confidence Level': confidence_level,
                   'Estimation Method': estimation_method
@@ -622,203 +621,6 @@ class ImpactOfDependence(object):
         else:
             return None
 
-    def draw_quantity(self, dep_meas="CopulaParam", figsize=(10, 6),
-                      savefig=False, color_map="jet"):
-        """
-        The quantity must be compute before
-        """
-        assert self._n_corr_vars in [1, 2, 3],\
-            EnvironmentError("Cannot draw quantiles for dim > 3")
-        assert self._quantity is not None,\
-            Exception("Quantity must be computed first")
-
-        if dep_meas == "KendallTau":
-            param_name = "\\tau"
-        elif dep_meas == "PearsonRho":
-            param_name = "\\rho"
-        elif dep_meas == "CopulaParam":
-            param_name = "Copula Parameter"
-        else:
-            raise("Undefined param")
-
-        # Dependence parameters
-        params = self._params[:, self._corr_vars]
-        # Output quantities of interest
-        quantity = self._quantity
-        quantity_name = self._quantity_name
-        # Output quantities of interest confidence intervals
-        low_bound = self._quantity_low_bound
-        up_bound = self._quantity_up_bound
-
-        # Find the almost independent configuration
-        max_eps = 1.E-1  # Tolerence for the independence param
-        
-        if self._n_corr_vars == 1:
-            id_indep = (np.abs(params)).argmin()
-        else:
-            id_indep = np.abs(params).sum(axis=1).argmin()
-
-        # Independent parameter and quantile
-        indep_param = params[id_indep]
-        indep_quant = quantity[id_indep]
-        if low_bound is not None:
-            indep_quant_l_bound = low_bound[id_indep]
-            indep_quant_u_bound = up_bound[id_indep]
-
-        # If it's greater than the tolerence, no need to show it
-        if np.sum(indep_param) > max_eps:
-            print_indep = False
-        else:
-            print_indep = True
-
-        fig = plt.figure(figsize=figsize)  # Create the fig object
-
-        if self._n_corr_vars == 1:  # One used correlation parameter
-            ax = fig.add_subplot(111)  # Create the axis object
-
-            # Ids of the sorted parameters for the plot
-            id_sorted_params = np.argsort(params, axis=0).ravel()
-
-            # Plot of the quantile conditionally to the correlation parameter
-            ax.plot(params[id_sorted_params], quantity[id_sorted_params],
-                    'ob', label=quantity_name, linewidth=2)
-
-            # Plot the confidence bounds
-            if low_bound is not None:
-                ax.plot(params[id_sorted_params], up_bound[id_sorted_params],
-                        '--b', label=quantity_name + " confidence",
-                        linewidth=2)
-                ax.plot(params[id_sorted_params], low_bound[id_sorted_params],
-                        '--b', linewidth=2)
-
-            # Print a line to distinguish the difference with the independence
-            # case
-            if print_indep:
-                p_min, p_max = params.min(), params.max()
-                ax.plot([p_min, p_max], [indep_quant] * 2, "r-",
-                        label="Independence")
-                if low_bound is not None:
-                    ax.plot([p_min, p_max], [indep_quant_l_bound] * 2, "r--")
-                    ax.plot([p_min, p_max], [indep_quant_u_bound] * 2, "r--")
-
-            i, j = self._corr_vars_ids[0][0], self._corr_vars_ids[0][1]
-            ax.set_xlabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
-            ax.set_ylabel(quantity_name)
-            ax.legend(loc="best")
-
-        elif self._n_corr_vars == 2:  # For 2 correlation parameters
-            view = "3d"
-            if view == "3d":
-                # Dependence parameters values
-                r1, r2 = params[:, 0], params[:, 1]
-
-                # 3d ax
-                ax = fig.add_subplot(111, projection='3d')
-                # Draw the point with the colors
-                ax.scatter(r1, r2, quantity, s=40)
-
-                # Plot the confidence bounds
-                if low_bound is not None:
-                    ax.plot_trisurf(r1, r2, low_bound,
-                                    color="red", alpha=0.05, linewidth=1)
-                    ax.plot_trisurf(r1, r2, up_bound, color="red",
-                                    alpha=0.05, linewidth=1)
-                    #ax.plot(r1, r2, up_bound, 'r.')
-                    #ax.plot(r1, r2, low_bound, 'r.')
-
-                # Print a line to distinguish the difference with the
-                # independence
-                # case
-                if print_indep:
-                    p1_min, p1_max = r1.min(), r1.max()
-                    p2_min, p2_max = r2.min(), r2.max()
-                    p1_ = np.linspace(p1_min, p1_max, 3)
-                    p2_ = np.linspace(p2_min, p2_max, 3)
-                    p1, p2 = np.meshgrid(p1_, p2_)
-                    q = np.zeros(p1.shape) + indep_quant
-                    ax.plot_wireframe(p1, p2, q, color="red")
-
-                    if low_bound is not None:
-                        q_l = np.zeros(p1.shape) + indep_quant_l_bound
-                        q_u = np.zeros(p1.shape) + indep_quant_u_bound
-                        ax.plot_wireframe(p1, p2, q_l, color="red")
-                        ax.plot_wireframe(p1, p2, q_u, color="red")
-                    #    ax.plot([p_min, p_max], [indep_quant_l_bound] * 2,
-                    #    "r--")
-                    #    ax.plot([p_min, p_max], [indep_quant_u_bound] * 2,
-                    #    "r--")
-                # Labels
-                i, j = self._corr_vars_ids[0][0], self._corr_vars_ids[0][1]
-                ax.set_xlabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
-                i, j = self._corr_vars_ids[1][0], self._corr_vars_ids[1][1]
-                ax.set_ylabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
-
-                ax.set_zlabel(quantity_name)
-
-        elif self._n_corr_vars == 3:  # For 2 correlation parameters
-            # Colormap configuration
-            color_scale = quantity
-            cm = plt.get_cmap(color_map)
-            c_min, c_max = min(color_scale), max(color_scale)
-            c_norm = matplotlib.colors.Normalize(vmin=c_min, vmax=c_max)
-            scalarMap = cmx.ScalarMappable(norm=c_norm, cmap=cm)
-
-            # Dependence parameters values
-            r1, r2, r3 = params[:, 0], params[:, 1], params[:, 2]
-
-            # 3d ax
-            ax = fig.add_subplot(111, projection='3d')
-
-            # Draw the point with the colors
-            ax.scatter(r1, r2, r3, c=scalarMap.to_rgba(color_scale), s=40)
-
-            # Create colorbar
-            scalarMap.set_array(color_scale)
-            cbar = fig.colorbar(scalarMap)
-
-            # If we print the independence values value on the colorbar
-            if print_indep:
-                pos = cbar.ax.get_position()
-                cbar.ax.set_aspect('auto')
-                ax2 = cbar.ax.twinx()
-                ax2.set_ylim([c_min, c_max])
-                width = 0.05
-                pos.x0 = pos.x1 - width
-                ax2.set_position(pos)
-                cbar.ax.set_position(pos)
-                n_label = 5
-                labels_val = np.linspace(c_min, c_max, n_label).tolist()
-                labels = [str(round(labels_val[i], 2)) for i in range(n_label)]
-                labels_val.append(indep_quant)
-                labels.append("Indep=%.2f" % indep_quant)
-                ax2.set_yticks([indep_quant])
-                ax2.set_yticklabels(["Indep"])
-
-            # Labels
-            i, j = self._corr_vars_ids[0][0], self._corr_vars_ids[0][1]
-            ax.set_xlabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
-            i, j = self._corr_vars_ids[1][0], self._corr_vars_ids[1][1]
-            ax.set_ylabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
-            i, j = self._corr_vars_ids[2][0], self._corr_vars_ids[2][1]
-            ax.set_zlabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
-
-        # Other figure stuffs
-        title = r"%s - $n = %d$" % (quantity_name, self._n_input_sample)
-        ax.set_title(title, fontsize=18)
-        ax.axis("tight")
-        fig.tight_layout()
-        plt.show(block=False)
-
-        # Saving the figure
-        if savefig:
-            if type(savefig) is str:
-                fname = savefig + '/'
-            else:
-                fname = "./"
-            fname += "fig" + quantity_name
-            fig.savefig(fname + ".pdf")
-            fig.savefig(fname + ".png")
-
     def draw_quantiles(self, alpha, estimation_method, n_per_dim=10,
                        dep_meas="KendallTau", with_sample=False,
                        figsize=(10, 6), savefig=False, color_map="jet"):
@@ -1009,7 +811,7 @@ class ImpactOfDependence(object):
         else:  # All random variables are correlated
             self._corr_matrix_bool = np.ones((self._input_dim, self._input_dim), dtype=bool)
             self._corr_vars = range(self._corr_dim)
-            self._corr_vars_ids = list(combinations(self._corr_vars, 2))
+            self._corr_vars_ids = list(combinations(range(self._input_dim), 2))
             self._n_corr_vars = self._corr_dim
 
     @property
@@ -1109,3 +911,201 @@ class ImpactOfDependence(object):
     @reshaped_output_sample_.setter
     def reshaped_output_sample_(self, value):
         raise EnvironmentError("You cannot set this variable")
+
+class DependenceResult(object):
+    def __init__(self, params, dependence_object, quantity, confidence_interval=None):
+        self.params = params
+        self.quantity = quantity
+        self.confidence_interval = confidence_interval
+        self.dependence = dependence_object
+
+        assert isinstance(dependence_object, ImpactOfDependence), \
+            'Variable must be an ImpactOfDependence object'
+
+    @property
+    def dependence(self):
+        return self._dependence
+
+    @dependence.setter
+    def dependence(self, obj):
+        assert isinstance(obj, ImpactOfDependence), \
+            'Variable must be an ImpactOfDependence object'
+        self._dependence = obj
+
+    @property
+    def params(self):
+        return self._params
+
+    @params.setter
+    def params(self, value):
+        assert isinstance(value, dict), \
+            TypeError("It should be a dictionnary")
+
+        self._quantity_name = value['Quantity Name']
+        self._confidence_level = value['Confidence Level']
+        self._estimation_method = value['Estimation Method']
+
+        if self._quantity_name == 'Probability':
+            self._threshold = value['Threshold']
+            self._operator = value['Operator']
+        elif self._quantity_name == 'Quantile':
+            self._alpha = value['Quantile Probability']
+
+    def __str__(self):
+        to_print = '%s: %s\n' % (self._quantity_name, self.quantity)
+        if self.confidence_interval is not None:
+            to_print += '%s confidence interval at %d %%: %s' % \
+                (self._quantity_name, self._confidence_level*100, self.confidence_interval)
+        return to_print
+
+    def draw(self, dep_meas="CopulaParam", figsize=(10, 6),
+             savefig=False, color_map="jet"):
+        """
+        The quantity must be compute before
+        """
+        obj = self._dependence
+        n_corr_vars = obj._n_corr_vars
+
+        assert n_corr_vars in [1, 2, 3],\
+            EnvironmentError("Cannot draw quantiles for dim > 3")
+
+        if dep_meas == "KendallTau":
+            param_name = "\\tau"
+        elif dep_meas == "PearsonRho":
+            param_name = "\\rho"
+        elif dep_meas == "CopulaParam":
+            param_name = "Copula Parameter"
+        else:
+            raise("Undefined param")
+
+        # Dependence parameters
+        params = obj._params[:, obj._corr_vars]
+        # Output quantities of interest
+        quantity = self.quantity
+        interval = self.confidence_interval
+        quantity_name = self._quantity_name
+
+        # Find the almost independent configuration
+        max_eps = 1.E-1  # Tolerence for the independence param
+        
+        if n_corr_vars == 1:
+            id_indep = (np.abs(params)).argmin()
+        else:
+            id_indep = np.abs(params).sum(axis=1).argmin()
+
+        # Independent parameter and quantile
+        indep_param = params[id_indep]
+        indep_quant = quantity[id_indep]
+
+        if interval is not None:
+            low_bound = quantity - interval
+            up_bound = quantity + interval
+            indep_quant_l_bound = low_bound[id_indep]
+            indep_quant_u_bound = up_bound[id_indep]
+
+        # If it's greater than the tolerence, no need to show it
+        if np.sum(indep_param) > max_eps:
+            print_indep = False
+        else:
+            print_indep = True
+
+        fig = plt.figure(figsize=figsize)  # Create the fig object
+
+        if n_corr_vars == 1:  # One used correlation parameter
+            ax = fig.add_subplot(111)  # Create the axis object
+
+            # Ids of the sorted parameters for the plot
+            id_sorted_params = np.argsort(params, axis=0).ravel()
+
+            # Plot of the quantile conditionally to the correlation parameter
+            ax.plot(params[id_sorted_params], quantity[id_sorted_params],
+                    'ob', label=quantity_name, linewidth=2)
+
+            # Plot the confidence bounds
+            if interval is not None:
+                ax.plot(params[id_sorted_params], up_bound[id_sorted_params],
+                        '--b', label=quantity_name + " confidence",
+                        linewidth=2)
+                ax.plot(params[id_sorted_params], low_bound[id_sorted_params],
+                        '--b', linewidth=2)
+
+            # Print a line to distinguish the difference with the independence
+            # case
+            if print_indep:
+                p_min, p_max = params.min(), params.max()
+                ax.plot([p_min, p_max], [indep_quant] * 2, "r-",
+                        label="Independence")
+                if interval is not None:
+                    ax.plot([p_min, p_max], [indep_quant_l_bound] * 2, "r--")
+                    ax.plot([p_min, p_max], [indep_quant_u_bound] * 2, "r--")
+
+            i, j = obj._corr_vars_ids[0][0], obj._corr_vars_ids[0][1]
+            ax.set_xlabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
+            ax.set_ylabel(quantity_name)
+            ax.legend(loc="best")
+
+        elif n_corr_vars == 2:  # For 2 correlation parameters
+            view = "3d"
+            if view == "3d":
+                # Dependence parameters values
+                r1, r2 = params[:, 0], params[:, 1]
+
+                # 3d ax
+                ax = fig.add_subplot(111, projection='3d')
+                # Draw the point with the colors
+                ax.scatter(r1, r2, quantity, s=40)
+
+                # Plot the confidence bounds
+                if interval is not None:
+                    ax.plot_trisurf(r1, r2, low_bound,
+                                    color="red", alpha=0.05, linewidth=1)
+                    ax.plot_trisurf(r1, r2, up_bound, color="red",
+                                    alpha=0.05, linewidth=1)
+                    #ax.plot(r1, r2, up_bound, 'r.')
+                    #ax.plot(r1, r2, low_bound, 'r.')
+
+                # Print a line to distinguish the difference with the
+                # independence
+                # case
+                if print_indep:
+                    p1_min, p1_max = r1.min(), r1.max()
+                    p2_min, p2_max = r2.min(), r2.max()
+                    p1_ = np.linspace(p1_min, p1_max, 3)
+                    p2_ = np.linspace(p2_min, p2_max, 3)
+                    p1, p2 = np.meshgrid(p1_, p2_)
+                    q = np.zeros(p1.shape) + indep_quant
+                    ax.plot_wireframe(p1, p2, q, color="red")
+
+                    if interval is not None:
+                        q_l = np.zeros(p1.shape) + indep_quant_l_bound
+                        q_u = np.zeros(p1.shape) + indep_quant_u_bound
+                        ax.plot_wireframe(p1, p2, q_l, color="red")
+                        ax.plot_wireframe(p1, p2, q_u, color="red")
+                    #    ax.plot([p_min, p_max], [indep_quant_l_bound] * 2,
+                    #    "r--")
+                    #    ax.plot([p_min, p_max], [indep_quant_u_bound] * 2,
+                    #    "r--")
+                # Labels
+                i, j = obj._corr_vars_ids[0][0], obj._corr_vars_ids[0][1]
+                ax.set_xlabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
+                i, j = obj._corr_vars_ids[1][0], obj._corr_vars_ids[1][1]
+                ax.set_ylabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
+
+                ax.set_zlabel(quantity_name)
+
+        # Other figure stuffs
+        title = r"%s - $n = %d$" % (quantity_name, obj._n_input_sample)
+        ax.set_title(title, fontsize=18)
+        ax.axis("tight")
+        fig.tight_layout()
+        plt.show(block=False)
+
+        # Saving the figure
+        if savefig:
+            if type(savefig) is str:
+                fname = savefig + '/'
+            else:
+                fname = "./"
+            fname += "fig" + quantity_name
+            fig.savefig(fname + ".pdf")
+            fig.savefig(fname + ".png")
