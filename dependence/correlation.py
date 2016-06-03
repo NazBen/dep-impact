@@ -3,6 +3,8 @@ import random
 import openturns as ot
 from pyDOE import lhs
 
+from conversion import Conversion
+
 """
 TODO :
     - Make the classes in Cython for better performances??
@@ -120,6 +122,68 @@ def create_random_correlation_param_previous(dim, n=1, sampling="monte-carlo"):
         return list_rho.ravel()
     else:
         return list_rho
+        
+def create_random_kendall_tau(corr_variables, n=1, sampling="monte-carlo", 
+                              is_normal=False):
+    """
+    Using acceptation reject...
+
+    corr_variables: the matrix to defined the variables that are correlated
+    """
+
+    dim = corr_variables.shape[0]
+    corr_dim = dim * (dim - 1) / 2
+    corr_vars = []  # Correlated variables
+    k = 0
+    for i in range(dim):
+        for j in range(i+1, dim):
+            # If the variables are correlated,
+            # we add the correlation ID in the list
+            if corr_variables[i, j]:
+                corr_vars.append(k)
+            k += 1
+    n_corr_vars = len(corr_vars)
+    
+    # Array of correlation parameters
+    list_tau = np.zeros((n, corr_dim), dtype=np.float)
+    
+    if not is_normal and n_corr_vars > 1:
+        raise NotImplementedError("You cannot yet sample kendal tau parameters for non gaussian copulas for more than 2 correlated variables")
+
+    for i in range(n): # For each parameter
+        condition = True
+        # Stop when the matrix is definite semi positive
+        while condition:
+            if sampling == "monte-carlo":
+                u = np.random.uniform(-1., 1., n_corr_vars)
+            elif sampling == "lhs":
+                u = (lhs(n_corr_vars, samples=1)*2. - 1.).ravel()
+            else:
+                raise ValueError("Unknow sampling strategy")
+
+            if is_normal:
+                u = Conversion.NormalCopula.fromKendallToParam(u)
+                
+            if n_corr_vars == corr_dim:
+                rho = u
+            else:
+                rho = np.zeros(corr_dim)
+                rho[corr_vars] = u
+
+            if check_params(rho, dim):
+                condition = False
+            
+        list_tau[i, :] = Conversion.NormalCopula.fromParamToKendall(rho)
+        
+    if n == 1:
+        return list_tau.ravel()
+    else:
+        return list_tau
+#
+#dim = 3
+#corr_vars = np.ones((dim, dim))
+#print create_random_kendall_tau(corr_vars, is_normal=True)
+
 
 def create_random_correlation_param(corr_variables, n=1, sampling="monte-carlo"):
     """
@@ -228,7 +292,7 @@ def get_grid_rho(corr_variables, n):
     if n_corr_vars == 1:  # Easy
         grid = np.linspace(-1., 1., n + 1, endpoint=False)[1:].reshape(n, 1)
     else:  # Not that easy...
-        raise Exception('Not implemented for dim > 1')
+        raise NotImplementedError('Not implemented for dim > 1')
 
     list_rho[:, corr_vars] = grid
     

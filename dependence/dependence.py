@@ -10,7 +10,7 @@ from itertools import combinations
 from pyquantregForest import QuantileForest
 
 from .conversion import Conversion
-from .correlation import get_grid_rho, create_random_correlation_param
+from .correlation import get_grid_rho, create_random_correlation_param, create_random_kendall_tau
 
 COPULA_LIST = ["NormalCopula", "ClaytonCopula", "GumbelCopula"]
 
@@ -63,7 +63,7 @@ class ImpactOfDependence(object):
         self.model_func = model_func
         self.margins = margins
         self.copula_name = copula_name
-        
+
         self.rand_vars = ot.ComposedDistribution(self._margins, self._copula)
         self.set_correlated_variables()
 
@@ -78,7 +78,7 @@ class ImpactOfDependence(object):
         """Load from data.
 
         This method initialise the class using built data from previous simulations.
-       
+
         Parameters
         ----------
         data_sample : :class:`~numpy.ndarray`
@@ -91,7 +91,7 @@ class ImpactOfDependence(object):
         # Creates the class object from ghost parameters.
         def foo(): return None
         obj = cls(foo, ot.ComposedDistribution())
-        
+
         corr_dim = dim * (dim - 1) / 2
         obj._corr_dim = corr_dim
         obj._input_dim = dim
@@ -155,11 +155,11 @@ class ImpactOfDependence(object):
 
         return cls.from_data(data.values, dim)
 
-    def run(self, n_dep_param, n_input_sample, fixed_grid=False, 
+    def run(self, n_dep_param, n_input_sample, fixed_grid=False,
             dep_measure="PearsonRho", output_ID=0, seed=None, from_init_sample=False):
         """Run the problem. It creates and evaluates the sample from different
         dependence parameter values.
-        
+
         Parameters
         ----------
         n_dep_param : int
@@ -198,7 +198,7 @@ class ImpactOfDependence(object):
         all_params_ : :class:`~numpy.ndarray`
             The dependence parameters associated to each output observation.
         """
-        if seed: # Initialises the seed
+        if seed:  # Initialises the seed
             np.random.seed(seed)
             ot.RandomGenerator.SetSeed(seed)
 
@@ -219,7 +219,7 @@ class ImpactOfDependence(object):
 
     def _build_corr_sample(self, n_param, fixed_grid, dep_measure):
         """Creates the sample of dependence parameters.
-        
+
         Parameters
         ----------
         n_param : int
@@ -238,32 +238,35 @@ class ImpactOfDependence(object):
 
         # We convert the dependence measure to the copula parameter
         if dep_measure == "KendallTau":
-            if fixed_grid:
-                grid_tau = get_grid_tau(n_param, corr_dim, -1., 1.)
-                meas_param = np.vstack(grid_tau).reshape(corr_dim, -1).T
+            if fixed_grid:                
+                assert self._n_corr_vars == 1, \
+                    NotImplementedError(
+                        "Fixed Grid does not work for high dim")
+                meas_param = get_grid_rho(self._corr_matrix_bool, n_param)                    
             else:  # Random grid
-                tmp_margs = [ot.Uniform(-1., 1.)] * corr_dim
-                tmp_otvar = ot.ComposedDistribution(tmp_margs)
-                meas_param = np.array(tmp_otvar.getSample(n_param))
-                
+                is_normal = True if self._copula_name == "NormalCopula" else False
+                meas_param = create_random_kendall_tau(self._corr_matrix_bool, 
+                                                       n_param, is_normal=is_normal)
+
         elif dep_measure == "PearsonRho":
             if fixed_grid:
                 assert self._n_corr_vars == 1, \
-                    NotImplementedError("Fixed Grid does not work for high dim")
-                # TODO: fix that shit!
+                    NotImplementedError(
+                        "Fixed Grid does not work for high dim")
+                # TODO: fix that
                 meas_param = get_grid_rho(self._corr_matrix_bool, n_param)
-                print meas_param.max()
-                # Once again, we change the number of param to have a grid
-                # with the same number of parameters in each dim
-                n_param = meas_param.shape[0]
             else:  # Random grid
-                meas_param = create_random_correlation_param(self._corr_matrix_bool, n_param)
+                meas_param = create_random_correlation_param(
+                    self._corr_matrix_bool, n_param)
+        elif dep_measure == "SpearmanRho":
+            raise NotImplementedError("Not yet implemented")
         else:
-            raise NotImplementedError("Unkown dependence parameter")
+            raise AttributeError("Unkown dependence parameter")
+            
 
+        self._meas_param = meas_param
         self._n_param = n_param
-        self._params = Conversion.to_copula_parameter(self.copula_name, 
-                                                      meas_param, dep_measure)        
+        self._params = self._copula_converter.to_copula_parameter(meas_param, dep_measure)
 
     def _build_input_sample(self, n_input_sample, from_init_sample):
         """Creates the observations for differents dependence parameters.
@@ -272,7 +275,7 @@ class ImpactOfDependence(object):
         ----------        
         n_input_sample : int
             The number of observations in the sampling of :math:`\mathbf X`.
-        
+
         from_init_sample : bool, optional (default=None)
             Not yet functionable. 
         """
@@ -311,7 +314,8 @@ class ImpactOfDependence(object):
                 tmp[:, 0] = -tmp[:, 0]
 
             # We save the input sample
-            self._input_sample[n_input_sample * i:n_input_sample * (i + 1), :] = tmp
+            self._input_sample[n_input_sample *
+                               i:n_input_sample * (i + 1), :] = tmp
 
             # As well for the dependence parameter
             self._all_params[n_input_sample * i:n_input_sample * (i + 1), :] = \
@@ -320,7 +324,7 @@ class ImpactOfDependence(object):
     def buildForest(self, n_jobs=8):
         """Build a Quantile Random Forest to estimate conditional quantiles.
         """
-        self._quantForest = QuantileForest(self._all_params, 
+        self._quantForest = QuantileForest(self._all_params,
                                            self._output_sample, n_jobs=n_jobs)
 
     def compute_quantity(self, quantity_func, options, boostrap=False):
@@ -351,7 +355,7 @@ class ImpactOfDependence(object):
                 self._quantity_up_bound = self._probability + self._probability_interval
                 self._quantity_low_bound = self._probability - \
                     self._probability_interval
-        elif callable(quantity_func):            
+        elif callable(quantity_func):
             out_sample = self.reshaped_output_sample_
             result = quantity_func(out_sample, *options)
             if isinstance(result, tuple):
@@ -367,7 +371,7 @@ class ImpactOfDependence(object):
         else:
             raise TypeError("Unknow input variable quantity_func")
 
-    def compute_probability(self, threshold, confidence_level=0.95, 
+    def compute_probability(self, threshold, confidence_level=0.95,
                             estimation_method="empirical", operator="greater"):
         """Compute the probability of the current sample for each dependence
         parameter.
@@ -390,22 +394,27 @@ class ImpactOfDependence(object):
                   }
 
         if estimation_method == "empirical":
-            # Compute the empirical probability of the sample
+            # Computes the empirical probability of the sample
             if operator == "greater":
-                probability = ((out_sample >= threshold).astype(float)).mean(axis=1)
+                probability = (
+                    (out_sample > threshold).astype(float)).mean(axis=1)
             elif operator == "lower":
-                probability = ((out_sample < threshold).astype(float)).mean(axis=1)
+                probability = (
+                    (out_sample <= threshold).astype(float)).mean(axis=1)
 
-            tmp = np.sqrt(probability * (1. - probability) / self._n_input_sample)
+            tmp = np.sqrt(probability * (1. - probability) /
+                          self._n_input_sample)
             # Quantile of a Gaussian distribution
-            q_normal = np.asarray(ot.Normal().computeQuantile((1 + confidence_level) / 2.))
+            q_normal = np.asarray(ot.Normal().computeQuantile(
+                (1 + confidence_level) / 2.))
             interval = q_normal * tmp  # Confidence interval
         else:
             raise AttributeError("Method does not exist")
 
         return DependenceResult(params, self, probability, interval)
 
-    def compute_quantiles(self, alpha, confidence_level=0.95, estimation_method="empirical"):
+    def compute_quantiles(self, alpha, confidence_level=0.95,
+                          estimation_method="empirical"):
         """Computes conditional quantiles.
 
         Compute the alpha-quantiles of the current sample for each dependence
@@ -434,7 +443,8 @@ class ImpactOfDependence(object):
             if self._load_data:
                 out_sample = np.zeros((self._n_param, self._n_input_sample))
                 for i, param in enumerate(self._params):
-                    id_param = np.where((self._all_params == param).all(axis=1))[0]
+                    id_param = np.where(
+                        (self._all_params == param).all(axis=1))[0]
                     out_sample[i, :] = self._output_sample[id_param]
             else:
                 out_sample = self.reshaped_output_sample_
@@ -442,9 +452,11 @@ class ImpactOfDependence(object):
             quantiles = np.percentile(out_sample, alpha * 100., axis=1)
         elif estimation_method == "randomforest":
             self.buildForest()
-            self._quantiles = self._quantForest.compute_quantile(self._params, alpha)
+            self._quantiles = self._quantForest.compute_quantile(
+                self._params, alpha)
         else:
-            raise AttributeError("Unknow estimation method: %s" % estimation_method)
+            raise AttributeError(
+                "Unknow estimation method: %s" % estimation_method)
 
         return DependenceResult(params, self, quantiles, interval)
 
@@ -562,7 +574,8 @@ class ImpactOfDependence(object):
             if self._input_dim == 2:
                 id_quant = np.where(self._params == corr_value)[0]
             else:
-                id_quant = np.where((self._params == corr_value).all(axis=1))[0]
+                id_quant = np.where(
+                    (self._params == corr_value).all(axis=1))[0]
             quant = self._quantiles[id_quant]
 
         if self._input_dim == 2:  # If input dimension is 2
@@ -622,141 +635,6 @@ class ImpactOfDependence(object):
         else:
             return None
 
-    def draw_quantiles(self, alpha, estimation_method, n_per_dim=10,
-                       dep_meas="KendallTau", with_sample=False,
-                       figsize=(10, 6), savefig=False, color_map="jet"):
-        """
-
-        """
-        assert self._n_corr_vars in [1, 3], "Cannot draw quantiles for dim > 3"
-
-        self.compute_quantiles(alpha, estimation_method)
-
-        if dep_meas == "KendallTau":
-            param_name = "\\tau"
-            param_min, param_max = self._tauMin, self._tauMax
-            grid_func = get_grid_tau
-
-        elif dep_meas == "PearsonRho":
-            param_name = "\\rho"
-            param_min, param_max = self._rhoMin, self._rhoMax
-            grid_func = get_grid_rho
-        else:
-            raise("Undefined param")
-
-        # If t's empirical
-        if estimation_method == 1:
-            # We take only the used correlated variables
-            listParam = self._params[:, self._corr_vars]
-            # And all the associated quantiles
-            quantiles = self._quantiles
-
-        # Quantile Random forest
-        elif estimation_method == 2:
-            # We recreate a grid for the regression
-            listParam = grid_func(n_per_dim, self._corr_dim, param_min,
-                                  param_max, all_sample=False)
-            # And we compute the quantiles for each point of the grid
-            quantiles = self._quantForest.computeQuantile(listParam, alpha)
-
-        # Find the almost independent configuration
-        max_eps = 1.E-1  # Tolerence for the independence param
-        if self._n_corr_vars == 1:
-            id_indep = (np.abs(listParam)).argmin()
-        else:
-            id_indep = np.abs(listParam).sum(axis=1).argmin()
-
-        # Independent parameter and quantile
-        indep_param = listParam[id_indep]
-        indep_quant = quantiles[id_indep]
-
-        # If it's greater than the tolerence, no need to show it
-        if np.sum(indep_param) > max_eps:
-            print_indep = False
-        else:
-            print_indep = True
-
-        fig = plt.figure(figsize=figsize)  # Create the fig object
-
-        if self._n_corr_vars == 1:  # One used correlation parameter
-            ax = fig.add_subplot(111)  # Create the axis object
-
-            # Ids of the sorted parameters for the plot
-            id_sorted_params = np.argsort(listParam, axis=0).ravel()
-
-            # Plot of the quantile conditionally to the correlation parameter
-            ax.plot(listParam[id_sorted_params], quantiles[id_sorted_params],
-                    'b', label="Conditional %.2f %% quantiles" % (alpha),
-                    linewidth=2)
-
-            # Add the sample (warning: it can be costly if too many points)
-            if with_sample:
-                ax.plot(self._all_params, self._output_sample, 'k.')
-
-            # Print a line to distinguish the difference with the independence
-            # case
-            if print_indep:
-                ax.plot([listParam.min(), listParam.max()], [indep_quant] * 2,
-                        "r-")
-
-            ax.set_xlabel("$%s_{12}$" % (param_name), fontsize=14)
-            ax.set_ylabel("Quantile")
-            ax.legend(loc="best")
-        elif self._n_corr_vars == 2:  # For 2 correlation parameters
-            raise Exception("Not yet implemented")
-
-        elif self._n_corr_vars == 3:  # For 2 correlation parameters
-            color_scale = quantiles
-            cm = plt.get_cmap(color_map)
-            c_min, c_max = min(color_scale), max(color_scale)
-            cNorm = matplotlib.colors.Normalize(vmin=c_min, vmax=c_max)
-            scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=cm)
-
-            x, y, z = listParam[:, 0], listParam[:, 1], listParam[:, 2]
-
-            ax = fig.add_subplot(111, projection='3d')
-            ax.scatter(x, y, z, c=scalarMap.to_rgba(color_scale), s=40)
-            scalarMap.set_array(color_scale)
-            cbar = fig.colorbar(scalarMap)
-            if print_indep:
-                pos = cbar.ax.get_position()
-                cbar.ax.set_aspect('auto')
-                ax2 = cbar.ax.twinx()
-                ax2.set_ylim([c_min, c_max])
-                width = 0.05
-                pos.x0 = pos.x1 - width
-                ax2.set_position(pos)
-                cbar.ax.set_position(pos)
-                n_label = 5
-                labels_val = np.linspace(c_min, c_max, n_label).tolist()
-                labels = [str(round(labels_val[i], 2)) for i in range(n_label)]
-                labels_val.append(indep_quant)
-                labels.append("Indep=%.2f" % indep_quant)
-                ax2.set_yticks([indep_quant])
-                ax2.set_yticklabels(["Indep"])
-
-            ax.set_xlabel("$%s_{12}$" % (param_name), fontsize=14)
-            ax.set_ylabel("$%s_{13}$" % (param_name), fontsize=14)
-            ax.set_zlabel("$%s_{23}$" % (param_name), fontsize=14)
-
-        # Other figure stuffs
-        title = r"$\hat q_{\alpha, n}(%s)$ with $\alpha=%.1e$, $n = %d$" % \
-            (param_name, alpha, self._n_sample)
-        ax.set_title(title, fontsize=18)
-        ax.axis("tight")
-        fig.tight_layout()
-        plt.show(block=False)
-
-        # Saving the figure
-        if savefig:
-            if type(savefig) is str:
-                fname = savefig + '/'
-            else:
-                fname = "./"
-            fname += "condQuantiles"
-            fig.savefig(fname + ".pdf")
-            fig.savefig(fname + ".png")
-
 # =============================================================================
 # Setters
 # =============================================================================
@@ -810,7 +688,8 @@ class ImpactOfDependence(object):
             self._corr_vars_ids = list_vars
             self._n_corr_vars = len(corr_vars)
         else:  # All random variables are correlated
-            self._corr_matrix_bool = np.ones((self._input_dim, self._input_dim), dtype=bool)
+            self._corr_matrix_bool = np.ones(
+                (self._input_dim, self._input_dim), dtype=bool)
             self._corr_vars = range(self._corr_dim)
             self._corr_vars_ids = list(combinations(range(self._input_dim), 2))
             self._n_corr_vars = self._corr_dim
@@ -863,6 +742,7 @@ class ImpactOfDependence(object):
         self._copula_name = name
         copula = getattr(ot, name)
         self._copula = copula(self._input_dim)
+        self._copula_converter = Conversion(name)
 
         # TODO: Find another way
         if name == "NormalCopula":
@@ -882,6 +762,7 @@ class ImpactOfDependence(object):
             TypeError("The variables must be OpenTURNS Distributions.")
 
         self._rand_vars = rand_vars
+
     @property
     def output_sample_(self):
         return self._output_sample
@@ -901,10 +782,11 @@ class ImpactOfDependence(object):
     @property
     def all_params_(self):
         return self._all_params
+
     @all_params_.setter
     def all_params_(self, value):
         raise EnvironmentError("You cannot set this variable")
-    
+
     @property
     def reshaped_output_sample_(self):
         return self._output_sample.reshape((self._n_param, self._n_input_sample))
@@ -913,8 +795,11 @@ class ImpactOfDependence(object):
     def reshaped_output_sample_(self, value):
         raise EnvironmentError("You cannot set this variable")
 
+
 class DependenceResult(object):
-    def __init__(self, params, dependence_object, quantity, confidence_interval=None):
+
+    def __init__(self, params, dependence_object, quantity,
+                 confidence_interval=None):
         self.params = params
         self.quantity = quantity
         self.confidence_interval = confidence_interval
@@ -952,15 +837,18 @@ class DependenceResult(object):
         elif self._quantity_name == 'Quantile':
             self._alpha = value['Quantile Probability']
 
+        self._params = value
+
     def __str__(self):
         to_print = '%s: %s\n' % (self._quantity_name, self.quantity)
         if self.confidence_interval is not None:
             to_print += '%s confidence interval at %d %%: %s' % \
-                (self._quantity_name, self._confidence_level*100, self.confidence_interval)
+                (self._quantity_name, self._confidence_level *
+                 100, self.confidence_interval)
         return to_print
 
     def draw(self, dep_meas="CopulaParam", figsize=(10, 6),
-             savefig=False, color_map="jet"):
+             savefig=False, color_map="jet", max_eps=1.E-1):
         """
         The quantity must be compute before
         """
@@ -969,26 +857,29 @@ class DependenceResult(object):
 
         assert n_corr_vars in [1, 2, 3],\
             EnvironmentError("Cannot draw quantiles for dim > 3")
+            
+        # Dependence parameters
+        copula_params = obj._params[:, obj._corr_vars]
 
         if dep_meas == "KendallTau":
+            params = obj._copula_converter.to_Kendall(copula_params)
             param_name = "\\tau"
         elif dep_meas == "PearsonRho":
+            params = obj._copula_converter.to_Pearson(copula_params)
             param_name = "\\rho^{Pearson}"
         elif dep_meas == "CopulaParam":
+            params = copula_params
             param_name = "\\rho"
         else:
             raise("Undefined param")
 
-        # Dependence parameters
-        params = obj._params[:, obj._corr_vars]
+
         # Output quantities of interest
         quantity = self.quantity
         interval = self.confidence_interval
         quantity_name = self._quantity_name
 
-        # Find the almost independent configuration
-        max_eps = 1.E-1  # Tolerence for the independence param
-        
+        # Find the "almost" independent configuration
         if n_corr_vars == 1:
             id_indep = (np.abs(params)).argmin()
         else:
@@ -998,6 +889,7 @@ class DependenceResult(object):
         indep_param = params[id_indep]
         indep_quant = quantity[id_indep]
 
+        # If we have confidence interval
         if interval is not None:
             low_bound = quantity - interval
             up_bound = quantity + interval
