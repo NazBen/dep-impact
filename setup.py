@@ -23,7 +23,7 @@ setup(
 
     version='0.1',
 
-    description='A Python package to compute the impact of dependencies.',
+    description='A Python package to compute the impact of dependencies for probabilistic studies.',
     #long_description=long_description,
 
     url='https://github.com/NazBen/impact-of-dependence',
@@ -33,7 +33,7 @@ setup(
 
     license='MIT',
 
-    keywords='sklearn randomforest quantile',
+    keywords='copula probability',
     
     packages=['dependence'],  # Python packages to install
     # (If we have individual .py modules we can use the py_module argument instead)
