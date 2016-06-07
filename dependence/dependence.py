@@ -7,7 +7,6 @@ import matplotlib.cm as cmx
 from mpl_toolkits.mplot3d import Axes3D
 import pandas as pd
 from itertools import combinations
-from pyquantregForest import QuantileForest
 
 from .conversion import Conversion
 from .correlation import get_grid_rho, create_random_correlation_param, create_random_kendall_tau
@@ -59,10 +58,10 @@ class ImpactOfDependence(object):
     """
     _load_data = False
 
-    def __init__(self, model_func, margins, copula_name="NormalCopula"):
+    def __init__(self, model_func, margins, families=None):
         self.model_func = model_func
         self.margins = margins
-        self.copula_name = copula_name
+        self.families = families
 
         self.rand_vars = ot.ComposedDistribution(self._margins, self._copula)
         self.set_correlated_variables()
