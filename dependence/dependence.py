@@ -7,7 +7,9 @@ import matplotlib.cm as cmx
 from mpl_toolkits.mplot3d import Axes3D
 import pandas as pd
 from itertools import combinations
+from scipy.stats import rv_continuous
 
+from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion
 from .correlation import get_grid_rho, create_random_correlation_param, create_random_kendall_tau
 
@@ -58,14 +60,13 @@ class ImpactOfDependence(object):
     """
     _load_data = False
 
-    def __init__(self, model_func, margins, families=None):
+    def __init__(self, model_func, margins, families="Normal"):
         self.model_func = model_func
         self.margins = margins
         self.families = families
 
-        self.rand_vars = ot.ComposedDistribution(self._margins, self._copula)
-        self.set_correlated_variables()
-
+        self._copula_converter = Conversion(families)
+        
         # Initialize the variables
         self._all_output_sample = None
         self._output_sample = None
@@ -241,11 +242,13 @@ class ImpactOfDependence(object):
                 assert self._n_corr_vars == 1, \
                     NotImplementedError(
                         "Fixed Grid does not work for high dim")
-                meas_param = get_grid_rho(self._corr_matrix_bool, n_param)                    
+                meas_param = get_grid_rho(self._corr_matrix_bool, n_param)
+                        
             else:  # Random grid
-                is_normal = True if self._copula_name == "NormalCopula" else False
-                meas_param = create_random_kendall_tau(self._corr_matrix_bool, 
-                                                       n_param, is_normal=is_normal)
+                #is_normal = True if self._copula_name == "NormalCopula" else False
+                #meas_param = create_random_kendall_tau(self._corr_matrix_bool, 
+                #                                       n_param, is_normal=is_normal)
+                meas_param = np.random.uniform(-1., 1., (n_param, corr_dim))
 
         elif dep_measure == "PearsonRho":
             if fixed_grid:
@@ -262,7 +265,6 @@ class ImpactOfDependence(object):
         else:
             raise AttributeError("Unkown dependence parameter")
             
-
         self._meas_param = meas_param
         self._n_param = n_param
         self._params = self._copula_converter.to_copula_parameter(meas_param, dep_measure)
@@ -715,39 +717,27 @@ class ImpactOfDependence(object):
     @margins.setter
     def margins(self, list_margins):
         assert isinstance(list_margins, list), \
-            TypeError("Wrong parameter type")
+            TypeError("It should be a list of margins distribution objects.")
 
         for marginal in list_margins:
-            assert isinstance(marginal, ot.DistributionImplementation), \
-                TypeError("Wrong parameter type")
+            assert isinstance(marginal, (ot.DistributionImplementation, rv_continuous)), \
+                TypeError("Must be scipy or OpenTURNS distribution objects.")
 
         self._margins = list_margins
         self._input_dim = len(list_margins)
         self._corr_dim = self._input_dim * (self._input_dim - 1) / 2
 
     @property
-    def copula_name(self):
-        """The copula name. Must be a string.
+    def families(self):
+        """The copula families.
         """
-        return self._copula_name
+        return self._families
 
-    @copula_name.setter
-    def copula_name(self, name):
-        assert isinstance(name, str), \
-            TypeError("Copula name must be a string type.")
-        assert (name in COPULA_LIST), \
-            KeyError("Unknow copula")
+    @families.setter
+    def families(self, value):
+        check_matrix(value)
 
-        self._copula_name = name
-        copula = getattr(ot, name)
-        self._copula = copula(self._input_dim)
-        self._copula_converter = Conversion(name)
-
-        # TODO: Find another way
-        if name == "NormalCopula":
-            self._corr_matrix = ot.CorrelationMatrix(self._input_dim)
-        else:
-            self._corr_matrix = None
+        self._families = value
 
     @property
     def rand_vars(self):
