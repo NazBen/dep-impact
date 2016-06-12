@@ -160,7 +160,7 @@ family[2, 0] = 3
   
 impact = ImpactOfDependence(model_func=add_function, margins=[Normal()]*dim, families=family)
 
-impact.run(n_dep_param=100, n_input_sample=10000, fixed_grid=False, 
+impact.run(n_dep_param=10, n_input_sample=100, fixed_grid=False, 
            dep_measure="KendallTau", seed=0)
 
 quant_result = impact.compute_quantiles(alpha)

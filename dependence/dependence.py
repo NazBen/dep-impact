@@ -10,25 +10,8 @@ from itertools import combinations
 from scipy.stats import rv_continuous
 
 from .vinecopula import VineCopula, check_matrix
-from .conversion import Conversion
+from .conversion import Conversion, get_tau_interval
 from .correlation import get_grid_rho, create_random_correlation_param, create_random_kendall_tau
-
-COPULA_LIST = ["NormalCopula", "ClaytonCopula", "GumbelCopula"]
-
-"""
-TODO: Makes the load and save available for custom number of correlated variables.
-"""
-
-
-def bootstrap(data, num_samples, statistic, alpha, args):
-    """Returns bootstrap estimate of 100.0*(1-alpha) CI for statistic."""
-    n = len(data)
-    idx = np.random.randint(0, n, (num_samples, n))
-    samples = data[idx]
-    stat = np.sort(statistic(samples, 1, *args))
-
-    return (stat[int((alpha / 2.0) * num_samples)],
-            stat[int((1 - alpha / 2.0) * num_samples)])
 
 
 class ImpactOfDependence(object):
@@ -60,12 +43,10 @@ class ImpactOfDependence(object):
     """
     _load_data = False
 
-    def __init__(self, model_func, margins, families="Normal"):
+    def __init__(self, model_func, margins, families):
         self.model_func = model_func
         self.margins = margins
         self.families = families
-
-        self._copula_converter = Conversion(families)
         
         # Initialize the variables
         self._all_output_sample = None
@@ -236,19 +217,15 @@ class ImpactOfDependence(object):
         """
         corr_dim = self._corr_dim
 
-        # We convert the dependence measure to the copula parameter
         if dep_measure == "KendallTau":
-            if fixed_grid:                
-                assert self._n_corr_vars == 1, \
-                    NotImplementedError(
-                        "Fixed Grid does not work for high dim")
-                meas_param = get_grid_rho(self._corr_matrix_bool, n_param)
-                        
+            if fixed_grid:
+                raise NotImplementedError("Not done yet")
+                meas_param = get_grid_rho(self._corr_matrix_bool, n_param)                        
             else:  # Random grid
-                #is_normal = True if self._copula_name == "NormalCopula" else False
-                #meas_param = create_random_kendall_tau(self._corr_matrix_bool, 
-                #                                       n_param, is_normal=is_normal)
-                meas_param = np.random.uniform(-1., 1., (n_param, corr_dim))
+                meas_param = np.zeros((n_param, self._n_corr_vars))
+                for i in range(self._n_corr_vars):
+                    tau_min, tau_max = get_tau_interval(self._family_list[i])
+                    meas_param[:, i] = np.random.uniform(tau_min, tau_max, n_param)
 
         elif dep_measure == "PearsonRho":
             if fixed_grid:
@@ -267,7 +244,9 @@ class ImpactOfDependence(object):
             
         self._meas_param = meas_param
         self._n_param = n_param
-        self._params = self._copula_converter.to_copula_parameter(meas_param, dep_measure)
+        self._params = np.zeros((n_param, self._n_corr_vars))
+        for i, k in enumerate(self._corr_vars):
+            self._params[:, i] = self._copula[k].to_copula_parameter(meas_param[:, i], dep_measure)
 
     def _build_input_sample(self, n_input_sample, from_init_sample):
         """Creates the observations for differents dependence parameters.
@@ -736,8 +715,20 @@ class ImpactOfDependence(object):
     @families.setter
     def families(self, value):
         check_matrix(value)
-
         self._families = value
+        self._family_list = []
+        self._n_corr_vars = 0
+        self._corr_vars = []
+        k = 0
+        for i in range(self._input_dim):
+            for j in range(i):
+                self._family_list.append(value[i, j])
+                if value[i, j] > 0:
+                    self._corr_vars.append(k)
+                    self._n_corr_vars += 1
+                k += 1
+
+        self._copula = [Conversion(family) for family in self._family_list]
 
     @property
     def rand_vars(self):
@@ -1024,3 +1015,14 @@ class DependenceResult(object):
                 fname += "fig" + quantity_name
             fig.savefig(fname + ".pdf")
             fig.savefig(fname + ".png")
+
+
+def bootstrap(data, num_samples, statistic, alpha, args):
+    """Returns bootstrap estimate of 100.0*(1-alpha) CI for statistic."""
+    n = len(data)
+    idx = np.random.randint(0, n, (num_samples, n))
+    samples = data[idx]
+    stat = np.sort(statistic(samples, 1, *args))
+
+    return (stat[int((alpha / 2.0) * num_samples)],
+            stat[int((1 - alpha / 2.0) * num_samples)])

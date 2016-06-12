@@ -12,6 +12,18 @@ def check_matrix(value):
     assert value.shape[0] == value.shape[1], \
         AttributeError('Matrix should be squared.')
 
+def check_family(matrix):
+    d = matrix.shape[0]
+    for i in range(d):
+        for j in range(i):
+            if isinstance(matrix[i, j], str):
+                matrix[i, j] = int(vinecopula.BiCopName(matrix[i, j], False)[0])
+            elif isinstance(matrix[i, j], int):
+                pass
+            else:
+                raise ValueError("Uncorrect Family matrix")
+
+    return matrix
 class VineCopula(object):
     """Vine Copula Class."""
 
@@ -40,6 +52,7 @@ class VineCopula(object):
     @family.setter
     def family(self, value):
         check_matrix(value)
+        check_family(value)
         assert value.shape[0] == self._dim, \
             AttributeError('Family matrix should be of dimension == %d' % (self._dim))
         self._family = value
