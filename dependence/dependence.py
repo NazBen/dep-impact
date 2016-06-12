@@ -222,8 +222,8 @@ class ImpactOfDependence(object):
                 raise NotImplementedError("Not done yet")
                 meas_param = get_grid_rho(self._corr_matrix_bool, n_param)                        
             else:  # Random grid
-                meas_param = np.zeros((n_param, self._n_corr_vars))
-                for i in range(self._n_corr_vars):
+                meas_param = np.zeros((n_param, self._corr_dim))
+                for i in self._corr_vars:
                     tau_min, tau_max = get_tau_interval(self._family_list[i])
                     meas_param[:, i] = np.random.uniform(tau_min, tau_max, n_param)
 
@@ -244,9 +244,10 @@ class ImpactOfDependence(object):
             
         self._meas_param = meas_param
         self._n_param = n_param
-        self._params = np.zeros((n_param, self._n_corr_vars))
-        for i, k in enumerate(self._corr_vars):
-            self._params[:, i] = self._copula[k].to_copula_parameter(meas_param[:, i], dep_measure)
+        self._params = np.zeros((n_param, self._corr_dim))
+
+        for i in self._corr_vars:
+            self._params[:, i] = self._copula[i].to_copula_parameter(meas_param[:, i], dep_measure)
 
     def _build_input_sample(self, n_input_sample, from_init_sample):
         """Creates the observations for differents dependence parameters.
@@ -490,19 +491,18 @@ class ImpactOfDependence(object):
         """
         must be the copula parameter
         """
-        # TODO: change it when the new ot released is out
-        if self._copula_name == "NormalCopula":
-            k = 0
-            for i in range(self._input_dim):
-                for j in range(i + 1, self._input_dim):
-                    self._corr_matrix[i, j] = param[k]
-                    k += 1
-            self._copula = ot.NormalCopula(self._corr_matrix)
-        else:
-            self._copula.setParametersCollection(param)
+        dim = self._input_dim
+        structure = np.zeros((dim, dim), dtype=int)
+        for i in range(dim):
+            structure[i, 0:i+1, ] = i + 1
 
-        self._rand_vars.setCopula(self._copula)
-        return np.asarray(self._rand_vars.getSample(n_obs))
+        matrix_param = to_matrix(param, dim)
+        vine_copula = VineCopula(structure, self._families, matrix_param)
+        cop_sample = vine_copula.get_sample(n_obs)
+        joint_sample = np.zeros((n_obs, dim))
+        for i, marginal in enumerate(self._margins):
+            joint_sample[:, i] = np.asarray(marginal.computeQuantile(cop_sample[:, i])).ravel()
+        return joint_sample
 
     def get_corresponding_sample(self, corr_value):
         """
@@ -1026,3 +1026,16 @@ def bootstrap(data, num_samples, statistic, alpha, args):
 
     return (stat[int((alpha / 2.0) * num_samples)],
             stat[int((1 - alpha / 2.0) * num_samples)])
+
+def to_matrix(param, dim):
+    """
+    """
+
+    matrix = np.zeros((dim, dim))
+    k = 0
+    for i in range(dim):
+        for j in range(i):
+            matrix[i, j] = param[k]
+            k += 1
+
+    return matrix

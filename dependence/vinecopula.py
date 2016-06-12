@@ -27,13 +27,15 @@ def check_family(matrix):
 class VineCopula(object):
     """Vine Copula Class."""
 
-    def __init__(self, structure, family, param1, param2):
+    def __init__(self, structure, family, param1, param2=None):
         self.structure = structure
         self.family = family
         self.param1 = param1
         self.param2 = param2
-        self.build_vine()
+
         ri.initr()
+
+        self.build_vine()
 
     @property
     def structure(self):
@@ -74,6 +76,8 @@ class VineCopula(object):
 
     @param2.setter
     def param2(self, value):
+        if value is None:
+            value = np.zeros((self._dim, self._dim))
         check_matrix(value)
         assert value.shape[0] == self._dim, \
             AttributeError('Family matrix should be of dimension == %d' % (self._dim))
@@ -94,5 +98,5 @@ class VineCopula(object):
         assert isinstance(n, int), \
             TypeError("Sample size must be an integer.")
         assert n > 0, \
-            TypeError("Sample size must be positive.")
+            ValueError("Sample size must be positive.")
         return np.asarray(vinecopula.RVineSim(n, self._rvine))
