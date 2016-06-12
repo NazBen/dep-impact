@@ -80,10 +80,12 @@ class Conversion(object):
 
         return copula_param
     
-    def to_Kendall(self, measure_param):
+    def to_Kendall(self, params):
         """Convert the dependence_measure to the copula parameter.
         """
-        return self._copula.fromParamToKendall(measure_param)
+        r_params = numpy2ri(params)
+        copula_param = np.asarray(vinecopula.BiCopPar2Tau(self._family, r_params))
+        return copula_param
         
                 
     def to_Pearson(self, measure_param):

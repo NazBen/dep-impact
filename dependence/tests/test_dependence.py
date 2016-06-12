@@ -156,15 +156,18 @@ alpha = 0.05
 threshold = 2.
 family = np.zeros((dim, dim), dtype=int)
 family[1, 0] = 1
-family[2, 0] = 3
+family[2, 0] = 0
+measure = "KendallTau"
   
 impact = ImpactOfDependence(model_func=add_function, margins=[Normal()]*dim, families=family)
 
-impact.run(n_dep_param=10, n_input_sample=100, fixed_grid=False, 
-           dep_measure="KendallTau", seed=0)
+impact.run(n_dep_param=100, n_input_sample=10000, fixed_grid=False, 
+           dep_measure=measure, seed=0)
 
 quant_result = impact.compute_quantiles(alpha)
-quant_result.draw(measure)
+print quant_result.quantity.shape
+print quant_result.quantity
+quant_result.draw(measure, savefig=True)
 
-proba_result = impact.compute_probability(threshold)
-proba_result.draw(measure)
+#proba_result = impact.compute_probability(threshold)
+#proba_result.draw(measure)

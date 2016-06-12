@@ -137,7 +137,7 @@ class ImpactOfDependence(object):
         return cls.from_data(data.values, dim)
 
     def run(self, n_dep_param, n_input_sample, fixed_grid=False,
-            dep_measure="PearsonRho", output_ID=0, seed=None, from_init_sample=False):
+            dep_measure="PearsonRho", output_ID=0, seed=None):
         """Run the problem. It creates and evaluates the sample from different
         dependence parameter values.
 
@@ -187,7 +187,7 @@ class ImpactOfDependence(object):
         self._build_corr_sample(n_dep_param, fixed_grid, dep_measure)
 
         # Creates the sample of input parameters
-        self._build_input_sample(n_input_sample, from_init_sample)
+        self._build_input_sample(n_input_sample)
 
         # Evaluates the input sample
         self._all_output_sample = self.model_func(self._input_sample)
@@ -249,7 +249,7 @@ class ImpactOfDependence(object):
         for i in self._corr_vars:
             self._params[:, i] = self._copula[i].to_copula_parameter(meas_param[:, i], dep_measure)
 
-    def _build_input_sample(self, n_input_sample, from_init_sample):
+    def _build_input_sample(self, n_input_sample):
         """Creates the observations for differents dependence parameters.
 
         Parameters
@@ -266,33 +266,9 @@ class ImpactOfDependence(object):
         self._input_sample = np.empty((n_sample, self._input_dim))
         self._all_params = np.empty((n_sample, self._corr_dim))
 
-        if from_init_sample:
-            #            var_unif = ot.ComposedDistribution([ot.Uniform(0,
-            #            1)]*dim)
-            #            unif_sample =
-            #            np.asarray(var_unif.getSample(n_obs_sample))
-            #            for i, var in enumerate(self._input_variables):
-            #                var.compute
-            init_sample = self._input_variables.getSample(n_input_sample)
-            self._sample_init = init_sample
-
         # We loop for each copula param and create observations for each
         for i, param in enumerate(self._params):  # For each copula parameter
-            if from_init_sample:
-                # TODO : do it better
-                if self._corr_dim == 1:
-                    self._corr_matrix[0, 1] = param
-                elif self._corr_dim == 3:
-                    self._corr_matrix[0, 1] = param[0]
-                    self._corr_matrix[0, 2] = param[1]
-                    self._corr_matrix[1, 2] = param[2]
-                B = self._corr_matrix.computeCholesky()
-                tmp = np.asarray(init_sample * B)
-            else:
-                tmp = self._get_sample(param, n_input_sample)
-
-            if self._copula_name == "InverseClaytonCopula":
-                tmp[:, 0] = -tmp[:, 0]
+            tmp = self._get_sample(param, n_input_sample)
 
             # We save the input sample
             self._input_sample[n_input_sample *
@@ -720,15 +696,18 @@ class ImpactOfDependence(object):
         self._n_corr_vars = 0
         self._corr_vars = []
         k = 0
+        list_vars = []
         for i in range(self._input_dim):
             for j in range(i):
                 self._family_list.append(value[i, j])
                 if value[i, j] > 0:
                     self._corr_vars.append(k)
                     self._n_corr_vars += 1
+                    list_vars.append([i, j])
                 k += 1
 
         self._copula = [Conversion(family) for family in self._family_list]
+        self._corr_vars_ids = list_vars
 
     @property
     def rand_vars(self):
@@ -842,7 +821,9 @@ class DependenceResult(object):
         copula_params = obj._params[:, obj._corr_vars]
 
         if dep_meas == "KendallTau":
-            params = obj._copula_converter.to_Kendall(copula_params)
+            params = np.zeros((obj._n_param, n_corr_vars))
+            for i, k in enumerate(obj._corr_vars):
+                params[:, i] = obj._copula[k].to_Kendall(copula_params[:, i])
             param_name = "\\tau"
         elif dep_meas == "PearsonRho":
             params = obj._copula_converter.to_Pearson(copula_params)
