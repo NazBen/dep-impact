@@ -48,12 +48,6 @@ class ImpactOfDependence(object):
         self.margins = margins
         self.families = families
         
-        # Initialize the variables
-        self._all_output_sample = None
-        self._output_sample = None
-        self._quantity = None
-        self._quantity_interval = None
-
     @classmethod
     def from_data(cls, data_sample, dim, out_ID=0):
         """Load from data.
@@ -165,9 +159,6 @@ class ImpactOfDependence(object):
             If int, ``seed`` is the seed used by the random number generator;
             If None, ``seed`` is the seed is random.
 
-        from_init_sample : bool, optional (default=None)
-            Not yet functionable. 
-
         Attributes
         ----------
         input_sample_ : :class:`~numpy.ndarray`
@@ -249,34 +240,59 @@ class ImpactOfDependence(object):
         for i in self._corr_vars:
             self._params[:, i] = self._copula[i].to_copula_parameter(meas_param[:, i], dep_measure)
 
-    def _build_input_sample(self, n_input_sample):
+    def _build_input_sample(self, n):
         """Creates the observations for differents dependence parameters.
 
         Parameters
         ----------        
-        n_input_sample : int
+        n : int
             The number of observations in the sampling of :math:`\mathbf X`.
 
         from_init_sample : bool, optional (default=None)
             Not yet functionable. 
         """
-        n_sample = n_input_sample * self._n_param
+        
+        n_sample = n * self._n_param
         self._n_sample = n_sample
-        self._n_input_sample = n_input_sample
+        self._n_input_sample = n
         self._input_sample = np.empty((n_sample, self._input_dim))
         self._all_params = np.empty((n_sample, self._corr_dim))
 
         # We loop for each copula param and create observations for each
         for i, param in enumerate(self._params):  # For each copula parameter
-            tmp = self._get_sample(param, n_input_sample)
+            tmp = self._get_sample(param, n)
 
             # We save the input sample
-            self._input_sample[n_input_sample *
-                               i:n_input_sample * (i + 1), :] = tmp
+            self._input_sample[n*i:n*(i+1), :] = tmp
 
             # As well for the dependence parameter
-            self._all_params[n_input_sample * i:n_input_sample * (i + 1), :] = \
-                param
+            self._all_params[n*i:n*(i+1), :] = param
+
+    def _get_sample(self, param, n_obs):
+        """
+        must be the copula parameter
+        """
+        dim = self._input_dim
+
+        # TODO: The structure is standard, think about changing it.
+        structure = np.zeros((dim, dim), dtype=int)
+        for i in range(dim):
+            structure[i, 0:i+1, ] = i + 1
+
+        matrix_param = to_matrix(param, dim)
+        # TODO: We only use one param. Do it for two parameters copulas.
+
+        vine_copula = VineCopula(structure, self._families, matrix_param)
+
+        # Sample from the copula
+        cop_sample = vine_copula.get_sample(n_obs)
+
+        # Applied to the inverse transformation
+        joint_sample = np.zeros((n_obs, dim))
+        for i, inv_CDF in enumerate(self._margins_inv_CDF):
+            joint_sample[:, i] = np.asarray(inv_CDF(cop_sample[:, i])).ravel()
+
+        return joint_sample
 
     def buildForest(self, n_jobs=8):
         """Build a Quantile Random Forest to estimate conditional quantiles.
@@ -463,23 +479,6 @@ class ImpactOfDependence(object):
         out_df = pd.DataFrame(out, columns=labels)
         out_df.to_csv(full_fname, index=False)
 
-    def _get_sample(self, param, n_obs):
-        """
-        must be the copula parameter
-        """
-        dim = self._input_dim
-        structure = np.zeros((dim, dim), dtype=int)
-        for i in range(dim):
-            structure[i, 0:i+1, ] = i + 1
-
-        matrix_param = to_matrix(param, dim)
-        vine_copula = VineCopula(structure, self._families, matrix_param)
-        cop_sample = vine_copula.get_sample(n_obs)
-        joint_sample = np.zeros((n_obs, dim))
-        for i, marginal in enumerate(self._margins):
-            joint_sample[:, i] = np.asarray(marginal.computeQuantile(cop_sample[:, i])).ravel()
-        return joint_sample
-
     def get_corresponding_sample(self, corr_value):
         """
         """
@@ -488,7 +487,7 @@ class ImpactOfDependence(object):
         y = self._output_sample[id_corr]
         return x, y
 
-    def draw_design_space(self, corr_value=None, figsize=(10, 6),
+    def draw_design_space(self, corr_id=None, figsize=(10, 6),
                           savefig=False, color_map="jet", output_name=None,
                           input_names=None, return_fig=False, color_lims=None,
                           display_quantile_value=None):
@@ -498,11 +497,10 @@ class ImpactOfDependence(object):
 
         fig = plt.figure(figsize=figsize)  # Create the fig object
 
-        if corr_value is None:
+        if corr_id is None:
             id_corr = np.ones(self._n_sample, dtype=bool)
-
         else:
-            id_corr = np.where((self._all_params == corr_value).all(axis=1))[0]
+            id_corr = np.where((self._all_params == self._params[corr_id]).all(axis=1))[0]
 
         if input_names:
             param_name = input_names
@@ -562,17 +560,17 @@ class ImpactOfDependence(object):
             ax.set_zlabel(param_name[2], fontsize=14)
 
         title = "Design Space with $n = %d$ observations" % len(id_corr)
-        if corr_value is not None:
+        if corr_id is not None:
             if display_quantile_value:
                 title += "\n$q_\\alpha = %.1f$ - $\\rho = " % (quant)
             else:
                 title += "\n$\\rho = "
-
+            p = self._params[corr_id]
             if self._corr_dim == 1:
-                title += "%.1f$" % (corr_value)
+                title += "%.1f$" % (p)
             elif self._corr_dim == 3:
-                title += "[%.1f, %.1f, %.1f]$" % (corr_value[0], corr_value[1],
-                                                  corr_value[2])
+                p = self._params[corr_id]
+                title += "[%.1f, %.1f, %.1f]$" % (p[0], p[1], p[2])
         ax.set_title(title, fontsize=18)
         ax.axis("tight")
         fig.tight_layout()
@@ -674,8 +672,13 @@ class ImpactOfDependence(object):
         assert isinstance(list_margins, list), \
             TypeError("It should be a list of margins distribution objects.")
 
+        self._margins_inv_CDF = []
         for marginal in list_margins:
-            assert isinstance(marginal, (ot.DistributionImplementation, rv_continuous)), \
+            if isinstance(marginal, ot.DistributionImplementation):
+                self._margins_inv_CDF.append(marginal.computeQuantile)
+            elif isinstance(marginal, rv_continuous):
+                self._margins_inv_CDF.append(marginal.ppf)
+            else:
                 TypeError("Must be scipy or OpenTURNS distribution objects.")
 
         self._margins = list_margins

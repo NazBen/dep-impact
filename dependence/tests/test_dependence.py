@@ -154,12 +154,12 @@ def test_custom_corr_vars():
 dim = 3
 alpha = 0.05
 threshold = 2.
-family = np.zeros((dim, dim), dtype=int)
-family[1, 0] = 1
-family[2, 0] = 0
+families = np.zeros((dim, dim), dtype=int)
+families[1, 0] = 1
+families[2, 0] = 0
 measure = "KendallTau"
   
-impact = ImpactOfDependence(model_func=add_function, margins=[Normal()]*dim, families=family)
+impact = ImpactOfDependence(model_func=add_function, margins=[Normal()]*dim, families=families)
 
 impact.run(n_dep_param=100, n_input_sample=10000, fixed_grid=False, 
            dep_measure=measure, seed=0)
