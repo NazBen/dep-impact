@@ -210,8 +210,19 @@ class ImpactOfDependence(object):
 
         if dep_measure == "KendallTau":
             if fixed_grid:
-                raise NotImplementedError("Not done yet")
-                meas_param = get_grid_rho(self._corr_matrix_bool, n_param)                        
+                d = self._n_corr_vars
+
+                # Number of points per dimension
+                n_d = np.floor((n_param) ** (1./d))
+                v = []
+                for i in self._corr_vars:
+                    tau_min, tau_max = get_tau_interval(self._family_list[i])
+                    v.append(np.linspace(tau_min, tau_max, n_d+1, endpoint=False)[1:])
+
+                meas_param = np.vstack(np.meshgrid(*v)).reshape(d,-1).T
+
+                # The final total number is not always the initial one.
+                n_param = n_d ** d
             else:  # Random grid
                 meas_param = np.zeros((n_param, self._corr_dim))
                 for i in self._corr_vars:
