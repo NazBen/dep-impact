@@ -498,6 +498,31 @@ class ImpactOfDependence(object):
         y = self._output_sample[id_corr]
         return x, y
 
+    def draw_matrix_plot(self, corr_id=None, figsize=(10, 6),
+                          savefig=False):
+        """
+        """
+        if corr_id is None:
+            id_corr = np.ones(self._n_sample, dtype=bool)
+        else:
+            id_corr = np.where((self._all_params == self._params[corr_id]).all(axis=1))[0]
+
+        x = self._input_sample[id_corr]
+        y = self._output_sample[id_corr]
+
+        fig, axes = plt.subplots(self._input_dim, self._input_dim, figsize=figsize, sharex='col')
+
+        for i in range(self._input_dim):
+            for j in range(self._input_dim):
+                ax = axes[i, j]
+                if i != j:
+                    xi = x[:, i]
+                    xj = x[:, j]
+                    ax.plot(xi, xj, '.')
+                if i == j:
+                    xi = x[:, i]
+                    ax.hist(xi, bins=50)
+
     def draw_design_space(self, corr_id=None, figsize=(10, 6),
                           savefig=False, color_map="jet", output_name=None,
                           input_names=None, return_fig=False, color_lims=None,
