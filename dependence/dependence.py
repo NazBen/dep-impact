@@ -544,7 +544,6 @@ class ImpactOfDependence(object):
             ax.set_ylabel(param_name[1], fontsize=14)
 
         if self._input_dim == 3:  # If input dimension is 3
-
             x1 = x[:, 0]
             x2 = x[:, 1]
             x3 = x[:, 2]
@@ -592,62 +591,6 @@ class ImpactOfDependence(object):
 # =============================================================================
 # Setters
 # =============================================================================
-    def set_correlated_variables(self, list_vars=None, matrix_bool=None):
-        """
-        Set of the variable distribution. They must be OpenTURNS distribution
-        with a defined copula in it.
-        """
-        if list_vars:
-            assert isinstance(list_vars, (list, np.ndarray)), \
-                TypeError('Unsupported type')
-            # Matrix of correlated variables
-            matrix_bool = np.identity(self._input_dim, dtype=bool)
-
-            # For each couple of correlated variables
-            for corr_i in list_vars:
-                assert len(corr_i) == 2, \
-                    ValueError("Wrong number: %d obtained" % len(corr_i))
-
-                # Make it true in the matrix
-                matrix_bool[corr_i[0], corr_i[1]] = True
-                matrix_bool[corr_i[1], corr_i[0]] = True
-
-            k = 0
-            corr_vars = []
-            for i in range(self._input_dim):
-                for j in range(i + 1, self._input_dim):
-                    if matrix_bool[i, j]:
-                        corr_vars.append(k)
-                    k += 1
-
-            self._corr_matrix_bool = matrix_bool
-            self._corr_vars = corr_vars
-            self._corr_vars_ids = list_vars
-            self._n_corr_vars = len(corr_vars)
-        elif matrix_bool:
-            assert isinstance(matrix_bool, np.ndarray), \
-                TypeError('Unsupported type')
-            k = 0
-            corr_vars = []
-            list_vars = []
-            for i in range(self._input_dim):
-                for j in range(i + 1, self._input_dim):
-                    if matrix_bool[i, j]:
-                        corr_vars.append(k)
-                        list_vars.append([i, j])
-                    k += 1
-
-            self._corr_matrix_bool = matrix_bool
-            self._corr_vars = corr_vars
-            self._corr_vars_ids = list_vars
-            self._n_corr_vars = len(corr_vars)
-        else:  # All random variables are correlated
-            self._corr_matrix_bool = np.ones(
-                (self._input_dim, self._input_dim), dtype=bool)
-            self._corr_vars = range(self._corr_dim)
-            self._corr_vars_ids = list(combinations(range(self._input_dim), 2))
-            self._n_corr_vars = self._corr_dim
-
     @property
     def model_func(self):
         """The model function. Must be a callable.
