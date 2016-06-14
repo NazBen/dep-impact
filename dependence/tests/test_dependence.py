@@ -154,18 +154,20 @@ def test_custom_corr_vars():
 dim = 3
 alpha = 0.05
 threshold = 2.
-copula_name = "ClaytonCopula"
+families = np.zeros((dim, dim), dtype=int)
+families[1, 0] = 1
+families[2, 0] = 1
 measure = "KendallTau"
-corr_vars = [[0, 1]]    
-impact = ImpactOfDependence(add_function, [Normal()] * dim, 
-                                           copula_name=copula_name)
-impact.set_correlated_variables(corr_vars)
+  
+impact = ImpactOfDependence(model_func=add_function, margins=[Normal()]*dim, families=families)
 
-impact.run(n_dep_param=100, n_input_sample=10000, fixed_grid=False, 
+impact.run(n_dep_param=100, n_input_sample=10000, fixed_grid=True, 
            dep_measure=measure, seed=0)
 
 quant_result = impact.compute_quantiles(alpha)
-quant_result.draw(measure)
+print quant_result.quantity.shape
+print quant_result.quantity
+quant_result.draw(measure, savefig=True)
 
-proba_result = impact.compute_probability(threshold)
-proba_result.draw(measure)
+#proba_result = impact.compute_probability(threshold)
+#proba_result.draw(measure)

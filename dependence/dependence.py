@@ -7,27 +7,11 @@ import matplotlib.cm as cmx
 from mpl_toolkits.mplot3d import Axes3D
 import pandas as pd
 from itertools import combinations
-from pyquantregForest import QuantileForest
+from scipy.stats import rv_continuous
 
-from .conversion import Conversion
+from .vinecopula import VineCopula, check_matrix
+from .conversion import Conversion, get_tau_interval
 from .correlation import get_grid_rho, create_random_correlation_param, create_random_kendall_tau
-
-COPULA_LIST = ["NormalCopula", "ClaytonCopula", "GumbelCopula"]
-
-"""
-TODO: Makes the load and save available for custom number of correlated variables.
-"""
-
-
-def bootstrap(data, num_samples, statistic, alpha, args):
-    """Returns bootstrap estimate of 100.0*(1-alpha) CI for statistic."""
-    n = len(data)
-    idx = np.random.randint(0, n, (num_samples, n))
-    samples = data[idx]
-    stat = np.sort(statistic(samples, 1, *args))
-
-    return (stat[int((alpha / 2.0) * num_samples)],
-            stat[int((1 - alpha / 2.0) * num_samples)])
 
 
 class ImpactOfDependence(object):
@@ -59,20 +43,11 @@ class ImpactOfDependence(object):
     """
     _load_data = False
 
-    def __init__(self, model_func, margins, copula_name="NormalCopula"):
+    def __init__(self, model_func, margins, families):
         self.model_func = model_func
         self.margins = margins
-        self.copula_name = copula_name
-
-        self.rand_vars = ot.ComposedDistribution(self._margins, self._copula)
-        self.set_correlated_variables()
-
-        # Initialize the variables
-        self._all_output_sample = None
-        self._output_sample = None
-        self._quantity = None
-        self._quantity_interval = None
-
+        self.families = families
+        
     @classmethod
     def from_data(cls, data_sample, dim, out_ID=0):
         """Load from data.
@@ -156,7 +131,7 @@ class ImpactOfDependence(object):
         return cls.from_data(data.values, dim)
 
     def run(self, n_dep_param, n_input_sample, fixed_grid=False,
-            dep_measure="PearsonRho", output_ID=0, seed=None, from_init_sample=False):
+            dep_measure="PearsonRho", output_ID=0, seed=None):
         """Run the problem. It creates and evaluates the sample from different
         dependence parameter values.
 
@@ -184,9 +159,6 @@ class ImpactOfDependence(object):
             If int, ``seed`` is the seed used by the random number generator;
             If None, ``seed`` is the seed is random.
 
-        from_init_sample : bool, optional (default=None)
-            Not yet functionable. 
-
         Attributes
         ----------
         input_sample_ : :class:`~numpy.ndarray`
@@ -206,7 +178,7 @@ class ImpactOfDependence(object):
         self._build_corr_sample(n_dep_param, fixed_grid, dep_measure)
 
         # Creates the sample of input parameters
-        self._build_input_sample(n_input_sample, from_init_sample)
+        self._build_input_sample(n_input_sample)
 
         # Evaluates the input sample
         self._all_output_sample = self.model_func(self._input_sample)
@@ -236,17 +208,26 @@ class ImpactOfDependence(object):
         """
         corr_dim = self._corr_dim
 
-        # We convert the dependence measure to the copula parameter
         if dep_measure == "KendallTau":
-            if fixed_grid:                
-                assert self._n_corr_vars == 1, \
-                    NotImplementedError(
-                        "Fixed Grid does not work for high dim")
-                meas_param = get_grid_rho(self._corr_matrix_bool, n_param)                    
+            if fixed_grid:
+                d = self._n_corr_vars
+
+                # Number of points per dimension
+                n_d = np.floor((n_param) ** (1./d))
+                v = []
+                for i in self._corr_vars:
+                    tau_min, tau_max = get_tau_interval(self._family_list[i])
+                    v.append(np.linspace(tau_min, tau_max, n_d+1, endpoint=False)[1:])
+
+                meas_param = np.vstack(np.meshgrid(*v)).reshape(d,-1).T
+
+                # The final total number is not always the initial one.
+                n_param = n_d ** d
             else:  # Random grid
-                is_normal = True if self._copula_name == "NormalCopula" else False
-                meas_param = create_random_kendall_tau(self._corr_matrix_bool, 
-                                                       n_param, is_normal=is_normal)
+                meas_param = np.zeros((n_param, self._corr_dim))
+                for i in self._corr_vars:
+                    tau_min, tau_max = get_tau_interval(self._family_list[i])
+                    meas_param[:, i] = np.random.uniform(tau_min, tau_max, n_param)
 
         elif dep_measure == "PearsonRho":
             if fixed_grid:
@@ -263,63 +244,66 @@ class ImpactOfDependence(object):
         else:
             raise AttributeError("Unkown dependence parameter")
             
-
         self._meas_param = meas_param
         self._n_param = n_param
-        self._params = self._copula_converter.to_copula_parameter(meas_param, dep_measure)
+        self._params = np.zeros((n_param, self._corr_dim))
 
-    def _build_input_sample(self, n_input_sample, from_init_sample):
+        for i in self._corr_vars:
+            self._params[:, i] = self._copula[i].to_copula_parameter(meas_param[:, i], dep_measure)
+
+    def _build_input_sample(self, n):
         """Creates the observations for differents dependence parameters.
 
         Parameters
         ----------        
-        n_input_sample : int
+        n : int
             The number of observations in the sampling of :math:`\mathbf X`.
 
         from_init_sample : bool, optional (default=None)
             Not yet functionable. 
         """
-        n_sample = n_input_sample * self._n_param
+        
+        n_sample = n * self._n_param
         self._n_sample = n_sample
-        self._n_input_sample = n_input_sample
+        self._n_input_sample = n
         self._input_sample = np.empty((n_sample, self._input_dim))
         self._all_params = np.empty((n_sample, self._corr_dim))
 
-        if from_init_sample:
-            #            var_unif = ot.ComposedDistribution([ot.Uniform(0,
-            #            1)]*dim)
-            #            unif_sample =
-            #            np.asarray(var_unif.getSample(n_obs_sample))
-            #            for i, var in enumerate(self._input_variables):
-            #                var.compute
-            init_sample = self._input_variables.getSample(n_input_sample)
-            self._sample_init = init_sample
-
         # We loop for each copula param and create observations for each
         for i, param in enumerate(self._params):  # For each copula parameter
-            if from_init_sample:
-                # TODO : do it better
-                if self._corr_dim == 1:
-                    self._corr_matrix[0, 1] = param
-                elif self._corr_dim == 3:
-                    self._corr_matrix[0, 1] = param[0]
-                    self._corr_matrix[0, 2] = param[1]
-                    self._corr_matrix[1, 2] = param[2]
-                B = self._corr_matrix.computeCholesky()
-                tmp = np.asarray(init_sample * B)
-            else:
-                tmp = self._get_sample(param, n_input_sample)
-
-            if self._copula_name == "InverseClaytonCopula":
-                tmp[:, 0] = -tmp[:, 0]
+            tmp = self._get_sample(param, n)
 
             # We save the input sample
-            self._input_sample[n_input_sample *
-                               i:n_input_sample * (i + 1), :] = tmp
+            self._input_sample[n*i:n*(i+1), :] = tmp
 
             # As well for the dependence parameter
-            self._all_params[n_input_sample * i:n_input_sample * (i + 1), :] = \
-                param
+            self._all_params[n*i:n*(i+1), :] = param
+
+    def _get_sample(self, param, n_obs):
+        """
+        must be the copula parameter
+        """
+        dim = self._input_dim
+
+        # TODO: The structure is standard, think about changing it.
+        structure = np.zeros((dim, dim), dtype=int)
+        for i in range(dim):
+            structure[i, 0:i+1, ] = i + 1
+
+        matrix_param = to_matrix(param, dim)
+        # TODO: We only use one param. Do it for two parameters copulas.
+
+        vine_copula = VineCopula(structure, self._families, matrix_param)
+
+        # Sample from the copula
+        cop_sample = vine_copula.get_sample(n_obs)
+
+        # Applied to the inverse transformation
+        joint_sample = np.zeros((n_obs, dim))
+        for i, inv_CDF in enumerate(self._margins_inv_CDF):
+            joint_sample[:, i] = np.asarray(inv_CDF(cop_sample[:, i])).ravel()
+
+        return joint_sample
 
     def buildForest(self, n_jobs=8):
         """Build a Quantile Random Forest to estimate conditional quantiles.
@@ -506,24 +490,6 @@ class ImpactOfDependence(object):
         out_df = pd.DataFrame(out, columns=labels)
         out_df.to_csv(full_fname, index=False)
 
-    def _get_sample(self, param, n_obs):
-        """
-        must be the copula parameter
-        """
-        # TODO: change it when the new ot released is out
-        if self._copula_name == "NormalCopula":
-            k = 0
-            for i in range(self._input_dim):
-                for j in range(i + 1, self._input_dim):
-                    self._corr_matrix[i, j] = param[k]
-                    k += 1
-            self._copula = ot.NormalCopula(self._corr_matrix)
-        else:
-            self._copula.setParametersCollection(param)
-
-        self._rand_vars.setCopula(self._copula)
-        return np.asarray(self._rand_vars.getSample(n_obs))
-
     def get_corresponding_sample(self, corr_value):
         """
         """
@@ -532,7 +498,32 @@ class ImpactOfDependence(object):
         y = self._output_sample[id_corr]
         return x, y
 
-    def draw_design_space(self, corr_value=None, figsize=(10, 6),
+    def draw_matrix_plot(self, corr_id=None, figsize=(10, 6),
+                          savefig=False):
+        """
+        """
+        if corr_id is None:
+            id_corr = np.ones(self._n_sample, dtype=bool)
+        else:
+            id_corr = np.where((self._all_params == self._params[corr_id]).all(axis=1))[0]
+
+        x = self._input_sample[id_corr]
+        y = self._output_sample[id_corr]
+
+        fig, axes = plt.subplots(self._input_dim, self._input_dim, figsize=figsize, sharex='col')
+
+        for i in range(self._input_dim):
+            for j in range(self._input_dim):
+                ax = axes[i, j]
+                if i != j:
+                    xi = x[:, i]
+                    xj = x[:, j]
+                    ax.plot(xi, xj, '.')
+                if i == j:
+                    xi = x[:, i]
+                    ax.hist(xi, bins=50)
+
+    def draw_design_space(self, corr_id=None, figsize=(10, 6),
                           savefig=False, color_map="jet", output_name=None,
                           input_names=None, return_fig=False, color_lims=None,
                           display_quantile_value=None):
@@ -542,11 +533,10 @@ class ImpactOfDependence(object):
 
         fig = plt.figure(figsize=figsize)  # Create the fig object
 
-        if corr_value is None:
+        if corr_id is None:
             id_corr = np.ones(self._n_sample, dtype=bool)
-
         else:
-            id_corr = np.where((self._all_params == corr_value).all(axis=1))[0]
+            id_corr = np.where((self._all_params == self._params[corr_id]).all(axis=1))[0]
 
         if input_names:
             param_name = input_names
@@ -590,7 +580,6 @@ class ImpactOfDependence(object):
             ax.set_ylabel(param_name[1], fontsize=14)
 
         if self._input_dim == 3:  # If input dimension is 3
-
             x1 = x[:, 0]
             x2 = x[:, 1]
             x3 = x[:, 2]
@@ -606,17 +595,17 @@ class ImpactOfDependence(object):
             ax.set_zlabel(param_name[2], fontsize=14)
 
         title = "Design Space with $n = %d$ observations" % len(id_corr)
-        if corr_value is not None:
+        if corr_id is not None:
             if display_quantile_value:
                 title += "\n$q_\\alpha = %.1f$ - $\\rho = " % (quant)
             else:
                 title += "\n$\\rho = "
-
+            p = self._params[corr_id]
             if self._corr_dim == 1:
-                title += "%.1f$" % (corr_value)
+                title += "%.1f$" % (p)
             elif self._corr_dim == 3:
-                title += "[%.1f, %.1f, %.1f]$" % (corr_value[0], corr_value[1],
-                                                  corr_value[2])
+                p = self._params[corr_id]
+                title += "[%.1f, %.1f, %.1f]$" % (p[0], p[1], p[2])
         ax.set_title(title, fontsize=18)
         ax.axis("tight")
         fig.tight_layout()
@@ -638,62 +627,6 @@ class ImpactOfDependence(object):
 # =============================================================================
 # Setters
 # =============================================================================
-    def set_correlated_variables(self, list_vars=None, matrix_bool=None):
-        """
-        Set of the variable distribution. They must be OpenTURNS distribution
-        with a defined copula in it.
-        """
-        if list_vars:
-            assert isinstance(list_vars, (list, np.ndarray)), \
-                TypeError('Unsupported type')
-            # Matrix of correlated variables
-            matrix_bool = np.identity(self._input_dim, dtype=bool)
-
-            # For each couple of correlated variables
-            for corr_i in list_vars:
-                assert len(corr_i) == 2, \
-                    ValueError("Wrong number: %d obtained" % len(corr_i))
-
-                # Make it true in the matrix
-                matrix_bool[corr_i[0], corr_i[1]] = True
-                matrix_bool[corr_i[1], corr_i[0]] = True
-
-            k = 0
-            corr_vars = []
-            for i in range(self._input_dim):
-                for j in range(i + 1, self._input_dim):
-                    if matrix_bool[i, j]:
-                        corr_vars.append(k)
-                    k += 1
-
-            self._corr_matrix_bool = matrix_bool
-            self._corr_vars = corr_vars
-            self._corr_vars_ids = list_vars
-            self._n_corr_vars = len(corr_vars)
-        elif matrix_bool:
-            assert isinstance(matrix_bool, np.ndarray), \
-                TypeError('Unsupported type')
-            k = 0
-            corr_vars = []
-            list_vars = []
-            for i in range(self._input_dim):
-                for j in range(i + 1, self._input_dim):
-                    if matrix_bool[i, j]:
-                        corr_vars.append(k)
-                        list_vars.append([i, j])
-                    k += 1
-
-            self._corr_matrix_bool = matrix_bool
-            self._corr_vars = corr_vars
-            self._corr_vars_ids = list_vars
-            self._n_corr_vars = len(corr_vars)
-        else:  # All random variables are correlated
-            self._corr_matrix_bool = np.ones(
-                (self._input_dim, self._input_dim), dtype=bool)
-            self._corr_vars = range(self._corr_dim)
-            self._corr_vars_ids = list(combinations(range(self._input_dim), 2))
-            self._n_corr_vars = self._corr_dim
-
     @property
     def model_func(self):
         """The model function. Must be a callable.
@@ -716,39 +649,47 @@ class ImpactOfDependence(object):
     @margins.setter
     def margins(self, list_margins):
         assert isinstance(list_margins, list), \
-            TypeError("Wrong parameter type")
+            TypeError("It should be a list of margins distribution objects.")
 
+        self._margins_inv_CDF = []
         for marginal in list_margins:
-            assert isinstance(marginal, ot.DistributionImplementation), \
-                TypeError("Wrong parameter type")
+            if isinstance(marginal, ot.DistributionImplementation):
+                self._margins_inv_CDF.append(marginal.computeQuantile)
+            elif isinstance(marginal, rv_continuous):
+                self._margins_inv_CDF.append(marginal.ppf)
+            else:
+                TypeError("Must be scipy or OpenTURNS distribution objects.")
 
         self._margins = list_margins
         self._input_dim = len(list_margins)
         self._corr_dim = self._input_dim * (self._input_dim - 1) / 2
 
     @property
-    def copula_name(self):
-        """The copula name. Must be a string.
+    def families(self):
+        """The copula families.
         """
-        return self._copula_name
+        return self._families
 
-    @copula_name.setter
-    def copula_name(self, name):
-        assert isinstance(name, str), \
-            TypeError("Copula name must be a string type.")
-        assert (name in COPULA_LIST), \
-            KeyError("Unknow copula")
+    @families.setter
+    def families(self, value):
+        check_matrix(value)
+        self._families = value
+        self._family_list = []
+        self._n_corr_vars = 0
+        self._corr_vars = []
+        k = 0
+        list_vars = []
+        for i in range(self._input_dim):
+            for j in range(i):
+                self._family_list.append(value[i, j])
+                if value[i, j] > 0:
+                    self._corr_vars.append(k)
+                    self._n_corr_vars += 1
+                    list_vars.append([i, j])
+                k += 1
 
-        self._copula_name = name
-        copula = getattr(ot, name)
-        self._copula = copula(self._input_dim)
-        self._copula_converter = Conversion(name)
-
-        # TODO: Find another way
-        if name == "NormalCopula":
-            self._corr_matrix = ot.CorrelationMatrix(self._input_dim)
-        else:
-            self._corr_matrix = None
+        self._copula = [Conversion(family) for family in self._family_list]
+        self._corr_vars_ids = list_vars
 
     @property
     def rand_vars(self):
@@ -862,7 +803,9 @@ class DependenceResult(object):
         copula_params = obj._params[:, obj._corr_vars]
 
         if dep_meas == "KendallTau":
-            params = obj._copula_converter.to_Kendall(copula_params)
+            params = np.zeros((obj._n_param, n_corr_vars))
+            for i, k in enumerate(obj._corr_vars):
+                params[:, i] = obj._copula[k].to_Kendall(copula_params[:, i])
             param_name = "\\tau"
         elif dep_meas == "PearsonRho":
             params = obj._copula_converter.to_Pearson(copula_params)
@@ -1035,3 +978,27 @@ class DependenceResult(object):
                 fname += "fig" + quantity_name
             fig.savefig(fname + ".pdf")
             fig.savefig(fname + ".png")
+
+
+def bootstrap(data, num_samples, statistic, alpha, args):
+    """Returns bootstrap estimate of 100.0*(1-alpha) CI for statistic."""
+    n = len(data)
+    idx = np.random.randint(0, n, (num_samples, n))
+    samples = data[idx]
+    stat = np.sort(statistic(samples, 1, *args))
+
+    return (stat[int((alpha / 2.0) * num_samples)],
+            stat[int((1 - alpha / 2.0) * num_samples)])
+
+def to_matrix(param, dim):
+    """
+    """
+
+    matrix = np.zeros((dim, dim))
+    k = 0
+    for i in range(dim):
+        for j in range(i):
+            matrix[i, j] = param[k]
+            k += 1
+
+    return matrix
