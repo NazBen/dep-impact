@@ -219,7 +219,11 @@ class ImpactOfDependence(object):
                     tau_min, tau_max = get_tau_interval(self._family_list[i])
                     v.append(np.linspace(tau_min, tau_max, n_d+1, endpoint=False)[1:])
 
-                meas_param = np.vstack(np.meshgrid(*v)).reshape(d,-1).T
+                tmp = np.vstack(np.meshgrid(*v)).reshape(d,-1).T
+                meas_param = np.zeros((n_param, self._corr_dim))
+
+                for i, k in enumerate(self._corr_vars):
+                    meas_param[:, k] = tmp[:, i]
 
                 # The final total number is not always the initial one.
                 n_param = n_d ** d

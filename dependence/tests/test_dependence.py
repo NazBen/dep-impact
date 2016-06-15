@@ -156,7 +156,8 @@ alpha = 0.05
 threshold = 2.
 families = np.zeros((dim, dim), dtype=int)
 families[1, 0] = 1
-families[2, 0] = 1
+families[2, 0] = 0
+families[2, 1] = 1
 measure = "KendallTau"
   
 impact = ImpactOfDependence(model_func=add_function, margins=[Normal()]*dim, families=families)
