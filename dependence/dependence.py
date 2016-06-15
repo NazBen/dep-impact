@@ -9,6 +9,7 @@ import pandas as pd
 from itertools import combinations
 from scipy.stats import rv_continuous
 import operator
+import json
 
 from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
@@ -196,8 +197,10 @@ class ImpactOfDependence(object):
 
         # If the output dimension is one
         if self._all_output_sample.shape[0] == self._all_output_sample.size:
+            self._output_dim = 1
             self._output_sample = self._all_output_sample
         else:
+            self._output_dim = self._all_output_sample.shape[1]
             self._output_sample = self._all_output_sample[:, output_ID]
 
     def _build_corr_sample(self, n_param, fixed_grid, dep_measure):
@@ -231,13 +234,13 @@ class ImpactOfDependence(object):
                     v.append(np.linspace(tau_min, tau_max, n_d+1, endpoint=False)[1:])
 
                 tmp = np.vstack(np.meshgrid(*v)).reshape(d,-1).T
-                meas_param = np.zeros((n_param, self._corr_dim))
-
-                for i, k in enumerate(self._corr_vars):
-                    meas_param[:, k] = tmp[:, i]
 
                 # The final total number is not always the initial one.
                 n_param = n_d ** d
+                meas_param = np.zeros((n_param, self._corr_dim))
+                for i, k in enumerate(self._corr_vars):
+                    meas_param[:, k] = tmp[:, i]
+                
             else:  # Random grid
                 meas_param = np.zeros((n_param, self._corr_dim))
                 for i in self._corr_vars:
@@ -496,37 +499,64 @@ class ImpactOfDependence(object):
         out = np.c_[self._all_params, self._input_sample, self._output_sample]
         np.savetxt(full_fname, out)
 
-    def save_structured_all_data(self, input_names=[], output_names=[],
-                                 path=".", fname="full_structured_data",
-                                 ftype=".csv"):
+    def save_data(self, input_names=[], output_names=[],
+                                 path=".", data_fname="full_structured_data",
+                                 ftype=".csv", param_fname='params'):
         """
         """
+        output_dim = self._output_dim
+
+        # List of correlated variable names
         labels = []
         for i in range(self._input_dim):
             for j in range(i + 1, self._input_dim):
                 labels.append("r_%d%d" % (i + 1, j + 1))
+
+        # List of input variable names
         if input_names:
-            assert len(input_names) == self._input_dim,\
-                "Dimension problem for input_names"
+            assert len(input_names) == self._input_dim, \
+                AttributeError("Dimension problem for input_names")
             labels.extend(input_names)
         else:
             for i in range(self._input_dim):
                 labels.append("x_%d" % (i + 1))
 
-        output_dim = self._all_output_sample.shape[1]
+        # List of output variable names
         if output_names:
             assert len(output_names) == output_dim,\
-                "Dimension problem for output_names"
+                AttributeError("Dimension problem for output_names")
             labels.extend(output_names)
         else:
             for i in range(output_dim):
                 labels.append("y_%d" % (i + 1))
 
-        full_fname = path + '/' + fname + ftype
+        path_fname = path + '/' + data_fname + ftype
         out = np.c_[self._all_params, self._input_sample,
                     self._all_output_sample]
         out_df = pd.DataFrame(out, columns=labels)
-        out_df.to_csv(full_fname, index=False)
+        out_df.to_csv(path_fname, index=False)
+
+        # Save the parameters
+        dict_output = {}
+        dict_copula = {'Families': self._families.tolist(),
+                       'Structure': self._vine_structure.tolist()}
+        dict_output.update(dict_copula)
+
+        # TODO: Find a way to get the name of the variable for
+        # Scipy frozen rv_continous instances
+        if isinstance(self._margins[0], ot.Distribution):
+            dict_margins = {}
+            for i, marginal in enumerate(self._margins):
+                name = marginal.getName()
+                params = list(marginal.getParameter())
+                dict_margins['margin_%d' % (i)] = {'Family': name,
+                                      'Parameters': params}
+    
+            dict_output.update(dict_margins)
+
+        path_fname = path + '/' + param_fname + '.json'
+        with open(path_fname, 'w') as outfile:
+            json.dump(dict_output, outfile, indent=4)
 
     def get_corresponding_sample(self, corr_value):
         """

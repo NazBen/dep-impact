@@ -1,6 +1,6 @@
 ﻿from scipy.special import erf, erfinv
 from numpy.testing import assert_allclose
-from openturns import Normal
+from openturns import Normal, Exponential, Weibull
 import numpy as np
 from itertools import combinations
 
@@ -154,21 +154,21 @@ def test_custom_corr_vars():
 dim = 3
 alpha = 0.05
 threshold = 2.
+measure = "KendallTau"
+margins = [Weibull(), Normal(), Normal()]
+
 families = np.zeros((dim, dim), dtype=int)
 families[1, 0] = 1
 families[2, 0] = 0
 families[2, 1] = 1
-measure = "KendallTau"
   
-impact = ImpactOfDependence(model_func=add_function, margins=[Normal()]*dim, families=families)
+impact = ImpactOfDependence(model_func=add_function, margins=margins, families=families)
 
-impact.run(n_dep_param=100, n_input_sample=10000, fixed_grid=True, 
+impact.run(n_dep_param=10, n_input_sample=500, fixed_grid=True, 
            dep_measure=measure, seed=0)
 
-quant_result = impact.compute_quantiles(alpha)
-print quant_result.quantity.shape
-print quant_result.quantity
-quant_result.draw(measure, savefig=True)
+impact.save_structured_all_data()
+
 
 #proba_result = impact.compute_probability(threshold)
 #proba_result.draw(measure)
