@@ -8,10 +8,15 @@ from mpl_toolkits.mplot3d import Axes3D
 import pandas as pd
 from itertools import combinations
 from scipy.stats import rv_continuous
+import operator
 
 from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
 from .correlation import get_grid_rho, create_random_correlation_param, create_random_kendall_tau
+
+
+OPERATORS = {">": operator.gt, ">=": operator.ge,
+             "<": operator.lt, "<=": operator.le}
 
 
 class ImpactOfDependence(object):
@@ -370,17 +375,30 @@ class ImpactOfDependence(object):
         else:
             raise TypeError("Unknow input variable quantity_func")
 
-    def compute_probability(self, threshold, confidence_level=0.95,
-                            estimation_method="empirical", operator="greater"):
+    def compute_probability(self, threshold, estimation_method='empirical',
+                            confidence_level=0.95, operator='>'):
         """Compute the probability of the current sample for each dependence
         parameter.
+
+        Parameters
+        ----------
+        threshold : float, int
+            The threshold :math:`s` of the output probability :math:`\mathbb P[Y \geq s]`
+        estimation_method : string, optional (default='empirical')
+            The probability estimation method. Available methods: 
+            - "empirical": The percentile of the output sample.
+            - "randomforest": Not yet implemented.
+        confidence_level : float, optional (default=0.95)
+            The confidence level probability.
+        operator : string, optional (default='>')
+            The operator of the probability :math:`\mathbb P[Y \geq s]`.
         """
-        assert isinstance(threshold, float), \
-            TypeError("Threshold should be a float")
+        assert isinstance(threshold, (float, int)), \
+            TypeError("Threshold should be a number.")
         assert isinstance(confidence_level, float), \
             TypeError("Confidence Level should be a float")
-        if confidence_level <= 0. or confidence_level >= 1.:
-            raise ValueError("Confidence level should be a probability")
+        assert 0. < confidence_level < 1., \
+            ValueError("Confidence level should be a probability")
         assert isinstance(estimation_method, str), \
             TypeError("Method name should be a string")
 
@@ -392,21 +410,18 @@ class ImpactOfDependence(object):
                   'Operator': operator
                   }
 
-        if estimation_method == "empirical":
-            # Computes the empirical probability of the sample
-            if operator == "greater":
-                probability = (
-                    (out_sample > threshold).astype(float)).mean(axis=1)
-            elif operator == "lower":
-                probability = (
-                    (out_sample <= threshold).astype(float)).mean(axis=1)
+        op_func = OPERATORS[operator]
 
+        if estimation_method == "empirical":
+            probability = (op_func(out_sample, threshold).astype(float)).mean(axis=1)
             tmp = np.sqrt(probability * (1. - probability) /
                           self._n_input_sample)
             # Quantile of a Gaussian distribution
             q_normal = np.asarray(ot.Normal().computeQuantile(
                 (1 + confidence_level) / 2.))
             interval = q_normal * tmp  # Confidence interval
+        elif estimation_method == 'randomforest':
+            raise NotImplementedError('Not Yet Done...')
         else:
             raise AttributeError("Method does not exist")
 
