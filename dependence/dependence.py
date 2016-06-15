@@ -48,10 +48,11 @@ class ImpactOfDependence(object):
     """
     _load_data = False
 
-    def __init__(self, model_func, margins, families):
+    def __init__(self, model_func, margins, families, vine_structure=None):
         self.model_func = model_func
         self.margins = margins
         self.families = families
+        self.vine_structure = vine_structure
         
     @classmethod
     def from_data(cls, data_sample, dim, out_ID=0):
@@ -304,11 +305,7 @@ class ImpactOfDependence(object):
             The 2nd copula parameters. Usefull for certain copula families like Student.
         """
         dim = self._input_dim
-
-        # TODO: The structure is standard, think about changing it.
-        structure = np.zeros((dim, dim), dtype=int)
-        for i in range(dim):
-            structure[i, 0:i+1, ] = i + 1
+        structure = self._vine_structure
 
         matrix_param = to_matrix(param, dim)
 
@@ -731,6 +728,22 @@ class ImpactOfDependence(object):
 
         self._copula = [Conversion(family) for family in self._family_list]
         self._corr_vars_ids = list_vars
+
+    @property
+    def vine_structure(self):
+        return _vine_structure
+
+    @vine_structure.setter
+    def vine_structure(self, structure):
+        if structure is None:
+            # TODO: The structure is standard, think about changing it.
+            dim = self._input_dim
+            structure = np.zeros((dim, dim), dtype=int)
+            for i in range(dim):
+                structure[i, 0:i+1, ] = i + 1
+        else:
+            check_matrix(structure)
+        self._vine_structure = structure
 
     @property
     def rand_vars(self):
