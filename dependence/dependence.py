@@ -131,9 +131,14 @@ class ImpactOfDependence(object):
         return cls.from_data(data.values, dim)
 
     def run(self, n_dep_param, n_input_sample, fixed_grid=False,
-            dep_measure="PearsonRho", output_ID=0, seed=None):
+            dep_measure="KendallTau", output_ID=0, seed=None):
         """Run the problem. It creates and evaluates the sample from different
         dependence parameter values.
+
+        Because the sampling can be difficult for some copula parameters with
+        infinite range of definition. The use of dependence measure is
+        a good approach to have a normalised measure. Moreover, it can 
+        easily compared with other copulas.
 
         Parameters
         ----------
@@ -146,7 +151,7 @@ class ImpactOfDependence(object):
         fixed_grid : bool, optional (default=False)
             The sampling of :math:`\mathbf X` is fixed or random.
 
-        dep_measure : string, optional (default="PearsonRho")
+        dep_measure : string, optional (default="KendallTau")
             The dependence measure used in the problem to explore the dependence 
             structures. Available dependence measures: 
             - "PearsonRho": The Pearson Rho parameter. Also called linear correlation parameter.
@@ -200,7 +205,7 @@ class ImpactOfDependence(object):
         fixed_grid : bool
             The sampling of :math:`\mathbf X` is fixed or random.
 
-        dep_measure : string, optional (default="PearsonRho")
+        dep_measure : string
             The dependence measure used in the problem to explore the dependence 
             structures. Available dependence measures: 
             - "PearsonRho": The Pearson Rho parameter. Also called linear correlation parameter.
@@ -252,6 +257,7 @@ class ImpactOfDependence(object):
         self._n_param = n_param
         self._params = np.zeros((n_param, self._corr_dim))
 
+        # Convert the dependence measure to copula parameters
         for i in self._corr_vars:
             self._params[:, i] = self._copula[i].to_copula_parameter(meas_param[:, i], dep_measure)
 
@@ -262,9 +268,6 @@ class ImpactOfDependence(object):
         ----------        
         n : int
             The number of observations in the sampling of :math:`\mathbf X`.
-
-        from_init_sample : bool, optional (default=None)
-            Not yet functionable. 
         """
         
         n_sample = n * self._n_param
@@ -283,9 +286,17 @@ class ImpactOfDependence(object):
             # As well for the dependence parameter
             self._all_params[n*i:n*(i+1), :] = param
 
-    def _get_sample(self, param, n_obs):
-        """
-        must be the copula parameter
+    def _get_sample(self, param, n_obs, param2=None):
+        """Creates the sample from the Vine Copula.
+                
+        Parameters
+        ----------        
+        param : :class:`~numpy.ndarray`
+            The copula parameters.
+        n_obs : int
+            The number of observations.
+        param2 : :class:`~numpy.ndarray`, optional (default=None)
+            The 2nd copula parameters. Usefull for certain copula families like Student.
         """
         dim = self._input_dim
 
@@ -295,14 +306,14 @@ class ImpactOfDependence(object):
             structure[i, 0:i+1, ] = i + 1
 
         matrix_param = to_matrix(param, dim)
-        # TODO: We only use one param. Do it for two parameters copulas.
 
+        # TODO: One param is used. Do it for two parameters copulas.
         vine_copula = VineCopula(structure, self._families, matrix_param)
 
         # Sample from the copula
         cop_sample = vine_copula.get_sample(n_obs)
 
-        # Applied to the inverse transformation
+        # Applied to the inverse transformation to get the sample of the joint distribution
         joint_sample = np.zeros((n_obs, dim))
         for i, inv_CDF in enumerate(self._margins_inv_CDF):
             joint_sample[:, i] = np.asarray(inv_CDF(cop_sample[:, i])).ravel()
