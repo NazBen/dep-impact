@@ -56,7 +56,7 @@ class ImpactOfDependence(object):
         self.vine_structure = vine_structure
         
     @classmethod
-    def from_data(cls, data_sample, dim, out_ID=0):
+    def from_data(cls, data_sample, params, out_ID=0):
         """Load from data.
 
         This method initialise the class using built data from previous simulations.
@@ -72,7 +72,15 @@ class ImpactOfDependence(object):
         """
         # Creates the class object from ghost parameters.
         def foo(): return None
-        obj = cls(foo, ot.ComposedDistribution())
+        dim = params['Input Dimension']
+        families = np.asarray(params['Families'])
+        structure = np.asarray(params['Structure'])
+        margins = []
+        for i in range(dim):
+            d_marg = params['Marginal_%d' % (i)]
+            marginal = getattr(ot, d_marg['Family'])(*d_marg['Parameters'])
+            margins.append(marginal)
+        obj = cls(foo, margins, families, structure)
 
         corr_dim = dim * (dim - 1) / 2
         obj._corr_dim = corr_dim
@@ -91,7 +99,8 @@ class ImpactOfDependence(object):
         return obj
 
     @classmethod
-    def from_structured_data(cls, loaded_data="full_structured_data.csv"):
+    def from_structured_data(cls, loaded_data="full_structured_data.csv",
+                             info_params='info_params.json'):
         """
         Load from structured with labels.
 
@@ -135,7 +144,11 @@ class ImpactOfDependence(object):
         # Compute the problem dimension
         dim = int(np.roots([1, -1, -2 * corr_dim])[0])
 
-        return cls.from_data(data.values, dim)
+        with open(info_params, 'r') as param_f:
+            params = json.load(param_f)
+
+
+        return cls.from_data(data.values, params)
 
     def run(self, n_dep_param, n_input_sample, fixed_grid=False,
             dep_measure="KendallTau", output_ID=0, seed=None):
@@ -501,7 +514,7 @@ class ImpactOfDependence(object):
 
     def save_data(self, input_names=[], output_names=[],
                                  path=".", data_fname="full_structured_data",
-                                 ftype=".csv", param_fname='params'):
+                                 ftype=".csv", param_fname='info_params'):
         """
         """
         output_dim = self._output_dim
@@ -538,18 +551,20 @@ class ImpactOfDependence(object):
 
         # Save the parameters
         dict_output = {}
+        dict_output['Input Dimension'] = self._input_dim
+
         dict_copula = {'Families': self._families.tolist(),
                        'Structure': self._vine_structure.tolist()}
         dict_output.update(dict_copula)
 
         # TODO: Find a way to get the name of the variable for
         # Scipy frozen rv_continous instances
-        if isinstance(self._margins[0], ot.Distribution):
+        if isinstance(self._margins[0], ot.DistributionImplementation):
             dict_margins = {}
             for i, marginal in enumerate(self._margins):
                 name = marginal.getName()
                 params = list(marginal.getParameter())
-                dict_margins['margin_%d' % (i)] = {'Family': name,
+                dict_margins['Marginal_%d' % (i)] = {'Family': name,
                                       'Parameters': params}
     
             dict_output.update(dict_margins)

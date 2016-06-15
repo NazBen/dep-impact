@@ -167,7 +167,11 @@ impact = ImpactOfDependence(model_func=add_function, margins=margins, families=f
 impact.run(n_dep_param=10, n_input_sample=500, fixed_grid=True, 
            dep_measure=measure, seed=0)
 
-impact.save_structured_all_data()
+impact.save_data()
+
+impact2 = ImpactOfDependence.from_structured_data()
+
+np.testing.assert_allclose(impact2._output_sample, impact._output_sample)
 
 
 #proba_result = impact.compute_probability(threshold)
