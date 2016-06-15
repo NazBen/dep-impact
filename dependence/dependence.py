@@ -377,7 +377,9 @@ class ImpactOfDependence(object):
 
     def compute_probability(self, threshold, estimation_method='empirical',
                             confidence_level=0.95, operator='>'):
-        """Compute the probability of the current sample for each dependence
+        """Computes conditional probabilities for each parameters.
+        
+        Compute the probability of the current sample for each dependence
         parameter.
 
         Parameters
@@ -386,8 +388,8 @@ class ImpactOfDependence(object):
             The threshold :math:`s` of the output probability :math:`\mathbb P[Y \geq s]`
         estimation_method : string, optional (default='empirical')
             The probability estimation method. Available methods: 
-            - "empirical": The percentile of the output sample.
-            - "randomforest": Not yet implemented.
+            - 'empirical': Count the number of sample greater of lower to the threshold.
+            - 'randomforest': Not yet implemented.
         confidence_level : float, optional (default=0.95)
             The confidence level probability.
         operator : string, optional (default='>')
@@ -427,8 +429,8 @@ class ImpactOfDependence(object):
 
         return DependenceResult(params, self, probability, interval)
 
-    def compute_quantiles(self, alpha, confidence_level=0.95,
-                          estimation_method="empirical"):
+    def compute_quantiles(self, alpha, estimation_method='empirical',
+                          confidence_level=0.95):
         """Computes conditional quantiles.
 
         Compute the alpha-quantiles of the current sample for each dependence
@@ -438,13 +440,19 @@ class ImpactOfDependence(object):
         ----------
         alpha : float
             Probability of the quantile.
+        estimation_method : string, optional (default='empirical')
+            The quantile estimation method. Available methods: 
+            - 'empirical': The percentile of the output sample.
+            - 'randomforest': Not yet implemented.
+        confidence_level : float, optional (default=0.95)
+            The confidence level probability.
         """
         assert isinstance(estimation_method, str), \
             TypeError("Method name should be a string")
         assert isinstance(alpha, float), \
             TypeError("Method name should be a float")
-        if alpha <= 0. or alpha >= 1.:
-            raise ValueError("Quantile probability should be a probability")
+        assert 0. < alpha < 1., \
+            ValueError("alpha should be a probability")
 
         params = {'Quantity Name': 'Quantile',
                   'Quantile Probability': alpha,
@@ -453,7 +461,7 @@ class ImpactOfDependence(object):
                   }
         interval = None
 
-        if estimation_method == "empirical":
+        if estimation_method == 'empirical':
             if self._load_data:
                 out_sample = np.zeros((self._n_param, self._n_input_sample))
                 for i, param in enumerate(self._params):
@@ -464,7 +472,10 @@ class ImpactOfDependence(object):
                 out_sample = self.reshaped_output_sample_
 
             quantiles = np.percentile(out_sample, alpha * 100., axis=1)
+            # TODO: think about using the check function instead of the percentile.
+
         elif estimation_method == "randomforest":
+            raise NotImplementedError('Still some bugs to fix')
             self.buildForest()
             self._quantiles = self._quantForest.compute_quantile(
                 self._params, alpha)
