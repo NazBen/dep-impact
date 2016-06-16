@@ -229,7 +229,7 @@ class ImpactOfDependence(object):
                 d = self._n_corr_vars
 
                 # Number of points per dimension
-                n_d = np.floor((n_param) ** (1./d))
+                n_d = int((n_param) ** (1./d))
                 v = []
                 for i in self._corr_vars:
                     tau_min, tau_max = get_tau_interval(self._family_list[i])
