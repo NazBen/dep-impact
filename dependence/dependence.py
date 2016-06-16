@@ -10,10 +10,11 @@ from itertools import combinations
 from scipy.stats import rv_continuous
 import operator
 import json
+from matplotlib.mlab import griddata
 
 from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
-from .correlation import get_grid_rho, create_random_correlation_param, create_random_kendall_tau
+from .correlation import get_grid_rho, create_random_correlation_param
 
 
 OPERATORS = {">": operator.gt, ">=": operator.ge,
@@ -75,23 +76,20 @@ class ImpactOfDependence(object):
         dim = params['Input Dimension']
         families = np.asarray(params['Families'])
         structure = np.asarray(params['Structure'])
-        margins = []
+        margins = []        
         for i in range(dim):
             d_marg = params['Marginal_%d' % (i)]
             marginal = getattr(ot, d_marg['Family'])(*d_marg['Parameters'])
             margins.append(marginal)
+            
         obj = cls(foo, margins, families, structure)
 
-        corr_dim = dim * (dim - 1) / 2
-        obj._corr_dim = corr_dim
-        obj._input_dim = dim
-
-        obj._list_param = data_sample[:, :corr_dim]
-        obj._n_sample = obj._list_param.shape[0]
-        obj._input_sample = data_sample[:, corr_dim:corr_dim + dim]
-        obj._all_output_sample = data_sample[:, corr_dim + dim:]
+        obj._all_params = data_sample[:, :obj._corr_dim]
+        obj._n_sample = obj._all_params.shape[0]
+        obj._input_sample = data_sample[:, obj._corr_dim:obj._corr_dim + dim]
+        obj._all_output_sample = data_sample[:, obj._corr_dim + dim:]
         obj._output_sample = obj._all_output_sample[:, out_ID]
-        obj._params = pd.DataFrame(obj._list_param).drop_duplicates().values
+        obj._params = pd.DataFrame(obj._all_params).drop_duplicates().values
         obj._n_param = obj._params.shape[0]
         obj._n_input_sample = obj._n_sample / obj._n_param
         obj._load_data = True
@@ -136,14 +134,7 @@ class ImpactOfDependence(object):
                     data = data.append(dat_i)
         else:
             raise TypeError("Uncorrect type for loaded_data")
-
-        c_names = data.columns.values  # Column names
-        # We count the number of correlation parameters
-        corr_dim = ["r_" in name for name in c_names].count(True)
-
-        # Compute the problem dimension
-        dim = int(np.roots([1, -1, -2 * corr_dim])[0])
-
+        
         with open(info_params, 'r') as param_f:
             params = json.load(param_f)
 
@@ -233,8 +224,6 @@ class ImpactOfDependence(object):
             - "PearsonRho": The Pearson Rho parameter. Also called linear correlation parameter.
             - "KendallTau": The Tau Kendall parameter.
         """
-        corr_dim = self._corr_dim
-
         if dep_measure == "KendallTau":
             if fixed_grid:
                 d = self._n_corr_vars
@@ -581,7 +570,7 @@ class ImpactOfDependence(object):
         y = self._output_sample[id_corr]
         return x, y
 
-    def draw_matrix_plot(self, corr_id=None, figsize=(10, 6),
+    def draw_matrix_plot(self, corr_id=None, copula_space=False, figsize=(10, 10),
                           savefig=False):
         """
         """
@@ -590,21 +579,32 @@ class ImpactOfDependence(object):
         else:
             id_corr = np.where((self._all_params == self._params[corr_id]).all(axis=1))[0]
 
-        x = self._input_sample[id_corr]
-        y = self._output_sample[id_corr]
+        data = self._input_sample[id_corr]
+        
+        if copula_space:
+            x = np.zeros(data.shape)
+            for i, marginal in enumerate(self._margins):
+                for j, ui in enumerate(data[:, i]):
+                    x[j, i] = marginal.computeCDF(ui)
+        else:
+            x = data
 
         fig, axes = plt.subplots(self._input_dim, self._input_dim, figsize=figsize, sharex='col')
 
         for i in range(self._input_dim):
             for j in range(self._input_dim):
                 ax = axes[i, j]
+                xi = x[:, i]
+                xj = x[:, j]
+#                if i < j:                    
+#                    x = np.linspace(x.min(), x.max(), 100)
+#                    yi = np.linspace(y.min(), y.max(), 100)
+#                    zi = griddata(x, y, z, xi, yi, interp='linear')
+#                    CS = plt.contour(xi, yi, zi)
                 if i != j:
-                    xi = x[:, i]
-                    xj = x[:, j]
-                    ax.plot(xi, xj, '.')
+                    ax.plot(xj, xi, '.')
                 if i == j:
-                    xi = x[:, i]
-                    ax.hist(xi, bins=50)
+                    ax.hist(xi, bins=20, normed=True)
 
     def draw_design_space(self, corr_id=None, figsize=(10, 6),
                           savefig=False, color_map="jet", output_name=None,
@@ -776,7 +776,7 @@ class ImpactOfDependence(object):
 
     @property
     def vine_structure(self):
-        return _vine_structure
+        return self._vine_structure
 
     @vine_structure.setter
     def vine_structure(self, structure):
@@ -887,8 +887,9 @@ class DependenceResult(object):
                  100, self.confidence_interval)
         return to_print
 
-    def draw(self, dep_meas="CopulaParam", figsize=(10, 6),
-             savefig=False, color_map="jet", max_eps=1.E-1):
+    def draw(self, dep_meas="CopulaParam", figsize=(10, 6), 
+             color_map="jet", max_eps=1.E-1,
+             savefig=False, figpath='.'):
         """
         The quantity must be compute before
         """
@@ -1070,7 +1071,7 @@ class DependenceResult(object):
 
         # Saving the figure
         if savefig:
-            fname = './'
+            fname = figpath + '/'
             if type(savefig) is str:
                 fname += savefig
             else:

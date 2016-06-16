@@ -1,6 +1,6 @@
 ﻿from scipy.special import erf, erfinv
 from numpy.testing import assert_allclose
-from openturns import Normal, Exponential, Weibull
+import openturns as ot
 import numpy as np
 from itertools import combinations
 
@@ -35,7 +35,7 @@ def test_additive_gaussian_emprical_estimation():
     """    
     for alpha, threshold in zip(ALPHAS, THRESHOLDS):
         for dim in DIMENSIONS:
-            impact = ImpactOfDependence(add_function, [Normal()] * dim, 
+            impact = ImpactOfDependence(add_function, [ot.Normal()] * dim, 
                                         copula_name='NormalCopula')
             impact.run(n_dep_param=100, n_input_sample=100000, 
                        fixed_grid=False, dep_measure='PearsonRho', seed=0)
@@ -58,7 +58,7 @@ def test_draw():
     measure = 'KendallTau'
     alpha = 0.05
     threshold = 2.
-    impact = ImpactOfDependence(add_function, [Normal()] * dim, 
+    impact = ImpactOfDependence(add_function, [ot.Normal()] * dim, 
                                                copula_name=copula_name)
     impact.run(n_dep_param=100, n_input_sample=10000, fixed_grid=True, 
                dep_measure=measure, seed=0)
@@ -78,7 +78,7 @@ def test_fixed_grid():
             if copula_name == "ClaytonCopula" and measure == "PearsonRho":
                 pass
             else:
-                impact = ImpactOfDependence(add_function, [Normal()] * dim, 
+                impact = ImpactOfDependence(add_function, [ot.Normal()] * dim, 
                                                            copula_name=copula_name)
                 impact.run(n_dep_param=100, n_input_sample=10000, fixed_grid=True, 
                            dep_measure=measure, seed=0)
@@ -95,7 +95,7 @@ def test_dim_measure():
     copula_name = "NormalCopula"
     for dim in DIMENSIONS:
         for measure in LIST_MEASURES:
-            impact = ImpactOfDependence(add_function, [Normal()] * dim, 
+            impact = ImpactOfDependence(add_function, [ot.Normal()] * dim, 
                                                        copula_name=copula_name)
             impact.run(n_dep_param=100, n_input_sample=10000, fixed_grid=False, 
                        dep_measure=measure, seed=0)
@@ -129,7 +129,7 @@ def test_custom_corr_vars():
         
     for corr_vars in all_corr_vars:        
         for measure in LIST_MEASURES:
-            impact = ImpactOfDependence(add_function, [Normal()] * dim, 
+            impact = ImpactOfDependence(add_function, [ot.Normal()] * dim, 
                                                        copula_name=copula_name)
             impact.set_correlated_variables(corr_vars)
             assert impact._n_corr_vars == len(corr_vars), "Not good"
@@ -155,7 +155,7 @@ dim = 3
 alpha = 0.05
 threshold = 2.
 measure = "KendallTau"
-margins = [Weibull(), Normal(), Normal()]
+margins = [ot.Weibull(), ot.Normal(), ot.Normal()]
 
 families = np.zeros((dim, dim), dtype=int)
 families[1, 0] = 1

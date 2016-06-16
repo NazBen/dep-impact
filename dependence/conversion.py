@@ -101,9 +101,10 @@ class Conversion(object):
     def family(self, value):
         """
         """
-        if isinstance(value, int):
+        if isinstance(value, (int, float)):
+            np.testing.assert_equal(value, int(value))
             self._family = value
-            self._family_name = vinecopula.BiCopName(value, False)[0]
+            self._family_name = vinecopula.BiCopName(value, False)[0]            
         elif isinstance(value, str):
             self._family = int(vinecopula.BiCopName(value, False)[0])
             self._family_name = value
