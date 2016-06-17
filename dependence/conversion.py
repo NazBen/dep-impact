@@ -1,9 +1,13 @@
-﻿import numpy as np
+﻿"""Conversion of copula.
+
+This class makes the conversion between copula parameters and dependence measures
+"""
+import numpy as np
 from rpy2.robjects.packages import importr
 from rpy2.robjects.numpy2ri import numpy2ri
 
 
-vinecopula = importr('VineCopula')
+VINECOPULA = importr('VineCopula')
 
 def get_param1_interval(copula):
     """
@@ -69,8 +73,7 @@ class Conversion(object):
         
         if dep_measure == "KendallTau":
             r_params = numpy2ri(measure_param)
-            copula_param = np.asarray(vinecopula.BiCopTau2Par(self._family, r_params))
-                    
+            copula_param = np.asarray(VINECOPULA.BiCopTau2Par(self._family, r_params))
         elif dep_measure == "PearsonRho":
             copula_param = self._copula.fromPearsonToParam(measure_param)
         else:
@@ -82,10 +85,9 @@ class Conversion(object):
         """Convert the dependence_measure to the copula parameter.
         """
         r_params = numpy2ri(params)
-        copula_param = np.asarray(vinecopula.BiCopPar2Tau(self._family, r_params))
+        copula_param = np.asarray(VINECOPULA.BiCopPar2Tau(self._family, r_params))
         return copula_param
-        
-                
+
     def to_Pearson(self, measure_param):
         """Convert the dependence_measure to the copula parameter.
         """
@@ -102,9 +104,9 @@ class Conversion(object):
         if isinstance(value, (int, float)):
             np.testing.assert_equal(value, int(value))
             self._family = value
-            self._family_name = vinecopula.BiCopName(value, False)[0]            
+            self._family_name = VINECOPULA.BiCopName(value, False)[0]            
         elif isinstance(value, str):
-            self._family = int(vinecopula.BiCopName(value, False)[0])
+            self._family = int(VINECOPULA.BiCopName(value, False)[0])
             self._family_name = value
         else:
             raise TypeError("Unkow Type for family")

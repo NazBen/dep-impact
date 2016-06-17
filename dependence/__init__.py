@@ -1,3 +1,5 @@
-﻿from .dependence import ImpactOfDependence
+﻿"""
+"""
+from .dependence import ImpactOfDependence
 
 __all__ = ["ImpactOfDependence"]

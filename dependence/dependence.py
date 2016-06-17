@@ -70,7 +70,7 @@ class ImpactOfDependence(object):
             The output ID to take care of when multiple output are available.
         """
         # Creates the class object from ghost parameters.
-        def foo(): return None
+        def tmp(): return None
         dim = params['Input Dimension']
         families = np.asarray(params['Families'])
         structure = np.asarray(params['Structure'])
@@ -80,7 +80,7 @@ class ImpactOfDependence(object):
             marginal = getattr(ot, d_marg['Family'])(*d_marg['Parameters'])
             margins.append(marginal)
             
-        obj = cls(foo, margins, families, structure)
+        obj = cls(tmp, margins, families, structure)
 
         obj._all_params = data_sample[:, :obj._corr_dim]
         obj._n_sample = obj._all_params.shape[0]
@@ -155,10 +155,10 @@ class ImpactOfDependence(object):
             The number of dependence parameters.
 
         n_input_sample : int
-            The number of observations in the sampling of :math:`\mathbf X`.
+            The number of observations in the sampling of :math:`\mathbf{X}`.
 
         fixed_grid : bool, optional (default=False)
-            The sampling of :math:`\mathbf X` is fixed or random.
+            The sampling of :math:`\mathbf{X}` is fixed or random.
 
         dep_measure : string, optional (default="KendallTau")
             The dependence measure used in the problem to explore the dependence 
@@ -410,7 +410,7 @@ class ImpactOfDependence(object):
                   'Confidence Level': confidence_level,
                   'Estimation Method': estimation_method,
                   'Operator': operator
-                  }
+                 }
 
         op_func = OPERATORS[operator]
 
@@ -458,7 +458,7 @@ class ImpactOfDependence(object):
                   'Quantile Probability': alpha,
                   'Confidence Level': confidence_level,
                   'Estimation Method': estimation_method
-                  }
+                 }
         interval = None
 
         if estimation_method == 'empirical':
@@ -501,8 +501,8 @@ class ImpactOfDependence(object):
         np.savetxt(full_fname, out)
 
     def save_data(self, input_names=[], output_names=[],
-                                 path=".", data_fname="full_structured_data",
-                                 ftype=".csv", param_fname='info_params'):
+                  path=".", data_fname="full_structured_data",
+                  ftype=".csv", param_fname='info_params'):
         """
         """
         output_dim = self._output_dim
@@ -553,7 +553,7 @@ class ImpactOfDependence(object):
                 name = marginal.getName()
                 params = list(marginal.getParameter())
                 dict_margins['Marginal_%d' % (i)] = {'Family': name,
-                                      'Parameters': params}
+                                                     'Parameters': params}
     
             dict_output.update(dict_margins)
 
@@ -570,7 +570,7 @@ class ImpactOfDependence(object):
         return x, y
 
     def draw_matrix_plot(self, corr_id=None, copula_space=False, figsize=(10, 10),
-                          savefig=False):
+                         savefig=False):
         """
         """
         if corr_id is None:
@@ -603,6 +603,8 @@ class ImpactOfDependence(object):
                 if copula_space:
                     ax.set_xticks([])
                     ax.set_yticks([])
+
+        fig.tight_layout()
 
     def draw_design_space(self, corr_id=None, figsize=(10, 6),
                           savefig=False, color_map="jet", output_name=None,
@@ -692,7 +694,7 @@ class ImpactOfDependence(object):
         fig.tight_layout()
 
         if savefig:
-            if type(savefig) is str:
+            if isinstance(savefig, str):
                 fname = savefig + '/'
             else:
                 fname = "./"
@@ -1071,7 +1073,7 @@ class DependenceResult(object):
         # Saving the figure
         if savefig:
             fname = figpath + '/'
-            if type(savefig) is str:
+            if isinstance(savefig, str):
                 fname += savefig
             else:
                 fname += "fig" + quantity_name
