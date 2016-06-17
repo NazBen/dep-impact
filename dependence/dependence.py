@@ -6,11 +6,9 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cmx
 from mpl_toolkits.mplot3d import Axes3D
 import pandas as pd
-from itertools import combinations
 from scipy.stats import rv_continuous
 import operator
 import json
-from matplotlib.mlab import griddata
 
 from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
@@ -465,11 +463,12 @@ class ImpactOfDependence(object):
 
         if estimation_method == 'empirical':
             if self._load_data:
-                out_sample = np.zeros((self._n_param, self._n_input_sample))
-                for i, param in enumerate(self._params):
-                    id_param = np.where(
-                        (self._all_params == param).all(axis=1))[0]
-                    out_sample[i, :] = self._output_sample[id_param]
+#                out_sample = np.zeros((self._n_param, self._n_input_sample))
+#                for i, param in enumerate(self._params):
+#                    id_param = np.where(
+#                        (self._all_params == param).all(axis=1))[0]
+#                    out_sample[i, :] = self._output_sample[id_param]
+                out_sample = self.reshaped_output_sample_
             else:
                 out_sample = self.reshaped_output_sample_
 
@@ -596,15 +595,14 @@ class ImpactOfDependence(object):
                 ax = axes[i, j]
                 xi = x[:, i]
                 xj = x[:, j]
-#                if i < j:                    
-#                    x = np.linspace(x.min(), x.max(), 100)
-#                    yi = np.linspace(y.min(), y.max(), 100)
-#                    zi = griddata(x, y, z, xi, yi, interp='linear')
-#                    CS = plt.contour(xi, yi, zi)
                 if i != j:
                     ax.plot(xj, xi, '.')
                 if i == j:
-                    ax.hist(xi, bins=20, normed=True)
+                    ax.hist(xi, bins=30, normed=True)
+                    
+                if copula_space:
+                    ax.set_xticks([])
+                    ax.set_yticks([])
 
     def draw_design_space(self, corr_id=None, figsize=(10, 6),
                           savefig=False, color_map="jet", output_name=None,
@@ -754,9 +752,10 @@ class ImpactOfDependence(object):
         return self._families
 
     @families.setter
-    def families(self, value):
-        check_matrix(value)
-        self._families = value
+    def families(self, matrix):
+        matrix = matrix.astype(int)
+        check_matrix(matrix)
+        self._families = matrix
         self._family_list = []
         self._n_corr_vars = 0
         self._corr_vars = []
@@ -764,8 +763,8 @@ class ImpactOfDependence(object):
         list_vars = []
         for i in range(self._input_dim):
             for j in range(i):
-                self._family_list.append(value[i, j])
-                if value[i, j] > 0:
+                self._family_list.append(matrix[i, j])
+                if matrix[i, j] > 0:
                     self._corr_vars.append(k)
                     self._n_corr_vars += 1
                     list_vars.append([i, j])

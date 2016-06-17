@@ -2,7 +2,7 @@ import numpy as np
 import rpy2.rinterface as ri
 from rpy2.robjects.packages import importr
 from rpy2.robjects.numpy2ri import numpy2ri
-vinecopula = importr('VineCopula')
+
 
 def check_matrix(value):
     assert isinstance(value, np.ndarray), \
@@ -12,7 +12,7 @@ def check_matrix(value):
     assert value.shape[0] == value.shape[1], \
         AttributeError('Matrix should be squared.')
 
-def check_family(matrix):
+def check_family(matrix, vinecopula):
     d = matrix.shape[0]
     for i in range(d):
         for j in range(i):
@@ -28,6 +28,7 @@ class VineCopula(object):
     """Vine Copula Class."""
 
     def __init__(self, structure, family, param1, param2=None):
+        self._vinecopula = importr('VineCopula')
         self.structure = structure
         self.family = family
         self.param1 = param1
@@ -54,7 +55,7 @@ class VineCopula(object):
     @family.setter
     def family(self, value):
         check_matrix(value)
-        check_family(value)
+        check_family(value, self._vinecopula)
         assert value.shape[0] == self._dim, \
             AttributeError('Family matrix should be of dimension == %d' % (self._dim))
         self._family = value
@@ -90,7 +91,7 @@ class VineCopula(object):
         r_family =  numpy2ri(self.family)
         r_par =  numpy2ri(self.param1)
         r_par2 =  numpy2ri(self.param2)
-        self._rvine = vinecopula.RVineMatrix(r_structure, r_family, r_par, r_par2)
+        self._rvine = self._vinecopula.RVineMatrix(r_structure, r_family, r_par, r_par2)
 
     def get_sample(self, n):
         """
@@ -99,4 +100,4 @@ class VineCopula(object):
             TypeError("Sample size must be an integer.")
         assert n > 0, \
             ValueError("Sample size must be positive.")
-        return np.asarray(vinecopula.RVineSim(n, self._rvine))
+        return np.asarray(self._vinecopula.RVineSim(n, self._rvine))

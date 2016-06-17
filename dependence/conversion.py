@@ -1,9 +1,7 @@
 ﻿import numpy as np
-import rpy2.rinterface as ri
 from rpy2.robjects.packages import importr
 from rpy2.robjects.numpy2ri import numpy2ri
 
-from .vinecopula import check_matrix, check_family
 
 vinecopula = importr('VineCopula')
 
@@ -37,7 +35,7 @@ def get_param2_interval(copula):
 
 def get_tau_interval(copula):
     assert isinstance(copula, (int, str)), \
-        TypeError("Input must be int or str")
+        TypeError("Input must be int or str. Not: ", type(copula))
 
     if copula in [1, 'Gaussian', 2, 't']:
         return -1., 1.
