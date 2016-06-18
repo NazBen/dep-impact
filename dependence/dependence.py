@@ -449,10 +449,16 @@ class ImpactOfDependence(object):
         """
         assert isinstance(estimation_method, str), \
             TypeError("Method name should be a string")
-        assert isinstance(alpha, float), \
+        if isinstance(alpha, (list, np.ndarray)):
+            for alphai in alpha:
+                assert 0. < alphai < 1., \
+                    ValueError("alpha should be a probability")
+            alpha = np.asarray(alpha)
+        elif isinstance(alpha, float):
+            assert 0. < alpha < 1., \
+                ValueError("alpha should be a probability")
+        else:
             TypeError("Method name should be a float")
-        assert 0. < alpha < 1., \
-            ValueError("alpha should be a probability")
 
         configs = {'Quantity Name': 'Quantile',
                   'Quantile Probability': alpha,
@@ -474,9 +480,7 @@ class ImpactOfDependence(object):
                 Please use the build_forest method before computing the 
                 quantiles.\nThe forest is build with default options for now.""",
                 DeprecationWarning)
-
                 self.build_forest()
-                self._params[:, self._corr_vars]
 
             if grid_size:
                 # Create the grid of params
