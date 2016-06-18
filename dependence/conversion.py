@@ -42,13 +42,13 @@ def get_tau_interval(copula):
         TypeError("Input must be int or str. Not: ", type(copula))
 
     if copula in [1, 'Gaussian', 2, 't']:
-        return -1., 1.
+        return -0.99, 0.99
     elif copula in [3, 'Clayton']:
-        return 0., 1.
+        return 0., 0.99
     elif copula in [4, 'Gumbel']:
-        return 0., 1.
+        return 0., 0.99
     elif copula in [5, 'Frank']:
-        return 0., 1.
+        return 0., 0.99
     else:
         raise NotImplementedError("Not implemented yet.")
 
@@ -84,7 +84,12 @@ class Conversion(object):
     def to_Kendall(self, params):
         """Convert the dependence_measure to the copula parameter.
         """
-        r_params = numpy2ri(params)
+        if isinstance(params, np.ndarray):
+            r_params = numpy2ri(params)
+        elif isinstance(params, float):
+            r_params = params
+        else:
+            raise TypeError("Wrong type for params. Got: ", type(params))
         copula_param = np.asarray(VINECOPULA.BiCopPar2Tau(self._family, r_params))
         return copula_param
 
