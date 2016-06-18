@@ -9,6 +9,8 @@ import pandas as pd
 from scipy.stats import rv_continuous
 import operator
 import json
+from pyquantregForest import QuantileForest
+import warnings
 
 from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
@@ -53,6 +55,8 @@ class ImpactOfDependence(object):
         self.margins = margins
         self.families = families
         self.vine_structure = vine_structure
+
+        self._forest_built = False
         
     @classmethod
     def from_data(cls, data_sample, params, out_ID=0):
@@ -325,11 +329,14 @@ class ImpactOfDependence(object):
 
         return joint_sample
 
-    def buildForest(self, n_jobs=8):
+    def build_forest(self, quant_forest=QuantileForest()):
         """Build a Quantile Random Forest to estimate conditional quantiles.
         """
-        self._quantForest = QuantileForest(self._all_params,
-                                           self._output_sample, n_jobs=n_jobs)
+        used_params = self._all_params[:, self._corr_vars]
+        quant_forest.fit(used_params, self._output_sample)
+        self._quant_forest = quant_forest
+
+        self._forest_built = True
 
     def compute_quantity(self, quantity_func, options, boostrap=False):
         """Compute the output quantity of interest.
@@ -462,24 +469,30 @@ class ImpactOfDependence(object):
         interval = None
 
         if estimation_method == 'empirical':
-            if self._load_data:
-#                out_sample = np.zeros((self._n_param, self._n_input_sample))
-#                for i, param in enumerate(self._params):
-#                    id_param = np.where(
-#                        (self._all_params == param).all(axis=1))[0]
-#                    out_sample[i, :] = self._output_sample[id_param]
-                out_sample = self.reshaped_output_sample_
-            else:
-                out_sample = self.reshaped_output_sample_
-
+            out_sample = self.reshaped_output_sample_
             quantiles = np.percentile(out_sample, alpha * 100., axis=1)
             # TODO: think about using the check function instead of the percentile.
 
         elif estimation_method == "randomforest":
-            raise NotImplementedError('Still some bugs to fix')
-            self.buildForest()
-            self._quantiles = self._quantForest.compute_quantile(
-                self._params, alpha)
+            if not self._forest_built:
+                warnings.warn(""""RandomForest has not been manually built. 
+                Please use the build_forest method before computing the 
+                quantiles.\nThe forest is build with default options for now.""",
+                DeprecationWarning)
+
+                self.build_forest()
+                self._params[:, self._corr_vars]
+                
+            # Create the grid of params
+            # We first create using kendall tau, then we convert it.
+            grid_size = 20
+            grid = np.zeros((self._n_corr_vars, grid_size))
+            for i, k in enumerate(self._corr_vars):
+                tau_min, tau_max = get_tau_interval(self._family_list[k])
+                grid[i, :] = np.linspace(tau_min, tau_max, grid_size+1, endpoint=False)[1:]
+
+            
+            quantiles = self._quant_forest.compute_quantile(self._params[:, self._corr_vars], alpha)
         else:
             raise AttributeError(
                 "Unknow estimation method: %s" % estimation_method)
@@ -856,7 +869,7 @@ class DependenceResult(object):
     @dependence.setter
     def dependence(self, obj):
         assert isinstance(obj, ImpactOfDependence), \
-            'Variable must be an ImpactOfDependence object'
+            TypeError('Variable must be an ImpactOfDependence object. Got instead:', type(obj))
         self._dependence = obj
 
     @property
