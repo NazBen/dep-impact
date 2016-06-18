@@ -9,8 +9,8 @@ import pandas as pd
 from scipy.stats import rv_continuous
 import operator
 import json
-from pyquantregForest import QuantileForest
 import warnings
+from pyquantregForest import QuantileForest
 
 from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
@@ -57,7 +57,7 @@ class ImpactOfDependence(object):
         self.vine_structure = vine_structure
 
         self._forest_built = False
-        
+
     @classmethod
     def from_data(cls, data_sample, params, out_ID=0):
         """Load from data.
@@ -266,7 +266,6 @@ class ImpactOfDependence(object):
         else:
             raise AttributeError("Unkown dependence parameter")
             
-        self._meas_param = meas_param
         self._n_param = n_param
         self._params = np.zeros((n_param, self._corr_dim))
 
@@ -320,7 +319,8 @@ class ImpactOfDependence(object):
         vine_copula = VineCopula(structure, self._families, matrix_param)
 
         # Sample from the copula
-        cop_sample = vine_copula.get_sample(n_obs)
+        # The reshape is in case there is only one sample (for RF tests)
+        cop_sample = vine_copula.get_sample(n_obs).reshape(n_obs, self._input_dim)
 
         # Applied to the inverse transformation to get the sample of the joint distribution
         joint_sample = np.zeros((n_obs, dim))
@@ -335,7 +335,6 @@ class ImpactOfDependence(object):
         used_params = self._all_params[:, self._corr_vars]
         quant_forest.fit(used_params, self._output_sample)
         self._quant_forest = quant_forest
-
         self._forest_built = True
 
     def compute_quantity(self, quantity_func, options, boostrap=False):
@@ -412,7 +411,7 @@ class ImpactOfDependence(object):
             TypeError("Method name should be a string")
 
         out_sample = self.reshaped_output_sample_
-        params = {'Quantity Name': 'Probability',
+        configs = {'Quantity Name': 'Probability',
                   'Threshold': threshold,
                   'Confidence Level': confidence_level,
                   'Estimation Method': estimation_method,
@@ -434,10 +433,10 @@ class ImpactOfDependence(object):
         else:
             raise AttributeError("Method does not exist")
 
-        return DependenceResult(params, self, probability, interval)
+        return DependenceResult(configs, self, probability, interval)
 
     def compute_quantiles(self, alpha, estimation_method='empirical',
-                          confidence_level=0.95):
+                          confidence_level=0.95, grid_size=100):
         """Computes conditional quantiles.
 
         Compute the alpha-quantiles of the current sample for each dependence
@@ -461,16 +460,18 @@ class ImpactOfDependence(object):
         assert 0. < alpha < 1., \
             ValueError("alpha should be a probability")
 
-        params = {'Quantity Name': 'Quantile',
+        configs = {'Quantity Name': 'Quantile',
                   'Quantile Probability': alpha,
                   'Confidence Level': confidence_level,
                   'Estimation Method': estimation_method
                  }
+
         interval = None
 
         if estimation_method == 'empirical':
             out_sample = self.reshaped_output_sample_
             quantiles = np.percentile(out_sample, alpha * 100., axis=1)
+            cond_params = self._params[:, self._corr_vars]
             # TODO: think about using the check function instead of the percentile.
 
         elif estimation_method == "randomforest":
@@ -485,19 +486,22 @@ class ImpactOfDependence(object):
                 
             # Create the grid of params
             # We first create using kendall tau, then we convert it.
-            grid_size = 20
             grid = np.zeros((self._n_corr_vars, grid_size))
             for i, k in enumerate(self._corr_vars):
-                tau_min, tau_max = get_tau_interval(self._family_list[k])
-                grid[i, :] = np.linspace(tau_min, tau_max, grid_size+1, endpoint=False)[1:]
+                p_min = self._copula[k].to_Kendall(self._params[:, k].min())
+                p_max = self._copula[k].to_Kendall(self._params[:, k].max())
+                tmp = np.linspace(p_min, p_max, grid_size+1, endpoint=False)[1:]
+                grid[i, :] = self._copula[k].to_copula_parameter(tmp, 'KendallTau')
 
-            
-            quantiles = self._quant_forest.compute_quantile(self._params[:, self._corr_vars], alpha)
+            cond_params = np.vstack(np.meshgrid(*grid)).reshape(self._n_corr_vars,-1).T
+
+            self._cond_params = cond_params
+            quantiles = self._quant_forest.compute_quantile(cond_params, alpha)
         else:
             raise AttributeError(
                 "Unknow estimation method: %s" % estimation_method)
 
-        return DependenceResult(params, self, quantiles, interval)
+        return DependenceResult(configs, self, quantiles, interval, cond_params)
 
     def save_input_data(self, path=".", fname="inputSampleCop", ftype=".csv"):
         """
@@ -853,14 +857,12 @@ class ImpactOfDependence(object):
 class DependenceResult(object):
 
     def __init__(self, params, dependence_object, quantity,
-                 confidence_interval=None):
+                 confidence_interval=None, cond_params=None):
         self.params = params
         self.quantity = quantity
         self.confidence_interval = confidence_interval
         self.dependence = dependence_object
-
-        assert isinstance(dependence_object, ImpactOfDependence), \
-            'Variable must be an ImpactOfDependence object'
+        self.cond_params = cond_params
 
     @property
     def dependence(self):
@@ -868,8 +870,8 @@ class DependenceResult(object):
 
     @dependence.setter
     def dependence(self, obj):
-        assert isinstance(obj, ImpactOfDependence), \
-            TypeError('Variable must be an ImpactOfDependence object. Got instead:', type(obj))
+        #assert isinstance(obj, ImpactOfDependence), \
+        #    TypeError('Variable must be an ImpactOfDependence object. Got instead:', type(obj))
         self._dependence = obj
 
     @property
@@ -914,10 +916,15 @@ class DependenceResult(object):
             EnvironmentError("Cannot draw quantiles for dim > 3")
             
         # Dependence parameters
-        copula_params = obj._params[:, obj._corr_vars]
+        if self.cond_params is None:
+            copula_params = obj._params[:, obj._corr_vars]
+            n_param = obj._n_param
+        else:
+            copula_params = self.cond_params
+            n_param = copula_params.shape[0]
 
         if dep_meas == "KendallTau":
-            params = np.zeros((obj._n_param, n_corr_vars))
+            params = np.zeros((n_param, n_corr_vars))
             for i, k in enumerate(obj._corr_vars):
                 params[:, i] = obj._copula[k].to_Kendall(copula_params[:, i])
             param_name = "\\tau"
@@ -930,7 +937,6 @@ class DependenceResult(object):
         else:
             raise("Undefined param")
 
-
         # Output quantities of interest
         quantity = self.quantity
         interval = self.confidence_interval
@@ -942,6 +948,7 @@ class DependenceResult(object):
         else:
             id_indep = np.abs(params).sum(axis=1).argmin()
 
+        print id_indep
         # Independent parameter and quantile
         indep_param = params[id_indep]
         indep_quant = quantity[id_indep]
