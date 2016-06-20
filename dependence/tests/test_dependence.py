@@ -184,7 +184,7 @@ families[1, 0] = 1
 families[2, 0] = 0
 families[2, 1] = 1
   
-impact = ImpactOfDependence(model_func=add_function, margins=margins, families=families)
+impact = ImpactOfDependence(model_func=add_function, margins=margins, families=families, copula_type='normal')
 
 impact.run(n_dep_param=10, n_input_sample=500, fixed_grid=True, 
             dep_measure=measure, seed=0)

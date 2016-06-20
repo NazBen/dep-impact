@@ -14,7 +14,7 @@ from pyquantregForest import QuantileForest
 
 from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
-from .correlation import get_grid_rho, create_random_correlation_param
+from .correlation import get_grid_rho, create_random_correlation_param, create_random_kendall_tau
 
 
 OPERATORS = {">": operator.gt, ">=": operator.ge,
@@ -50,12 +50,12 @@ class ImpactOfDependence(object):
     """
     _load_data = False
 
-    def __init__(self, model_func, margins, families, vine_structure=None):
+    def __init__(self, model_func, margins, families, vine_structure=None, copula_type='vine'):
         self.model_func = model_func
         self.margins = margins
         self.families = families
         self.vine_structure = vine_structure
-
+        self.copula_type = copula_type
         self._forest_built = False
 
     @classmethod
@@ -246,10 +246,16 @@ class ImpactOfDependence(object):
                     meas_param[:, k] = tmp[:, i]
                 
             else:  # Random grid
-                meas_param = np.zeros((n_param, self._corr_dim))
-                for i in self._corr_vars:
-                    tau_min, tau_max = get_tau_interval(self._family_list[i])
-                    meas_param[:, i] = np.random.uniform(tau_min, tau_max, n_param)
+                if self._copula_type == "vine":
+                    meas_param = np.zeros((n_param, self._corr_dim))
+                    for i in self._corr_vars:
+                        tau_min, tau_max = get_tau_interval(self._family_list[i])
+                        meas_param[:, i] = np.random.uniform(tau_min, tau_max, n_param)
+                elif self._copula_type == "normal":
+                    meas_param = create_random_kendall_tau(self._families, 
+                                                       n_param)
+                else:
+                    raise AttributeError('Unknow copula type:', self._copula_type)
 
         elif dep_measure == "PearsonRho":
             NotImplementedError("Work in progress.")
@@ -306,12 +312,20 @@ class ImpactOfDependence(object):
 
         matrix_param = to_matrix(param, dim)
 
-        # TODO: One param is used. Do it for two parameters copulas.
-        vine_copula = VineCopula(structure, self._families, matrix_param)
+        if self._copula_type == 'vine':
+            # TODO: One param is used. Do it for two parameters copulas.
+            vine_copula = VineCopula(structure, self._families, matrix_param)
 
-        # Sample from the copula
-        # The reshape is in case there is only one sample (for RF tests)
-        cop_sample = vine_copula.get_sample(n_obs).reshape(n_obs, self._input_dim)
+            # Sample from the copula
+            # The reshape is in case there is only one sample (for RF tests)
+            cop_sample = vine_copula.get_sample(n_obs).reshape(n_obs, self._input_dim)
+        elif self._copula_type == 'normal':
+            # Create the correlation matrix
+            cor_matrix = matrix_param + matrix_param.T + np.identity(dim)
+            cop = ot.NormalCopula(ot.CorrelationMatrix(cor_matrix))
+            cop_sample = np.asarray(cop.getSample(n_obs))
+        else:
+            raise AttributeError('Unknown type of copula.')
 
         # Applied to the inverse transformation to get the sample of the joint distribution
         joint_sample = np.zeros((n_obs, dim))
@@ -794,6 +808,25 @@ class ImpactOfDependence(object):
         self._copula = [Conversion(family) for family in self._family_list]
         self._corr_vars_ids = list_vars
 
+    @property
+    def copula_type(self):
+        return self._copula_type
+
+    @copula_type.setter
+    def copula_type(self, value):
+        assert isinstance(value, str), \
+            TypeError('Type must be a string. Type given:', type(value))
+            
+        if value == "normal":
+            families = self._families
+            # Warn if the user added a wrong type of family
+            if (families[self._families != 0] != 1).any():
+                warnings.warn('Some families were not normal and you want an elliptic copula.')
+            
+            # Set all to families to normal
+            families[self._families != 0] = 1
+            self.families = families
+        self._copula_type = value
     @property
     def vine_structure(self):
         return self._vine_structure

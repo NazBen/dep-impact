@@ -123,8 +123,7 @@ def create_random_correlation_param_previous(dim, n=1, sampling="monte-carlo"):
     else:
         return list_rho
         
-def create_random_kendall_tau(corr_variables, n=1, sampling="monte-carlo", 
-                              is_normal=False):
+def create_random_kendall_tau(corr_variables, n=1, sampling="monte-carlo"):
     """
     Using acceptation reject...
 
@@ -136,7 +135,7 @@ def create_random_kendall_tau(corr_variables, n=1, sampling="monte-carlo",
     corr_vars = []  # Correlated variables
     k = 0
     for i in range(dim):
-        for j in range(i+1, dim):
+        for j in range(i):
             # If the variables are correlated,
             # we add the correlation ID in the list
             if corr_variables[i, j]:
@@ -147,9 +146,6 @@ def create_random_kendall_tau(corr_variables, n=1, sampling="monte-carlo",
     # Array of correlation parameters
     list_tau = np.zeros((n, corr_dim), dtype=np.float)
     
-    if not is_normal and n_corr_vars > 1:
-        raise NotImplementedError("You cannot yet sample kendal tau parameters for non gaussian copulas for more than 2 correlated variables")
-
     for i in range(n): # For each parameter
         condition = True
         # Stop when the matrix is definite semi positive
@@ -161,8 +157,7 @@ def create_random_kendall_tau(corr_variables, n=1, sampling="monte-carlo",
             else:
                 raise ValueError("Unknow sampling strategy")
 
-            if is_normal:
-                u = Conversion.NormalCopula.fromKendallToParam(u)
+            u = Conversion.NormalCopula.fromKendallToParam(u)
                 
             if n_corr_vars == corr_dim:
                 rho = u
