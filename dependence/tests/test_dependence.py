@@ -180,15 +180,17 @@ measure = "KendallTau"
 margins = [ot.Weibull(), ot.Normal(), ot.Normal()]
 
 families = np.zeros((dim, dim), dtype=int)
-families[1, 0] = 1
+families[1, 0] = 0
 families[2, 0] = 0
-families[2, 1] = 1
+families[2, 1] = 26
   
-impact = ImpactOfDependence(model_func=add_function, margins=margins, families=families, copula_type='normal')
+impact = ImpactOfDependence(model_func=add_function, margins=margins, families=families)
 
-impact.run(n_dep_param=10, n_input_sample=500, fixed_grid=True, 
+impact.run(n_dep_param=10, n_input_sample=10000, fixed_grid=True, 
             dep_measure=measure, seed=0)
 
-quant_res = impact.compute_quantiles(alpha, estimation_method='randomforest')
+quant_res = impact.compute_quantiles(alpha)
 
-print quant_res.quantity
+id_min = quant_res.quantity.argmax()
+
+impact.draw_matrix_plot(id_min, copula_space=True)

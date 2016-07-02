@@ -573,9 +573,12 @@ class ImpactOfDependence(object):
         # Save the parameters
         dict_output = {}
         dict_output['Input Dimension'] = self._input_dim
+        dict_output['Parameter Number'] = self._n_param
+        dict_output['Sample Size'] = self._n_input_sample
 
         dict_copula = {'Families': self._families.tolist(),
                        'Structure': self._vine_structure.tolist()}
+                       
         dict_output.update(dict_copula)
 
         # TODO: Find a way to get the name of the variable for
@@ -882,7 +885,16 @@ class ImpactOfDependence(object):
 
     @property
     def reshaped_output_sample_(self):
-        return self._output_sample.reshape((self._n_param, self._n_input_sample))
+        if not self._load_data:
+            return self._output_sample.reshape((self._n_param, self._n_input_sample))
+            
+        else:
+            # TODO: this is not consistent. Find a way to presort the sample.
+            out_sample = np.zeros((self._n_param, self._n_input_sample))
+            for i, par in enumerate(self._params):
+                id_p = (self._all_params == par).all(axis=1)
+                out_sample[i, :] = self._output_sample[id_p]
+            return out_sample
 
     @reshaped_output_sample_.setter
     def reshaped_output_sample_(self, value):

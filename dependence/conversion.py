@@ -6,6 +6,24 @@ import numpy as np
 from rpy2.robjects.packages import importr
 from rpy2.robjects.numpy2ri import numpy2ri
 
+INFO_COPULA = {0: 'Independence',
+               1: 'Gaussian',
+               2: 't',
+               3: 'Clayton',
+               4: 'Gumbel',
+               5: 'Frank',
+               6: 'Joe',
+               13: 'Survival Clayton',
+               14: 'Survival Gumbel',
+               16: 'Survival Joe',
+               23: 'Rotated Clayton 90 degrees',
+               24: 'Rotated Gumbel 90 degrees',
+               26: 'Rotated Joe 90 degrees',
+               33: 'Rotated Clayton 270 degrees',
+               34: 'Rotated Gumbel 270 degrees',
+               36: 'Rotated Joe 270 degrees'               
+              }
+
 
 VINECOPULA = importr('VineCopula')
 
@@ -14,15 +32,21 @@ def get_param1_interval(copula):
     """
     assert isinstance(copula, (int, str)), \
         TypeError("Input must be int or str")
+    if isinstance(copula, str):
+        copula = int(VINECOPULA.BiCopName(copula, False)[0])
 
-    if copula in [1, 'Gaussian', 2, 't']:
+    if copula in [1, 2]:
         return -1., 1.
-    elif copula in [3, 'Clayton']:
+    elif copula in [3, 13]:
         return 0., np.inf
-    elif copula in [4, 'Gumbel']:
+    elif copula in [23, 33]:
+        return 0., -np.inf,
+    elif copula in [4, 14, 24, 34]:
         return 1., np.inf
-    elif copula in [5, 'Frank']:
+    elif copula in [5]:
         return -np.inf, np.inf
+    elif copula in [6, 26, 36]:
+        return 1., np.inf
     else:
         raise NotImplementedError("Not implemented yet.")
 
@@ -40,15 +64,15 @@ def get_param2_interval(copula):
 def get_tau_interval(copula):
     assert isinstance(copula, (int, str)), \
         TypeError("Input must be int or str. Not: ", type(copula))
+    if isinstance(copula, str):
+        copula = int(VINECOPULA.BiCopName(copula, False)[0])
 
-    if copula in [1, 'Gaussian', 2, 't']:
+    if copula in [1, 2]:
         return -0.99, 0.99
-    elif copula in [3, 'Clayton']:
+    elif copula in [3, 13, 4, 14, 5, 6, 16]:
         return 0., 0.99
-    elif copula in [4, 'Gumbel']:
-        return 0., 0.99
-    elif copula in [5, 'Frank']:
-        return 0., 0.99
+    elif copula in [23, 24, 26, 33, 34, 36]:  # Rotated copulas
+        return -0.99, 0.
     else:
         raise NotImplementedError("Not implemented yet.")
 
