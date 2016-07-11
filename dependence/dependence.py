@@ -1,7 +1,10 @@
-# -*- coding: utf-8 -*-
+"""Impact of Dependencies.
+
+The main class inspect the impact that dependencies can have on a quantity
+of interest of the output of a model.
+"""
 import numpy as np
 import openturns as ot
-import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.cm as cmx
 from mpl_toolkits.mplot3d import Axes3D
@@ -15,7 +18,6 @@ from pyquantregForest import QuantileForest
 from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
 from .correlation import get_grid_rho, create_random_correlation_param, create_random_kendall_tau
-
 
 OPERATORS = {">": operator.gt, ">=": operator.ge,
              "<": operator.lt, "<=": operator.le}
@@ -444,7 +446,7 @@ class ImpactOfDependence(object):
         return DependenceResult(configs, self, probability, interval, cond_params)
 
     def compute_quantiles(self, alpha, estimation_method='empirical',
-                          confidence_level=0.95, grid_size=None):
+                          confidence_level=0.95, grid_size=None, bootstrap=True):
         """Computes conditional quantiles.
 
         Compute the alpha-quantiles of the current sample for each dependence
@@ -486,6 +488,7 @@ class ImpactOfDependence(object):
         if estimation_method == 'empirical':
             out_sample = self.reshaped_output_sample_
             quantiles = np.percentile(out_sample, alpha * 100., axis=1)
+            func_bootstrap(out_sample, 5, np.percentile, alpha)
             # TODO: think about using the check function instead of the percentile.
 
         elif estimation_method == "randomforest":
@@ -675,7 +678,7 @@ class ImpactOfDependence(object):
             c_min, c_max = min(color_scale), max(color_scale)
         else:
             c_min, c_max = color_lims[0], color_lims[1]
-        cNorm = matplotlib.colors.Normalize(vmin=c_min, vmax=c_max)
+        cNorm = plt.colors.Normalize(vmin=c_min, vmax=c_max)
         scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=cm)
         if display_quantile_value:
             alpha = display_quantile_value
@@ -1106,7 +1109,7 @@ class DependenceResult(object):
             color_scale = quantity
             cm = plt.get_cmap(color_map)
             c_min, c_max = min(color_scale), max(color_scale)
-            cNorm = matplotlib.colors.Normalize(vmin=c_min, vmax=c_max)
+            cNorm = plt.colors.Normalize(vmin=c_min, vmax=c_max)
             scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=cm)
 
             x, y, z = params[:, 0], params[:, 1], params[:, 2]
@@ -1153,7 +1156,7 @@ class DependenceResult(object):
             fig.savefig(fname + ".png")
 
 
-def bootstrap(data, num_samples, statistic, alpha, args):
+def func_bootstrap(data, num_samples, statistic, alpha, args):
     """Returns bootstrap estimate of 100.0*(1-alpha) CI for statistic."""
     n = len(data)
     idx = np.random.randint(0, n, (num_samples, n))
