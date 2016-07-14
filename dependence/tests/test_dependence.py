@@ -4,7 +4,7 @@ import openturns as ot
 import numpy as np
 from itertools import combinations
 
-from dependence import ImpactOfDependence
+from dependence import ImpactOfDependence, DependenceBounding
 
 def add_function(x):
     """
@@ -13,13 +13,13 @@ def add_function(x):
     
     
 def true_quantile(alpha, dim, params):
-    sigma = np.sqrt(dim + 2*params.sum(axis=1))
-    return sigma*np.sqrt(2.) * erfinv(2*alpha - 1.)
+    sigma = np.sqrt(dim + 2 * params.sum(axis=1))
+    return sigma * np.sqrt(2.) * erfinv(2 * alpha - 1.)
         
     
 def true_probability(x, dim, params):
-    sigma = np.sqrt(dim + 2*params.sum(axis=1))    
-    return 0.5*(1. + erf(x / (sigma*np.sqrt(2.))))
+    sigma = np.sqrt(dim + 2 * params.sum(axis=1))    
+    return 0.5 * (1. + erf(x / (sigma * np.sqrt(2.))))
     
 
 ALPHAS = [0.05, 0.01]
@@ -122,7 +122,7 @@ def test_custom_corr_vars():
     all_corr_vars = []
     for i, corr in enumerate(list(combinations(range(dim), 2))):
         if i > 0:
-            tmp = all_corr_vars[i-1] + [corr]
+            tmp = all_corr_vars[i - 1] + [corr]
             all_corr_vars.append(tmp)
         else:
             all_corr_vars.append([corr])
@@ -173,24 +173,50 @@ def test_saving_loading():
 
     np.testing.assert_allclose(impact2._output_sample, impact._output_sample)
 
+
+def test_last():
+    dim = 3
+    alpha = 0.05
+    threshold = 2.
+    measure = "KendallTau"
+    margins = [ot.Weibull(), ot.Normal(), ot.Normal()]
+
+    families = np.zeros((dim, dim), dtype=int)
+    families[1, 0] = 0
+    families[2, 0] = 0
+    families[2, 1] = 26
+  
+    impact = ImpactOfDependence(model_func=add_function, margins=margins, families=families)
+
+    impact.run(n_dep_param=10, n_input_sample=10000, fixed_grid=True, 
+                dep_measure=measure, seed=0)
+
+    quant_res = impact.compute_quantiles(alpha)
+
+    id_min = quant_res.quantity.argmax()
+
+    impact.draw_matrix_plot(id_min, copula_space=True)
+
 dim = 3
 alpha = 0.05
 threshold = 2.
 measure = "KendallTau"
-margins = [ot.Weibull(), ot.Normal(), ot.Normal()]
-
+margins = [ot.Normal(), ot.Normal(), ot.Normal()]
 families = np.zeros((dim, dim), dtype=int)
-families[1, 0] = 0
-families[2, 0] = 0
-families[2, 1] = 26
+families[1, 0] = 1
+families[2, 0] = 1
+families[2, 1] = 1
   
 impact = ImpactOfDependence(model_func=add_function, margins=margins, families=families)
 
-impact.run(n_dep_param=10, n_input_sample=10000, fixed_grid=True, 
-            dep_measure=measure, seed=0)
-
+impact.minmax_run(1000)
 quant_res = impact.compute_quantiles(alpha)
 
+print quant_res.quantity
+print quant_res.cond_params
 id_min = quant_res.quantity.argmax()
 
 impact.draw_matrix_plot(id_min, copula_space=True)
+
+#bounds = DependenceBounding(model_func=add_function, margins=margins)
+#bounds.run()

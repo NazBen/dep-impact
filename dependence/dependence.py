@@ -1,4 +1,4 @@
-"""Impact of Dependencies.
+﻿"""Impact of Dependencies.
 
 The main class inspect the impact that dependencies can have on a quantity
 of interest of the output of a model.
@@ -14,6 +14,7 @@ import operator
 import json
 import warnings
 from pyquantregForest import QuantileForest
+import itertools
 
 from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
@@ -97,7 +98,6 @@ class ImpactOfDependence(object):
         obj._n_param = obj._params.shape[0]
         obj._n_input_sample = obj._n_sample / obj._n_param
         obj._load_data = True
-
         return obj
 
     @classmethod
@@ -273,6 +273,29 @@ class ImpactOfDependence(object):
         for i in self._corr_vars:
             self._params[:, i] = self._copula[i].to_copula_parameter(meas_param[:, i], dep_measure)
 
+    def minmax_run(self, n_input_sample, output_ID=0, seed=None):
+        """
+        """
+        p = self._n_corr_vars
+        eps = 1.E-4
+        self._params = np.asarray(tuple(itertools.product([-1 + eps, 1 - eps], repeat=p)))
+
+        self._n_param = 2**p
+
+        # Creates the sample of input parameters
+        self._build_input_sample(n_input_sample)
+
+        # Evaluates the input sample
+        self._all_output_sample = self.model_func(self._input_sample)
+
+        # If the output dimension is one
+        if self._all_output_sample.shape[0] == self._all_output_sample.size:
+            self._output_dim = 1
+            self._output_sample = self._all_output_sample
+        else:
+            self._output_dim = self._all_output_sample.shape[1]
+            self._output_sample = self._all_output_sample[:, output_ID]
+
     def _build_input_sample(self, n):
         """Creates the observations for differents dependence parameters.
 
@@ -391,7 +414,7 @@ class ImpactOfDependence(object):
             raise TypeError("Unknow input variable quantity_func")
 
     def compute_probability(self, threshold, estimation_method='empirical',
-                            confidence_level=0.95, operator='>'):
+                            confidence_level=0.95, operator='>', bootstrap=False):
         """Computes conditional probabilities for each parameters.
         
         Compute the probability of the current sample for each dependence
@@ -446,7 +469,7 @@ class ImpactOfDependence(object):
         return DependenceResult(configs, self, probability, interval, cond_params)
 
     def compute_quantiles(self, alpha, estimation_method='empirical',
-                          confidence_level=0.95, grid_size=None, bootstrap=True):
+                          confidence_level=0.95, grid_size=None, bootstrap=False):
         """Computes conditional quantiles.
 
         Compute the alpha-quantiles of the current sample for each dependence
@@ -488,7 +511,8 @@ class ImpactOfDependence(object):
         if estimation_method == 'empirical':
             out_sample = self.reshaped_output_sample_
             quantiles = np.percentile(out_sample, alpha * 100., axis=1)
-            func_bootstrap(out_sample, 5, np.percentile, alpha)
+            if bootstrap:
+                func_bootstrap(out_sample, 5, np.percentile, alpha)
             # TODO: think about using the check function instead of the percentile.
 
         elif estimation_method == "randomforest":
@@ -833,6 +857,7 @@ class ImpactOfDependence(object):
             families[self._families != 0] = 1
             self.families = families
         self._copula_type = value
+
     @property
     def vine_structure(self):
         return self._vine_structure
