@@ -193,15 +193,13 @@ def test_last():
                 dep_measure=measure, seed=0)
 
     quant_res = impact.compute_quantiles(alpha)
-
     id_min = quant_res.quantity.argmax()
-
     impact.draw_matrix_plot(id_min, copula_space=True)
 
 
 @profile
 def test_bounds():
-    dim = 5
+    dim = 3
     alpha = 0.05
     threshold = 2.
     measure = "KendallTau"

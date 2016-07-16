@@ -3,23 +3,26 @@
 The main class inspect the impact that dependencies can have on a quantity
 of interest of the output of a model.
 """
-import numpy as np
-import openturns as ot
-import matplotlib.pyplot as plt
-import matplotlib.cm as cmx
-import matplotlib
-from mpl_toolkits.mplot3d import Axes3D
-import pandas as pd
-from scipy.stats import rv_continuous
+
 import operator
 import json
 import warnings
-from pyquantregForest import QuantileForest
 import itertools
 
-from .vinecopula import VineCopula, check_matrix
+import numpy as np
+import pandas as pd
+import openturns as ot
+import matplotlib
+import matplotlib.pyplot as plt
+import matplotlib.cm as cmx
+from mpl_toolkits.mplot3d import Axes3D
+from scipy.stats import rv_continuous
+
+from pyquantregForest import QuantileForest
+
+from .vinecopula import VineCopula
 from .conversion import Conversion, get_tau_interval
-from .correlation import get_grid_rho, create_random_correlation_param, create_random_kendall_tau
+from .correlation import create_random_kendall_tau
 
 OPERATORS = {">": operator.gt, ">=": operator.ge,
              "<": operator.lt, "<=": operator.le}
@@ -207,23 +210,23 @@ class ImpactOfDependence(object):
         # Arange output for multidimensional output
         self._fix_output(output_ID)
 
-    def minmax_run(self, n_input_sample, output_ID=0, seed=None, eps=1.E-4):
+    def minmax_run(self, n_input_sample, output_ID=0, seed=None, eps=1.E-4, store_input_sample=False):
         """
         """
         p = self._n_corr_vars
-        dep_configs = np.asarray(tuple(itertools.product([-1 + eps, 1 - eps],
-                                                         repeat=p)))
-
         self._n_param = 2**p
-        self._params = np.zeros((self._n_param, self._corr_dim))
-        self._params[:, self._corr_vars] = dep_configs
+        self._params = np.zeros((self._n_param, self._corr_dim), dtype=float)
+
+        tmp = tuple(itertools.product([-1 + eps, 1 - eps], repeat=p))
+        self._params[:, self._corr_vars] = np.asarray(tmp, dtype=float)
 
         # Creates the sample of input parameters
         self._build_input_sample(n_input_sample)
 
         # Evaluates the input sample
         self._all_output_sample = self.model_func(self._input_sample)
-        del self._input_sample
+        if store_input_sample:
+            del self._input_sample
 
         # Arange output for multidimensional output
         self._fix_output(output_ID)
@@ -460,8 +463,7 @@ class ImpactOfDependence(object):
             tmp = np.sqrt(probability * (1. - probability) /
                           self._n_input_sample)
             # Quantile of a Gaussian distribution
-            q_normal = np.asarray(ot.Normal().computeQuantile(
-                (1 + confidence_level) / 2.))
+            q_normal = scipy.stats.norm.ppf((1 + confidence_level) / 2.)
             interval = q_normal * tmp  # Confidence interval
             cond_params = self._params[:, self._corr_vars]
         elif estimation_method == 'randomforest':
