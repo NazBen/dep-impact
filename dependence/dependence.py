@@ -94,12 +94,12 @@ class ImpactOfDependence(object):
             
         obj = cls(tmp, margins, families, structure)
 
-        obj._all_params = data_sample[:, :obj._corr_dim]
-        obj._n_sample = obj._all_params.shape[0]
+        obj.all_params_ = data_sample[:, :obj._corr_dim]
+        obj._n_sample = obj.all_params_.shape[0]
         obj._input_sample = data_sample[:, obj._corr_dim:obj._corr_dim + dim]
         obj._all_output_sample = data_sample[:, obj._corr_dim + dim:]
         obj._output_sample = obj._all_output_sample[:, out_ID]
-        obj._params = pd.DataFrame(obj._all_params).drop_duplicates().values
+        obj._params = pd.DataFrame(obj.all_params_).drop_duplicates().values
         obj._n_param = obj._params.shape[0]
         obj._n_input_sample = obj._n_sample / obj._n_param
         obj._load_data = True
@@ -211,8 +211,7 @@ class ImpactOfDependence(object):
         # Arange output for multidimensional output
         self._fix_output(output_ID)
         
-    @profile
-    def minmax_run(self, n_input_sample, output_ID=0, seed=None, eps=1.E-4, store_input_sample=False):
+    def minmax_run(self, n_input_sample, output_ID=0, seed=None, eps=1.E-4, store_input_sample=True):
         """
         """
         p = self._n_corr_vars
@@ -227,7 +226,7 @@ class ImpactOfDependence(object):
 
         # Evaluates the input sample
         self._all_output_sample = self.model_func(self._input_sample)
-        if store_input_sample:
+        if not store_input_sample:
             del self._input_sample
 
         # Arange output for multidimensional output
@@ -295,7 +294,6 @@ class ImpactOfDependence(object):
         for i in self._corr_vars:
             self._params[:, i] = self._copula[i].to_copula_parameter(meas_param[:, i], dep_measure)
 
-    @profile
     def _build_input_sample(self, n):
         """Creates the observations for differents dependence parameters.
 
@@ -308,17 +306,11 @@ class ImpactOfDependence(object):
         self._n_sample = n_sample
         self._n_input_sample = n
         self._input_sample = np.empty((n_sample, self._input_dim))
-        self._all_params = np.empty((n_sample, self._corr_dim))
 
         # We loop for each copula param and create observations for each
         for i, param in enumerate(self._params):
-            tmp = self._get_sample(param, n)
-
             # We save the input sample
-            self._input_sample[n*i:n*(i+1), :] = tmp
-
-            # As well for the dependence parameter
-            self._all_params[n*i:n*(i+1), :] = param
+            self._input_sample[n*i:n*(i+1), :] = self._get_sample(param, n)
 
     def _get_sample(self, param, n_obs, param2=None):
         """Creates the sample from the Vine Copula.
@@ -347,12 +339,12 @@ class ImpactOfDependence(object):
             # Create the correlation matrix
             cor_matrix = matrix_param + matrix_param.T + np.identity(dim)
             cop = ot.NormalCopula(ot.CorrelationMatrix(cor_matrix))
-            cop_sample = np.asarray(cop.getSample(n_obs))
+            cop_sample = np.asarray(cop.getSample(n_obs), dtype=float)
         else:
             raise AttributeError('Unknown type of copula.')
 
         # Applied to the inverse transformation to get the sample of the joint distribution
-        joint_sample = np.zeros((n_obs, dim))
+        joint_sample = np.zeros((n_obs, dim), dtype=float)
         for i, inv_CDF in enumerate(self._margins_inv_CDF):
             joint_sample[:, i] = np.asarray(inv_CDF(cop_sample[:, i])).ravel()
 
@@ -372,7 +364,7 @@ class ImpactOfDependence(object):
         """
         # We take only used params (i.e. the zero cols are taken off)
         # Actually, it should not mind to RF, but it's better for clarity.
-        used_params = self._all_params[:, self._corr_vars]
+        used_params = self.all_params_[:, self._corr_vars]
         quant_forest.fit(used_params, self._output_sample)
         self._quant_forest = quant_forest
         self._forest_built = True
@@ -553,18 +545,12 @@ class ImpactOfDependence(object):
 
         return DependenceResult(configs, self, quantiles, interval, cond_params)
 
-    def save_input_data(self, path=".", fname="inputSampleCop", ftype=".csv"):
-        """
-        """
-        full_fname = path + '/' + fname + ftype
-        np.savetxt(full_fname, self._all_params)
-
     def save_all_data(self, path=".", fname="full_data", ftype=".csv"):
         """
 
         """
         full_fname = path + '/' + fname + ftype
-        out = np.c_[self._all_params, self._input_sample, self._output_sample]
+        out = np.c_[self.all_params_, self._input_sample, self._output_sample]
         np.savetxt(full_fname, out)
 
     def save_data(self, input_names=[], output_names=[],
@@ -599,7 +585,7 @@ class ImpactOfDependence(object):
                 labels.append("y_%d" % (i + 1))
 
         path_fname = path + '/' + data_fname + ftype
-        out = np.c_[self._all_params, self._input_sample,
+        out = np.c_[self.all_params_, self._input_sample,
                     self._all_output_sample]
         out_df = pd.DataFrame(out, columns=labels)
         out_df.to_csv(path_fname, index=False)
@@ -634,7 +620,7 @@ class ImpactOfDependence(object):
     def get_corresponding_sample(self, corr_value):
         """
         """
-        id_corr = np.where((self._all_params == corr_value).all(axis=1))[0]
+        id_corr = np.where((self.all_params_ == corr_value).all(axis=1))[0]
         x = self._input_sample[id_corr]
         y = self._output_sample[id_corr]
         return x, y
@@ -646,7 +632,7 @@ class ImpactOfDependence(object):
         if corr_id is None:
             id_corr = np.ones(self._n_sample, dtype=bool)
         else:
-            id_corr = np.where((self._all_params == self._params[corr_id]).all(axis=1))[0]
+            id_corr = np.where((self.all_params_ == self._params[corr_id]).all(axis=1))[0]
 
         data = self._input_sample[id_corr]
         
@@ -689,7 +675,7 @@ class ImpactOfDependence(object):
         if corr_id is None:
             id_corr = np.ones(self._n_sample, dtype=bool)
         else:
-            id_corr = np.where((self._all_params == self._params[corr_id]).all(axis=1))[0]
+            id_corr = np.where((self.all_params_ == self._params[corr_id]).all(axis=1))[0]
 
         if input_names:
             param_name = input_names
@@ -912,7 +898,10 @@ class ImpactOfDependence(object):
 
     @property
     def all_params_(self):
-        return self._all_params
+        params = np.zeros(self._n_sample, self._corr_dim)
+        for param in self._params:
+            params[n*i:n*(i+1), :] = param
+        return params
 
     @all_params_.setter
     def all_params_(self, value):
@@ -927,7 +916,7 @@ class ImpactOfDependence(object):
             # TODO: this is not consistent. Find a way to presort the sample.
             out_sample = np.zeros((self._n_param, self._n_input_sample))
             for i, par in enumerate(self._params):
-                id_p = (self._all_params == par).all(axis=1)
+                id_p = (self.all_params_ == par).all(axis=1)
                 out_sample[i, :] = self._output_sample[id_p]
             return out_sample
 

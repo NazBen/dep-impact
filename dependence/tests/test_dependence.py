@@ -209,7 +209,7 @@ def test_bounds():
             families[i, j] = 1
     impact = ImpactOfDependence(model_func=add_function, margins=margins, families=families)
 
-    impact.minmax_run(1000, eps=1.E-4)
+    impact.minmax_run(10000, eps=1.E-4)
     quant_res = impact.compute_quantiles(alpha)
 
     print quant_res.quantity
