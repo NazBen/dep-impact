@@ -7,6 +7,7 @@ import numpy as np
 import openturns as ot
 import matplotlib.pyplot as plt
 import matplotlib.cm as cmx
+import matplotlib
 from mpl_toolkits.mplot3d import Axes3D
 import pandas as pd
 from scipy.stats import rv_continuous
@@ -203,13 +204,28 @@ class ImpactOfDependence(object):
         # Evaluates the input sample
         self._all_output_sample = self.model_func(self._input_sample)
 
-        # If the output dimension is one
-        if self._all_output_sample.shape[0] == self._all_output_sample.size:
-            self._output_dim = 1
-            self._output_sample = self._all_output_sample
-        else:
-            self._output_dim = self._all_output_sample.shape[1]
-            self._output_sample = self._all_output_sample[:, output_ID]
+        # Arange output for multidimensional output
+        self._fix_output(output_ID)
+
+    def minmax_run(self, n_input_sample, output_ID=0, seed=None, eps=1.E-4):
+        """
+        """
+        p = self._n_corr_vars
+        dep_configs = np.asarray(tuple(itertools.product([-1 + eps, 1 - eps],
+                                                         repeat=p)))
+
+        self._n_param = 2**p
+        self._params = np.zeros((self._n_param, self._corr_dim))
+        self._params[:, self._corr_vars] = dep_configs
+
+        # Creates the sample of input parameters
+        self._build_input_sample(n_input_sample)
+
+        # Evaluates the input sample
+        self._all_output_sample = self.model_func(self._input_sample)
+
+        # Arange output for multidimensional output
+        self._fix_output(output_ID)
 
     def _build_corr_sample(self, n_param, fixed_grid, dep_measure):
         """Creates the sample of dependence parameters.
@@ -273,29 +289,6 @@ class ImpactOfDependence(object):
         for i in self._corr_vars:
             self._params[:, i] = self._copula[i].to_copula_parameter(meas_param[:, i], dep_measure)
 
-    def minmax_run(self, n_input_sample, output_ID=0, seed=None):
-        """
-        """
-        p = self._n_corr_vars
-        eps = 1.E-4
-        self._params = np.asarray(tuple(itertools.product([-1 + eps, 1 - eps], repeat=p)))
-
-        self._n_param = 2**p
-
-        # Creates the sample of input parameters
-        self._build_input_sample(n_input_sample)
-
-        # Evaluates the input sample
-        self._all_output_sample = self.model_func(self._input_sample)
-
-        # If the output dimension is one
-        if self._all_output_sample.shape[0] == self._all_output_sample.size:
-            self._output_dim = 1
-            self._output_sample = self._all_output_sample
-        else:
-            self._output_dim = self._all_output_sample.shape[1]
-            self._output_sample = self._all_output_sample[:, output_ID]
-
     def _build_input_sample(self, n):
         """Creates the observations for differents dependence parameters.
 
@@ -358,6 +351,15 @@ class ImpactOfDependence(object):
             joint_sample[:, i] = np.asarray(inv_CDF(cop_sample[:, i])).ravel()
 
         return joint_sample
+
+    def _fix_output(self, output_ID):
+        # If the output dimension is one
+        if self._all_output_sample.shape[0] == self._all_output_sample.size:
+            self._output_dim = 1
+            self._output_sample = self._all_output_sample
+        else:
+            self._output_dim = self._all_output_sample.shape[1]
+            self._output_sample = self._all_output_sample[:, output_ID]
 
     def build_forest(self, quant_forest=QuantileForest()):
         """Build a Quantile Random Forest to estimate conditional quantiles.
@@ -1134,7 +1136,7 @@ class DependenceResult(object):
             color_scale = quantity
             cm = plt.get_cmap(color_map)
             c_min, c_max = min(color_scale), max(color_scale)
-            cNorm = plt.colors.Normalize(vmin=c_min, vmax=c_max)
+            cNorm = matplotlib.colors.Normalize(vmin=c_min, vmax=c_max)
             scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=cm)
 
             x, y, z = params[:, 0], params[:, 1], params[:, 2]

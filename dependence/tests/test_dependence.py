@@ -4,7 +4,7 @@ import openturns as ot
 import numpy as np
 from itertools import combinations
 
-from dependence import ImpactOfDependence, DependenceBounding
+from dependence import ImpactOfDependence
 
 def add_function(x):
     """
@@ -197,26 +197,20 @@ def test_last():
 
     impact.draw_matrix_plot(id_min, copula_space=True)
 
-dim = 3
+dim = 6
 alpha = 0.05
 threshold = 2.
 measure = "KendallTau"
-margins = [ot.Normal(), ot.Normal(), ot.Normal()]
+margins = [ot.Normal()]*dim
 families = np.zeros((dim, dim), dtype=int)
-families[1, 0] = 1
-families[2, 0] = 1
-families[2, 1] = 1
+for i in range(dim):
+    for j in range(i):
+        families[i, j] = 1
   
 impact = ImpactOfDependence(model_func=add_function, margins=margins, families=families)
 
-impact.minmax_run(1000)
+impact.minmax_run(1000, eps=1.E-4)
 quant_res = impact.compute_quantiles(alpha)
 
 print quant_res.quantity
-print quant_res.cond_params
-id_min = quant_res.quantity.argmax()
-
-impact.draw_matrix_plot(id_min, copula_space=True)
-
-#bounds = DependenceBounding(model_func=add_function, margins=margins)
-#bounds.run()
+id_min = quant_res.quantity.argmin()
