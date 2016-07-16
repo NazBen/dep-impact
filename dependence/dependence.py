@@ -19,8 +19,9 @@ from mpl_toolkits.mplot3d import Axes3D
 from scipy.stats import rv_continuous
 
 from pyquantregForest import QuantileForest
+from memory_profiler import profile
 
-from .vinecopula import VineCopula
+from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
 from .correlation import create_random_kendall_tau
 
@@ -209,7 +210,8 @@ class ImpactOfDependence(object):
 
         # Arange output for multidimensional output
         self._fix_output(output_ID)
-
+        
+    @profile
     def minmax_run(self, n_input_sample, output_ID=0, seed=None, eps=1.E-4, store_input_sample=False):
         """
         """
@@ -293,6 +295,7 @@ class ImpactOfDependence(object):
         for i in self._corr_vars:
             self._params[:, i] = self._copula[i].to_copula_parameter(meas_param[:, i], dep_measure)
 
+    @profile
     def _build_input_sample(self, n):
         """Creates the observations for differents dependence parameters.
 
@@ -308,7 +311,7 @@ class ImpactOfDependence(object):
         self._all_params = np.empty((n_sample, self._corr_dim))
 
         # We loop for each copula param and create observations for each
-        for i, param in enumerate(self._params):  # For each copula parameter
+        for i, param in enumerate(self._params):
             tmp = self._get_sample(param, n)
 
             # We save the input sample
@@ -331,7 +334,6 @@ class ImpactOfDependence(object):
         """
         dim = self._input_dim
         structure = self._vine_structure
-
         matrix_param = to_matrix(param, dim)
 
         if self._copula_type == 'vine':

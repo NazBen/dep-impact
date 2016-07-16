@@ -197,9 +197,8 @@ def test_last():
     impact.draw_matrix_plot(id_min, copula_space=True)
 
 
-@profile
 def test_bounds():
-    dim = 3
+    dim = 4
     alpha = 0.05
     threshold = 2.
     measure = "KendallTau"
