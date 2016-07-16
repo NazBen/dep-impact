@@ -223,6 +223,7 @@ class ImpactOfDependence(object):
 
         # Evaluates the input sample
         self._all_output_sample = self.model_func(self._input_sample)
+        del self._input_sample
 
         # Arange output for multidimensional output
         self._fix_output(output_ID)

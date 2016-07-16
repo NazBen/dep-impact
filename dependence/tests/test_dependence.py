@@ -3,6 +3,7 @@ from numpy.testing import assert_allclose
 import openturns as ot
 import numpy as np
 from itertools import combinations
+from memory_profiler import profile
 
 from dependence import ImpactOfDependence
 
@@ -197,20 +198,25 @@ def test_last():
 
     impact.draw_matrix_plot(id_min, copula_space=True)
 
-dim = 6
-alpha = 0.05
-threshold = 2.
-measure = "KendallTau"
-margins = [ot.Normal()]*dim
-families = np.zeros((dim, dim), dtype=int)
-for i in range(dim):
-    for j in range(i):
-        families[i, j] = 1
-  
-impact = ImpactOfDependence(model_func=add_function, margins=margins, families=families)
 
-impact.minmax_run(1000, eps=1.E-4)
-quant_res = impact.compute_quantiles(alpha)
+@profile
+def test_bounds():
+    dim = 5
+    alpha = 0.05
+    threshold = 2.
+    measure = "KendallTau"
+    margins = [ot.Normal()]*dim
+    families = np.zeros((dim, dim), dtype=int)
+    for i in range(dim):
+        for j in range(i):
+            families[i, j] = 1
+    impact = ImpactOfDependence(model_func=add_function, margins=margins, families=families)
 
-print quant_res.quantity
-id_min = quant_res.quantity.argmin()
+    impact.minmax_run(1000, eps=1.E-4)
+    quant_res = impact.compute_quantiles(alpha)
+
+    print quant_res.quantity
+    id_min = quant_res.quantity.argmin()
+
+if __name__ == '__main__':
+    test_bounds()
