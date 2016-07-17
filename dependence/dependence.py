@@ -207,6 +207,7 @@ class ImpactOfDependence(object):
         # Get output dimension
         self._output_info()
         
+    @profile
     def minmax_run(self, n_input_sample, seed=None, eps=1.E-4, store_input_sample=True):
         """
         """
@@ -301,7 +302,7 @@ class ImpactOfDependence(object):
         n_sample = n * self._n_param
         self._n_sample = n_sample
         self._n_input_sample = n
-        self._input_sample = np.empty((n_sample, self._input_dim))
+        self._input_sample = np.empty((n_sample, self._input_dim), dtype=float)
 
         # We loop for each copula param and create observations for each
         for i, param in enumerate(self._params):
@@ -438,7 +439,6 @@ class ImpactOfDependence(object):
             TypeError("Method name should be a string")
 
         self._output_ID = output_ID
-        out_sample = self.reshaped_output_sample_
         configs = {'Quantity Name': 'Probability',
                   'Threshold': threshold,
                   'Confidence Level': confidence_level,
@@ -449,6 +449,7 @@ class ImpactOfDependence(object):
         op_func = OPERATORS[operator]
 
         if estimation_method == "empirical":
+            out_sample = self.reshaped_output_sample_
             probability = (op_func(out_sample, threshold).astype(float)).mean(axis=1)
             tmp = np.sqrt(probability * (1. - probability) /
                           self._n_input_sample)
@@ -493,7 +494,8 @@ class ImpactOfDependence(object):
                 ValueError("alpha should be a probability")
         else:
             TypeError("Method name should be a float")
-
+            
+        self._output_ID = output_ID
         configs = {'Quantity Name': 'Quantile',
                   'Quantile Probability': alpha,
                   'Confidence Level': confidence_level,

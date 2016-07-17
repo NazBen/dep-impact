@@ -196,9 +196,9 @@ def test_last():
     id_min = quant_res.quantity.argmax()
     impact.draw_matrix_plot(id_min, copula_space=True)
 
-
+@profile
 def test_bounds():
-    dim = 3
+    dim = 4
     alpha = 0.05
     threshold = 2.
     measure = "KendallTau"
@@ -212,7 +212,6 @@ def test_bounds():
     impact.minmax_run(10000, eps=1.E-4)
     quant_res = impact.compute_quantiles(alpha)
 
-    print quant_res.quantity
     id_min = quant_res.quantity.argmin()
 
 if __name__ == '__main__':
