@@ -86,14 +86,12 @@ class ImpactOfDependence(object):
         dim = params['Input Dimension']
         families = np.asarray(params['Families'])
         structure = np.asarray(params['Structure'])
-        margins = []        
+        margins = []
         for i in range(dim):
             d_marg = params['Marginal_%d' % (i)]
             marginal = getattr(ot, d_marg['Family'])(*d_marg['Parameters'])
             margins.append(marginal)
-            
         obj = cls(tmp, margins, families, structure)
-
         obj.all_params_ = data_sample[:, :obj._corr_dim]
         obj._n_sample = obj.all_params_.shape[0]
         obj._input_sample = data_sample[:, obj._corr_dim:obj._corr_dim + dim]
@@ -131,7 +129,6 @@ class ImpactOfDependence(object):
                     dat_i = load_dat
                 else:
                     raise TypeError("Uncorrect type for data")
-
                 if i == 0:  # For the first file
                     data = dat_i  # Data
                     labels = data.columns.values  # Labels
@@ -143,15 +140,14 @@ class ImpactOfDependence(object):
                     data = data.append(dat_i)
         else:
             raise TypeError("Uncorrect type for loaded_data")
-        
+
         with open(info_params, 'r') as param_f:
             params = json.load(param_f)
-
 
         return cls.from_data(data.values, params)
 
     def run(self, n_dep_param, n_input_sample, fixed_grid=False,
-            dep_measure="KendallTau", output_ID=0, seed=None):
+            dep_measure="KendallTau", seed=None):
         """Run the problem. It creates and evaluates the sample from different
         dependence parameter values.
 
@@ -208,10 +204,10 @@ class ImpactOfDependence(object):
         # Evaluates the input sample
         self._all_output_sample = self.model_func(self._input_sample)
 
-        # Arange output for multidimensional output
-        self._fix_output(output_ID)
+        # Get output dimension
+        self._output_info()
         
-    def minmax_run(self, n_input_sample, output_ID=0, seed=None, eps=1.E-4, store_input_sample=True):
+    def minmax_run(self, n_input_sample, seed=None, eps=1.E-4, store_input_sample=True):
         """
         """
         p = self._n_corr_vars
@@ -229,8 +225,8 @@ class ImpactOfDependence(object):
         if not store_input_sample:
             del self._input_sample
 
-        # Arange output for multidimensional output
-        self._fix_output(output_ID)
+        # Get output dimension
+        self._output_info()
 
     def _build_corr_sample(self, n_param, fixed_grid, dep_measure):
         """Creates the sample of dependence parameters.
@@ -350,14 +346,12 @@ class ImpactOfDependence(object):
 
         return joint_sample
 
-    def _fix_output(self, output_ID):
+    def _output_info(self):
         # If the output dimension is one
         if self._all_output_sample.shape[0] == self._all_output_sample.size:
             self._output_dim = 1
-            self._output_sample = self._all_output_sample
         else:
             self._output_dim = self._all_output_sample.shape[1]
-            self._output_sample = self._all_output_sample[:, output_ID]
 
     def build_forest(self, quant_forest=QuantileForest()):
         """Build a Quantile Random Forest to estimate conditional quantiles.
@@ -365,7 +359,7 @@ class ImpactOfDependence(object):
         # We take only used params (i.e. the zero cols are taken off)
         # Actually, it should not mind to RF, but it's better for clarity.
         used_params = self.all_params_[:, self._corr_vars]
-        quant_forest.fit(used_params, self._output_sample)
+        quant_forest.fit(used_params, self.output_sample_)
         self._quant_forest = quant_forest
         self._forest_built = True
 
@@ -414,7 +408,8 @@ class ImpactOfDependence(object):
             raise TypeError("Unknow input variable quantity_func")
 
     def compute_probability(self, threshold, estimation_method='empirical',
-                            confidence_level=0.95, operator='>', bootstrap=False):
+                            confidence_level=0.95, operator='>', bootstrap=False, 
+                            output_ID=0):
         """Computes conditional probabilities for each parameters.
         
         Compute the probability of the current sample for each dependence
@@ -442,6 +437,7 @@ class ImpactOfDependence(object):
         assert isinstance(estimation_method, str), \
             TypeError("Method name should be a string")
 
+        self._output_ID = output_ID
         out_sample = self.reshaped_output_sample_
         configs = {'Quantity Name': 'Probability',
                   'Threshold': threshold,
@@ -550,7 +546,7 @@ class ImpactOfDependence(object):
 
         """
         full_fname = path + '/' + fname + ftype
-        out = np.c_[self.all_params_, self._input_sample, self._output_sample]
+        out = np.c_[self.all_params_, self._input_sample, self.output_sample_]
         np.savetxt(full_fname, out)
 
     def save_data(self, input_names=[], output_names=[],
@@ -617,14 +613,6 @@ class ImpactOfDependence(object):
         with open(path_fname, 'w') as outfile:
             json.dump(dict_output, outfile, indent=4)
 
-    def get_corresponding_sample(self, corr_value):
-        """
-        """
-        id_corr = np.where((self.all_params_ == corr_value).all(axis=1))[0]
-        x = self._input_sample[id_corr]
-        y = self._output_sample[id_corr]
-        return x, y
-
     def draw_matrix_plot(self, corr_id=None, copula_space=False, figsize=(10, 10),
                          savefig=False):
         """
@@ -688,7 +676,7 @@ class ImpactOfDependence(object):
             output_label = "Output value"
 
         x = self._input_sample[id_corr]
-        y = self._output_sample[id_corr]
+        y = self.output_sample_[id_corr]
         color_scale = y
         cm = plt.get_cmap(color_map)
         if color_lims is None:
@@ -868,21 +856,11 @@ class ImpactOfDependence(object):
         self._vine_structure = structure
 
     @property
-    def rand_vars(self):
-        """The random variable describing the input joint density of the problem.
-        """
-        return self._rand_vars
-
-    @rand_vars.setter
-    def rand_vars(self, rand_vars):
-        assert isinstance(rand_vars, ot.ComposedDistribution), \
-            TypeError("The variables must be OpenTURNS Distributions.")
-
-        self._rand_vars = rand_vars
-
-    @property
     def output_sample_(self):
-        return self._output_sample
+        if self._output_dim == 1:
+            return self._all_output_sample
+        else:
+            return self._all_output_sample[:, self._output_ID]
 
     @output_sample_.setter
     def output_sample_(self, value):
@@ -910,14 +888,14 @@ class ImpactOfDependence(object):
     @property
     def reshaped_output_sample_(self):
         if not self._load_data:
-            return self._output_sample.reshape((self._n_param, self._n_input_sample))
+            return self.output_sample_.reshape((self._n_param, self._n_input_sample))
             
         else:
             # TODO: this is not consistent. Find a way to presort the sample.
             out_sample = np.zeros((self._n_param, self._n_input_sample))
             for i, par in enumerate(self._params):
                 id_p = (self.all_params_ == par).all(axis=1)
-                out_sample[i, :] = self._output_sample[id_p]
+                out_sample[i, :] = self.output_sample_[id_p]
             return out_sample
 
     @reshaped_output_sample_.setter

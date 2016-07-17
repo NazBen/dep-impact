@@ -198,7 +198,7 @@ def test_last():
 
 
 def test_bounds():
-    dim = 4
+    dim = 3
     alpha = 0.05
     threshold = 2.
     measure = "KendallTau"
