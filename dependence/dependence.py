@@ -228,6 +228,19 @@ class ImpactOfDependence(object):
         # Get output dimension
         self._output_info()
 
+    def run_independence(self, n_input_sample, seed=None):
+        self._n_param = 1
+        self._params = np.zeros((1, self._corr_dim), dtype=float)
+
+        # Creates the sample of input parameters
+        self._build_input_sample(n_input_sample)
+
+        # Evaluates the input sample
+        self._all_output_sample = self.model_func(self._input_sample)
+
+        # Get output dimension
+        self._output_info()
+
     def _build_corr_sample(self, n_param, fixed_grid, dep_measure):
         """Creates the sample of dependence parameters.
 
@@ -913,6 +926,7 @@ class DependenceResult(object):
         """
         """
         #TODO: think of a way to delete the dependence object.
+        #TODO: Use a ** object to pass the arguments
         self.configs = configs
         self.quantity = quantity
         self.confidence_interval = confidence_interval
@@ -968,7 +982,24 @@ class DependenceResult(object):
                  100, self.confidence_interval)
         return to_print
 
-    def draw(self, dep_meas="KendallTau", figsize=(10, 6), 
+    def draw_bounds(self, indep_quant=None, figsize=(10, 6)):
+        """
+        """
+        min_quantile = self.quantity.min(axis=1)
+        max_quantile = self.quantity.max(axis=1)
+
+        fig, ax = plt.subplots()
+        if indep_quant is not None:
+            ax.plot(indep_quant._alpha, indep_quant.quantity, 'b')
+        ax.plot(self._alpha, min_quantile, '--b')
+        ax.plot(self._alpha, max_quantile, '--b')
+
+        ax.set_ylabel(self._quantity_name)
+        ax.set_xlabel('$\\alpha$')
+        ax.axis('tight')
+        fig.tight_layout()
+
+    def draw(self, id_alpha=0, dep_meas="KendallTau", figsize=(10, 6), 
              color_map="jet", max_eps=1.E-1,
              savefig=False, figpath='.'):
         """Draw the quantity with the dependence measure or copula
@@ -977,6 +1008,12 @@ class DependenceResult(object):
         obj = self._dependence
         copula_params = self._cond_params
         n_param, n_corr_vars = copula_params.shape
+
+        if isinstance(id_alpha, list):
+            n_alphas = len(id_alpha)
+        else:
+            n_alphas = 1
+            id_alpha = [id_alpha]
 
         assert n_corr_vars in [1, 2, 3],\
             EnvironmentError("Cannot draw the quantity for dim > 3")
@@ -997,8 +1034,11 @@ class DependenceResult(object):
             raise AttributeError("Undefined param")
 
         # Output quantities of interest
-        quantity = self.quantity
-        interval = self.confidence_interval
+        quantity = self.quantity[id_alpha, :].reshape(n_alphas, -1)
+        if self.confidence_interval is not None:
+            interval = self.confidence_interval[id_alpha, :]
+        else:
+            interval = None
         quantity_name = self._quantity_name
 
         # Find the "almost" independent configuration
@@ -1009,7 +1049,7 @@ class DependenceResult(object):
 
         # Independent parameter and quantile
         indep_param = params[id_indep]
-        indep_quant = quantity[id_indep]
+        indep_quant = quantity[:, id_indep]
 
         # If we have confidence interval
         if interval is not None:
@@ -1033,8 +1073,12 @@ class DependenceResult(object):
             id_sorted_params = np.argsort(params, axis=0).ravel()
 
             # Plot of the quantile conditionally to the correlation parameter
-            ax.plot(params[id_sorted_params], quantity[id_sorted_params],
-                    'ob', label=quantity_name, linewidth=2)
+            for k in range(n_alphas):
+                label = quantity_name
+                if quantity_name == 'Quantile':
+                    label += 'at $\\alpha=%.2f$' % ( self._alpha[id_alpha[k]] )
+                ax.plot(params[id_sorted_params], quantity[k, id_sorted_params],
+                        'o', label=label, linewidth=2)
 
             # Plot the confidence bounds
             if interval is not None:
