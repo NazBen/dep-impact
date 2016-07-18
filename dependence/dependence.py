@@ -207,14 +207,14 @@ class ImpactOfDependence(object):
         # Get output dimension
         self._output_info()
 
-    def minmax_run(self, n_input_sample, seed=None, eps=1.E-4, store_input_sample=True):
+    def minmax_run(self, n_input_sample, seed=None, eps=1.E-5, store_input_sample=True):
         """
         """
         p = self._n_corr_vars
-        self._n_param = 2**p
+        self._n_param = 3**p
         self._params = np.zeros((self._n_param, self._corr_dim), dtype=float)
 
-        tmp = tuple(itertools.product([-1 + eps, 1 - eps], repeat=p))
+        tmp = tuple(itertools.product([-1. + eps, 1. - eps, 0.], repeat=p))
         self._params[:, self._corr_vars] = np.asarray(tmp, dtype=float)
 
         # Creates the sample of input parameters
