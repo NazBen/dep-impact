@@ -206,8 +206,7 @@ class ImpactOfDependence(object):
 
         # Get output dimension
         self._output_info()
-        
-    @profile
+
     def minmax_run(self, n_input_sample, seed=None, eps=1.E-4, store_input_sample=True):
         """
         """
@@ -409,7 +408,7 @@ class ImpactOfDependence(object):
             raise TypeError("Unknow input variable quantity_func")
 
     def compute_probability(self, threshold, estimation_method='empirical',
-                            confidence_level=0.95, operator='>', bootstrap=False, 
+                            confidence_level=0.95, operator='>', bootstrap=False,
                             output_ID=0):
         """Computes conditional probabilities for each parameters.
         
@@ -465,7 +464,8 @@ class ImpactOfDependence(object):
         return DependenceResult(configs, self, probability, interval, cond_params)
 
     def compute_quantiles(self, alpha, estimation_method='empirical',
-                          confidence_level=0.95, grid_size=None, bootstrap=False):
+                          confidence_level=0.95, grid_size=None, bootstrap=False,
+                          output_ID=0):
         """Computes conditional quantiles.
 
         Compute the alpha-quantiles of the current sample for each dependence
@@ -685,7 +685,7 @@ class ImpactOfDependence(object):
             c_min, c_max = min(color_scale), max(color_scale)
         else:
             c_min, c_max = color_lims[0], color_lims[1]
-        cNorm = plt.colors.Normalize(vmin=c_min, vmax=c_max)
+        cNorm = matplotlib.colors.Normalize(vmin=c_min, vmax=c_max)
         scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=cm)
         if display_quantile_value:
             alpha = display_quantile_value
@@ -878,8 +878,9 @@ class ImpactOfDependence(object):
 
     @property
     def all_params_(self):
-        params = np.zeros(self._n_sample, self._corr_dim)
-        for param in self._params:
+        params = np.zeros((self._n_sample, self._corr_dim))
+        n = self._n_input_sample
+        for i, param in enumerate(self._params):
             params[n*i:n*(i+1), :] = param
         return params
 
