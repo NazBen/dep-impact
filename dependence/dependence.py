@@ -16,10 +16,9 @@ import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.cm as cmx
 from mpl_toolkits.mplot3d import Axes3D
-from scipy.stats import rv_continuous
+from scipy.stats import rv_continuous, norm
 
 from pyquantregForest import QuantileForest
-from memory_profiler import profile
 
 from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
@@ -93,13 +92,9 @@ class ImpactOfDependence(object):
             margins.append(marginal)
         obj = cls(tmp, margins, families, structure)
         obj.all_params_ = data_sample[:, :obj._corr_dim]
-        obj._n_sample = obj.all_params_.shape[0]
         obj._input_sample = data_sample[:, obj._corr_dim:obj._corr_dim + dim]
         obj._all_output_sample = data_sample[:, obj._corr_dim + dim:]
-        obj._output_sample = obj._all_output_sample[:, out_ID]
-        obj._params = pd.DataFrame(obj.all_params_).drop_duplicates().values
-        obj._n_param = obj._params.shape[0]
-        obj._n_input_sample = obj._n_sample / obj._n_param
+        obj._output_dim = obj._all_output_sample.shape[1]
         obj._load_data = True
         return obj
 
@@ -466,7 +461,7 @@ class ImpactOfDependence(object):
             tmp = np.sqrt(probability * (1. - probability) /
                           self._n_input_sample)
             # Quantile of a Gaussian distribution
-            q_normal = scipy.stats.norm.ppf((1 + confidence_level) / 2.)
+            q_normal = norm.ppf((1 + confidence_level) / 2.)
             interval = q_normal * tmp  # Confidence interval
             cond_params = self._params[:, self._corr_vars]
         elif estimation_method == 'randomforest':
@@ -520,7 +515,7 @@ class ImpactOfDependence(object):
         cond_params = self._params[:, self._corr_vars]
         if estimation_method == 'empirical':
             out_sample = self.reshaped_output_sample_
-            quantiles = np.percentile(out_sample, alpha * 100., axis=1)
+            quantiles = np.percentile(out_sample, alpha * 100., axis=1).reshape(1, -1)
             if bootstrap:
                 func_bootstrap(out_sample, 5, np.percentile, alpha)
             # TODO: think about using the check function instead of the percentile.
@@ -664,11 +659,20 @@ class ImpactOfDependence(object):
                     ax.set_yticks([])
 
         fig.tight_layout()
+        
+        if savefig:
+            if isinstance(savefig, str):
+                fname = savefig + '/'
+            else:
+                fname = "./"
+            fname += "matrix_plot"
+            fig.savefig(fname + ".png", dpi=200)
+
+        return fig
 
     def draw_design_space(self, corr_id=None, figsize=(10, 6),
                           savefig=False, color_map="jet", output_name=None,
-                          input_names=None, return_fig=False, color_lims=None,
-                          display_quantile_value=None):
+                          input_names=None, return_fig=False, color_lims=None):
         """
         """
         assert self._input_dim in [2, 3], "Cannot draw quantiles for dim > 3"
@@ -700,15 +704,6 @@ class ImpactOfDependence(object):
             c_min, c_max = color_lims[0], color_lims[1]
         cNorm = matplotlib.colors.Normalize(vmin=c_min, vmax=c_max)
         scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=cm)
-        if display_quantile_value:
-            alpha = display_quantile_value
-            self.compute_quantiles(alpha, 1)
-            if self._input_dim == 2:
-                id_quant = np.where(self._params == corr_value)[0]
-            else:
-                id_quant = np.where(
-                    (self._params == corr_value).all(axis=1))[0]
-            quant = self._quantiles[id_quant]
 
         if self._input_dim == 2:  # If input dimension is 2
             ax = fig.add_subplot(111)  # Creat the ax object
@@ -738,10 +733,7 @@ class ImpactOfDependence(object):
 
         title = "Design Space with $n = %d$ observations" % len(id_corr)
         if corr_id is not None:
-            if display_quantile_value:
-                title += "\n$q_\\alpha = %.1f$ - $\\rho = " % (quant)
-            else:
-                title += "\n$\\rho = "
+            title += "\n$\\rho = "
             p = self._params[corr_id]
             if self._corr_dim == 1:
                 title += "%.1f$" % (p)
@@ -891,15 +883,23 @@ class ImpactOfDependence(object):
 
     @property
     def all_params_(self):
-        params = np.zeros((self._n_sample, self._corr_dim))
-        n = self._n_input_sample
-        for i, param in enumerate(self._params):
-            params[n*i:n*(i+1), :] = param
-        return params
+        if self._load_data:
+            return self._all_params
+        else:
+            params = np.zeros((self._n_sample, self._corr_dim), dtype=float)
+            n = self._n_input_sample
+            for i, param in enumerate(self._params):
+                params[n*i:n*(i+1), :] = param
+            return params
 
+    # TODO: thats bullshit. It works for now, but find another way to do this
     @all_params_.setter
     def all_params_(self, value):
-        raise EnvironmentError("You cannot set this variable")
+        self._all_params = value
+        self._params = pd.DataFrame(value).drop_duplicates().values
+        self._n_param = self._params.shape[0]
+        self._n_sample = value.shape[0]
+        self._n_input_sample = self._n_sample / self._n_param
 
     @property
     def reshaped_output_sample_(self):
@@ -1009,12 +1009,6 @@ class DependenceResult(object):
         copula_params = self._cond_params
         n_param, n_corr_vars = copula_params.shape
 
-        if isinstance(id_alpha, list):
-            n_alphas = len(id_alpha)
-        else:
-            n_alphas = 1
-            id_alpha = [id_alpha]
-
         assert n_corr_vars in [1, 2, 3],\
             EnvironmentError("Cannot draw the quantity for dim > 3")
 
@@ -1033,8 +1027,9 @@ class DependenceResult(object):
         else:
             raise AttributeError("Undefined param")
 
+        
         # Output quantities of interest
-        quantity = self.quantity[id_alpha, :].reshape(n_alphas, -1)
+        quantity = self.quantity[id_alpha, :].reshape(n_param, -1)
         if self.confidence_interval is not None:
             interval = self.confidence_interval[id_alpha, :]
         else:
@@ -1049,7 +1044,7 @@ class DependenceResult(object):
 
         # Independent parameter and quantile
         indep_param = params[id_indep]
-        indep_quant = quantity[:, id_indep]
+        indep_quant = quantity[id_indep]
 
         # If we have confidence interval
         if interval is not None:
@@ -1073,12 +1068,8 @@ class DependenceResult(object):
             id_sorted_params = np.argsort(params, axis=0).ravel()
 
             # Plot of the quantile conditionally to the correlation parameter
-            for k in range(n_alphas):
-                label = quantity_name
-                if quantity_name == 'Quantile':
-                    label += 'at $\\alpha=%.2f$' % ( self._alpha[id_alpha[k]] )
-                ax.plot(params[id_sorted_params], quantity[k, id_sorted_params],
-                        'o', label=label, linewidth=2)
+            ax.plot(params[id_sorted_params], quantity[id_sorted_params, :],
+                    'ob', label=quantity_name, linewidth=2)
 
             # Plot the confidence bounds
             if interval is not None:
