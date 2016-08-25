@@ -10,6 +10,8 @@
 *.pyd
 *.pyc
 
+.ipynb_checkpoints/
+
 # Visual Studio project files
 *.pyproj
 *.sln
@@ -224,3 +226,4 @@ FakesAssemblies/
 GeneratedArtifacts/
 _Pvt_Extensions/
 ModelManifest.xml
+*.pyperf
