@@ -8,15 +8,19 @@ import operator
 import json
 import warnings
 import itertools
+import os
+import time
 
 import numpy as np
 import pandas as pd
 import openturns as ot
 import matplotlib
+matplotlib.use('Agg') # Must be before importing matplotlib.pyplot or pylab!
 import matplotlib.pyplot as plt
 import matplotlib.cm as cmx
 from mpl_toolkits.mplot3d import Axes3D
 from scipy.stats import rv_continuous, norm
+import pyDOE
 
 from pyquantregForest import QuantileForest
 
@@ -64,6 +68,8 @@ class ImpactOfDependence(object):
         self.vine_structure = vine_structure
         self.copula_type = copula_type
         self._forest_built = False
+        self._lhs_grid_criterion = 'centermaximin'
+        self._grid_folder = './experiment_designs'
 
     @classmethod
     def from_data(cls, data_sample, params, out_ID=0):
@@ -90,11 +96,29 @@ class ImpactOfDependence(object):
             d_marg = params['Marginal_%d' % (i)]
             marginal = getattr(ot, d_marg['Family'])(*d_marg['Parameters'])
             margins.append(marginal)
+            
         obj = cls(tmp, margins, families, structure)
-        obj.all_params_ = data_sample[:, :obj._corr_dim]
-        obj._input_sample = data_sample[:, obj._corr_dim:obj._corr_dim + dim]
-        obj._all_output_sample = data_sample[:, obj._corr_dim + dim:]
+        all_params = data_sample[:, :obj._corr_dim]
+        params = pd.DataFrame(all_params).drop_duplicates().values
+        n_sample = all_params.shape[0]
+        n_params = params.shape[0]
+        n = n_sample / n_params
+        
+        data_sample_ordered = np.zeros(data_sample.shape)
+        for i, par in enumerate(params):
+            id_p = (all_params == par).all(axis=1)
+            data_sample_ordered[i*n:(i+1)*n, :] = data_sample[id_p, :]
+        
+        #obj.all_params_ = data_sample_ordered[:, :obj._corr_dim]
+        obj._params = params
+        obj._n_param = n_params
+        obj._n_sample = n_sample
+        obj._n_input_sample = n
+        
+        obj._input_sample = data_sample_ordered[:, obj._corr_dim:obj._corr_dim + dim]
+        obj._all_output_sample = data_sample_ordered[:, obj._corr_dim + dim:]
         obj._output_dim = obj._all_output_sample.shape[1]
+        obj._output_ID = out_ID
         obj._load_data = True
         return obj
 
@@ -141,8 +165,8 @@ class ImpactOfDependence(object):
 
         return cls.from_data(data.values, params)
 
-    def run(self, n_dep_param, n_input_sample, fixed_grid=False,
-            dep_measure="KendallTau", seed=None):
+    def run(self, n_dep_param, n_input_sample, grid='rand',
+            dep_measure="KendallTau", seed=None, use_grid=None, save_grid=None):
         """Run the problem. It creates and evaluates the sample from different
         dependence parameter values.
 
@@ -186,12 +210,12 @@ class ImpactOfDependence(object):
         all_params_ : :class:`~numpy.ndarray`
             The dependence parameters associated to each output observation.
         """
-        if seed:  # Initialises the seed
+        if seed is not None:  # Initialises the seed
             np.random.seed(seed)
             ot.RandomGenerator.SetSeed(seed)
 
         # Creates the sample of dependence parameters
-        self._build_corr_sample(n_dep_param, fixed_grid, dep_measure)
+        self._build_corr_sample(n_dep_param, grid, dep_measure, use_grid, save_grid)
 
         # Creates the sample of input parameters
         self._build_input_sample(n_input_sample)
@@ -236,7 +260,7 @@ class ImpactOfDependence(object):
         # Get output dimension
         self._output_info()
 
-    def _build_corr_sample(self, n_param, fixed_grid, dep_measure):
+    def _build_corr_sample(self, n_param, grid, dep_measure, use_grid, save_grid):
         """Creates the sample of dependence parameters.
 
         Parameters
@@ -253,44 +277,125 @@ class ImpactOfDependence(object):
             - "PearsonRho": The Pearson Rho parameter. Also called linear correlation parameter.
             - "KendallTau": The Tau Kendall parameter.
         """
-        if dep_measure == "KendallTau":
-            if fixed_grid:
-                d = self._n_corr_vars
-
-                # Number of points per dimension
-                n_d = int((n_param) ** (1./d))
-                v = []
-                for i in self._corr_vars:
-                    tau_min, tau_max = get_tau_interval(self._family_list[i])
-                    v.append(np.linspace(tau_min, tau_max, n_d+1, endpoint=False)[1:])
-
-                tmp = np.vstack(np.meshgrid(*v)).reshape(d,-1).T
-
-                # The final total number is not always the initial one.
-                n_param = n_d ** d
-                meas_param = np.zeros((n_param, self._corr_dim))
-                for i, k in enumerate(self._corr_vars):
-                    meas_param[:, k] = tmp[:, i]
+        grid_filename = None
+        p = self._n_corr_vars
+        if grid == 'lhs':
+            gridname = '%s_crit_%s' % (grid, self._lhs_grid_criterion)
+        else:
+            gridname = grid
+        # If the design is loaded
+        if use_grid is not None:
+            # TODO: let the code load the latest design which have the same configs           
+            if isinstance(use_grid, str):
+                filename = use_grid
+                assert gridname in use_grid, \
+                    "Not the same configurations"
+                name = os.path.basename(filename)
+            elif isinstance(use_grid, (int, bool)):
+                k = int(use_grid)
+                name = '%s_p_%d_n_%d_%s_%d.csv' % (gridname, p, n_param, dep_measure, k)
+                filename = os.path.join(self._grid_folder, name)
+            else:
+                raise AttributeError('Unknow use_grid')
                 
-            else:  # Random grid
-                if self._copula_type == "vine":
-                    meas_param = np.zeros((n_param, self._corr_dim))
+            assert os.path.exists(filename), \
+                'Grid file %s does not exists' % name
+            print 'loading file %s' % name
+            sample = np.loadtxt(filename).reshape(n_param, -1)
+            assert n_param == sample.shape[0], \
+                'Wrong grid size'
+            assert p == sample.shape[1], \
+                'Wrong dimension'
+                
+            meas_param = np.zeros((n_param, self._corr_dim))
+            for k, i in enumerate(self._corr_vars):
+                tau_min, tau_max = get_tau_interval(self._family_list[i])
+                meas_param[:, i] = sample[:, k]
+
+            grid_filename = filename
+        else:
+            sample = np.zeros((n_param, p))
+            if dep_measure == "KendallTau":
+                if grid == 'fixed':    
+                    # Number of points per dimension
+                    n_p = int((n_param) ** (1./p))
+                    v = []
                     for i in self._corr_vars:
                         tau_min, tau_max = get_tau_interval(self._family_list[i])
-                        meas_param[:, i] = np.random.uniform(tau_min, tau_max, n_param)
-                elif self._copula_type == "normal":
-                    meas_param = create_random_kendall_tau(self._families, 
-                                                       n_param)
+                        v.append(np.linspace(tau_min, tau_max, n_p+1, endpoint=False)[1:])
+    
+                    tmp = np.vstack(np.meshgrid(*v)).reshape(p,-1).T
+    
+                    # The final total number is not always the initial one.
+                    n_param = n_p ** p
+                    meas_param = np.zeros((n_param, self._corr_dim))
+                    for k, i in enumerate(self._corr_vars):
+                        meas_param[:, i] = tmp[:, k]
+                        tau_min, tau_max = get_tau_interval(self._family_list[i])
+                        sample[:, k] = (meas_param[:, i] - tau_min) / (tau_max - tau_min)
+                    
+                elif grid == 'rand':  # Random grid
+                    if self._copula_type == "vine":
+                        meas_param = np.zeros((n_param, self._corr_dim))
+                        for k, i in enumerate(self._corr_vars):
+                            tau_min, tau_max = get_tau_interval(self._family_list[i])
+                            meas_param[:, i] = np.random.uniform(tau_min, tau_max, n_param)
+                            sample[:, k] = (meas_param[:, i] - tau_min) / (tau_max - tau_min)
+                    elif self._copula_type == "normal":
+                        meas_param = create_random_kendall_tau(self._families, 
+                                                           n_param)
+                        for k, i in enumerate(self._corr_vars):
+                            tau_min, tau_max = get_tau_interval(self._family_list[i])
+                            sample[:, k] = (meas_param[:, i] - tau_min) / (tau_max - tau_min)
+                    else:
+                        raise AttributeError('Unknow copula type:', self._copula_type)
+                        
+                elif grid == 'lhs':
+                    meas_param = np.zeros((n_param, self._corr_dim))
+                    sample = pyDOE.lhs(p, samples=n_param, 
+                                       criterion=self._lhs_grid_criterion)
+                    for k, i in enumerate(self._corr_vars):
+                        tau_min, tau_max = get_tau_interval(self._family_list[i])
+                        meas_param[:, i] = sample[:, k]*(tau_max - tau_min) + tau_min
                 else:
-                    raise AttributeError('Unknow copula type:', self._copula_type)
+                    raise AttributeError('%s is unknow for DOE type' % grid)
+                    
+            elif dep_measure == "PearsonRho":
+                NotImplementedError("Work in progress.")
+            elif dep_measure == "SpearmanRho":
+                raise NotImplementedError("Not yet implemented")
+            else:
+                raise AttributeError("Unkown dependence parameter")
 
-        elif dep_measure == "PearsonRho":
-            NotImplementedError("Work in progress.")
-        elif dep_measure == "SpearmanRho":
-            raise NotImplementedError("Not yet implemented")
-        else:
-            raise AttributeError("Unkown dependence parameter")
-
+        if save_grid is not None and use_grid is None:
+            # The grid is saved
+            if save_grid is True: # No filename provided
+                dirname = self._grid_folder
+                if not os.path.exists(dirname):
+                    os.mkdir(dirname)
+                    
+                k = 0
+                do_save = True
+                name = '%s_p_%d_n_%d_%s_%d.csv' % (gridname, p, n_param, dep_measure, k)
+                filename = os.path.join(dirname, name)
+                # If this file already exists
+                while os.path.exists(filename):
+                    existing_sample = np.loadtxt(filename).reshape(n_param, -1)
+                    if np.allclose(np.sort(existing_sample, axis=0), np.sort(sample, axis=0)):
+                        do_save = False
+                        print 'The DOE already exist in %s' % (name)
+                        break
+                    k += 1
+                    name = '%s_p_%d_n_%d_%s_%d.csv' % (gridname, p, n_param, dep_measure, k)
+                    filename = os.path.join(dirname, name)
+                
+            grid_filename = filename
+            # It is saved
+            if do_save:
+                np.savetxt(filename, sample)
+            
+        self._grid_filename = grid_filename
+        self._grid = grid
         self._n_param = n_param
         self._params = np.zeros((n_param, self._corr_dim))
 
@@ -515,9 +620,11 @@ class ImpactOfDependence(object):
         cond_params = self._params[:, self._corr_vars]
         if estimation_method == 'empirical':
             out_sample = self.reshaped_output_sample_
-            quantiles = np.percentile(out_sample, alpha * 100., axis=1).reshape(1, -1)
-            if bootstrap:
-                func_bootstrap(out_sample, 5, np.percentile, alpha)
+            if not bootstrap:
+                quantiles = np.percentile(out_sample, alpha * 100., axis=1).reshape(1, -1)
+            else:
+                quantiles, interval = bootstrap_quantile(out_sample, alpha, 20, 0.01)
+                
             # TODO: think about using the check function instead of the percentile.
 
         elif estimation_method == "randomforest":
@@ -567,9 +674,10 @@ class ImpactOfDependence(object):
         output_dim = self._output_dim
 
         # List of correlated variable names
+        # TODO: git the bug...
         labels = []
         for i in range(self._input_dim):
-            for j in range(i + 1, self._input_dim):
+            for j in range(i):
                 labels.append("r_%d%d" % (i + 1, j + 1))
 
         # List of input variable names
@@ -601,6 +709,12 @@ class ImpactOfDependence(object):
         dict_output['Input Dimension'] = self._input_dim
         dict_output['Parameter Number'] = self._n_param
         dict_output['Sample Size'] = self._n_input_sample
+        dict_output['Grid'] = self._grid
+        if self._grid_filename:
+            dict_output['Grid Filename'] = os.path.basename(self._grid_filename)
+        if self._grid == 'lhs':
+            dict_output['LHS Criterion'] = self._lhs_grid_criterion
+        
 
         dict_copula = {'Families': self._families.tolist(),
                        'Structure': self._vine_structure.tolist()}
@@ -881,38 +995,25 @@ class ImpactOfDependence(object):
     def input_sample_(self, value):
         raise EnvironmentError("You cannot set this variable")
 
+    # TODO: there is a compromise between speed and memory efficiency...
     @property
     def all_params_(self):
-        if self._load_data:
-            return self._all_params
-        else:
-            params = np.zeros((self._n_sample, self._corr_dim), dtype=float)
-            n = self._n_input_sample
-            for i, param in enumerate(self._params):
-                params[n*i:n*(i+1), :] = param
-            return params
-
-    # TODO: thats bullshit. It works for now, but find another way to do this
-    @all_params_.setter
-    def all_params_(self, value):
-        self._all_params = value
-        self._params = pd.DataFrame(value).drop_duplicates().values
-        self._n_param = self._params.shape[0]
-        self._n_sample = value.shape[0]
-        self._n_input_sample = self._n_sample / self._n_param
+#        if self._load_data:
+#            return self._all_params
+#        else:
+        params = np.zeros((self._n_sample, self._corr_dim), dtype=float)
+        n = self._n_input_sample
+        for i, param in enumerate(self._params):
+            params[n*i:n*(i+1), :] = param
+        return params
+#
+#    @all_params_.setter
+#    def all_params_(self, value):
+#        self._all_params = value
 
     @property
     def reshaped_output_sample_(self):
-        if not self._load_data:
-            return self.output_sample_.reshape((self._n_param, self._n_input_sample))
-            
-        else:
-            # TODO: this is not consistent. Find a way to presort the sample.
-            out_sample = np.zeros((self._n_param, self._n_input_sample))
-            for i, par in enumerate(self._params):
-                id_p = (self.all_params_ == par).all(axis=1)
-                out_sample[i, :] = self.output_sample_[id_p]
-            return out_sample
+        return self.output_sample_.reshape((self._n_param, self._n_input_sample))
 
     @reshaped_output_sample_.setter
     def reshaped_output_sample_(self, value):
@@ -1181,7 +1282,7 @@ class DependenceResult(object):
         ax.set_title(title, fontsize=18)
         ax.axis("tight")
         fig.tight_layout()
-
+    
         # Saving the figure
         if savefig:
             fname = figpath + '/'
@@ -1191,17 +1292,20 @@ class DependenceResult(object):
                 fname += "fig" + quantity_name
             fig.savefig(fname + ".pdf")
             fig.savefig(fname + ".png")
+            
+        return ax
 
 
-def func_bootstrap(data, num_samples, statistic, alpha, args):
+def bootstrap_quantile(data, alpha, n_boot, alpha_boot):
     """Returns bootstrap estimate of 100.0*(1-alpha) CI for statistic."""
     n = len(data)
-    idx = np.random.randint(0, n, (num_samples, n))
+    idx = np.random.randint(0, n, (n_boot, n))
     samples = data[idx]
-    stat = np.sort(statistic(samples, 1, *args))
+    stat = np.sort(np.percentile(samples, alpha * 100., axis=1))
 
-    return (stat[int((alpha / 2.0) * num_samples)],
-            stat[int((1 - alpha / 2.0) * num_samples)])
+    return stat.mean(axis=0), np.c_[stat[int((alpha_boot*0.5) * n_boot)],
+            stat[int((1. - alpha_boot*0.5) * n_boot)]]
+    
 
 def to_matrix(param, dim):
     """
