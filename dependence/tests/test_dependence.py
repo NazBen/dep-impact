@@ -193,15 +193,12 @@ def test_last():
                 dep_measure=measure, seed=0)
 
     quant_res = impact.compute_quantiles(alpha)
-
     id_min = quant_res.quantity.argmax()
-
     impact.draw_matrix_plot(id_min, copula_space=True)
-
 
 @profile
 def test_bounds():
-    dim = 5
+    dim = 4
     alpha = 0.05
     threshold = 2.
     measure = "KendallTau"
@@ -212,10 +209,9 @@ def test_bounds():
             families[i, j] = 1
     impact = ImpactOfDependence(model_func=add_function, margins=margins, families=families)
 
-    impact.minmax_run(1000, eps=1.E-4)
+    impact.minmax_run(10000, eps=1.E-4)
     quant_res = impact.compute_quantiles(alpha)
 
-    print quant_res.quantity
     id_min = quant_res.quantity.argmin()
 
 if __name__ == '__main__':

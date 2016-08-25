@@ -3,23 +3,30 @@
 The main class inspect the impact that dependencies can have on a quantity
 of interest of the output of a model.
 """
-import numpy as np
-import openturns as ot
-import matplotlib.pyplot as plt
-import matplotlib.cm as cmx
-import matplotlib
-from mpl_toolkits.mplot3d import Axes3D
-import pandas as pd
-from scipy.stats import rv_continuous
+
 import operator
 import json
 import warnings
-from pyquantregForest import QuantileForest
 import itertools
+import os
+import time
+
+import numpy as np
+import pandas as pd
+import openturns as ot
+import matplotlib
+matplotlib.use('Agg') # Must be before importing matplotlib.pyplot or pylab!
+import matplotlib.pyplot as plt
+import matplotlib.cm as cmx
+from mpl_toolkits.mplot3d import Axes3D
+from scipy.stats import rv_continuous, norm
+import pyDOE
+
+from pyquantregForest import QuantileForest
 
 from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
-from .correlation import get_grid_rho, create_random_correlation_param, create_random_kendall_tau
+from .correlation import create_random_kendall_tau
 
 OPERATORS = {">": operator.gt, ">=": operator.ge,
              "<": operator.lt, "<=": operator.le}
@@ -61,6 +68,8 @@ class ImpactOfDependence(object):
         self.vine_structure = vine_structure
         self.copula_type = copula_type
         self._forest_built = False
+        self._lhs_grid_criterion = 'centermaximin'
+        self._grid_folder = './experiment_designs'
 
     @classmethod
     def from_data(cls, data_sample, params, out_ID=0):
@@ -82,22 +91,34 @@ class ImpactOfDependence(object):
         dim = params['Input Dimension']
         families = np.asarray(params['Families'])
         structure = np.asarray(params['Structure'])
-        margins = []        
+        margins = []
         for i in range(dim):
             d_marg = params['Marginal_%d' % (i)]
             marginal = getattr(ot, d_marg['Family'])(*d_marg['Parameters'])
             margins.append(marginal)
             
         obj = cls(tmp, margins, families, structure)
-
-        obj._all_params = data_sample[:, :obj._corr_dim]
-        obj._n_sample = obj._all_params.shape[0]
-        obj._input_sample = data_sample[:, obj._corr_dim:obj._corr_dim + dim]
-        obj._all_output_sample = data_sample[:, obj._corr_dim + dim:]
-        obj._output_sample = obj._all_output_sample[:, out_ID]
-        obj._params = pd.DataFrame(obj._all_params).drop_duplicates().values
-        obj._n_param = obj._params.shape[0]
-        obj._n_input_sample = obj._n_sample / obj._n_param
+        all_params = data_sample[:, :obj._corr_dim]
+        params = pd.DataFrame(all_params).drop_duplicates().values
+        n_sample = all_params.shape[0]
+        n_params = params.shape[0]
+        n = n_sample / n_params
+        
+        data_sample_ordered = np.zeros(data_sample.shape)
+        for i, par in enumerate(params):
+            id_p = (all_params == par).all(axis=1)
+            data_sample_ordered[i*n:(i+1)*n, :] = data_sample[id_p, :]
+        
+        #obj.all_params_ = data_sample_ordered[:, :obj._corr_dim]
+        obj._params = params
+        obj._n_param = n_params
+        obj._n_sample = n_sample
+        obj._n_input_sample = n
+        
+        obj._input_sample = data_sample_ordered[:, obj._corr_dim:obj._corr_dim + dim]
+        obj._all_output_sample = data_sample_ordered[:, obj._corr_dim + dim:]
+        obj._output_dim = obj._all_output_sample.shape[1]
+        obj._output_ID = out_ID
         obj._load_data = True
         return obj
 
@@ -127,7 +148,6 @@ class ImpactOfDependence(object):
                     dat_i = load_dat
                 else:
                     raise TypeError("Uncorrect type for data")
-
                 if i == 0:  # For the first file
                     data = dat_i  # Data
                     labels = data.columns.values  # Labels
@@ -139,15 +159,14 @@ class ImpactOfDependence(object):
                     data = data.append(dat_i)
         else:
             raise TypeError("Uncorrect type for loaded_data")
-        
+
         with open(info_params, 'r') as param_f:
             params = json.load(param_f)
 
-
         return cls.from_data(data.values, params)
 
-    def run(self, n_dep_param, n_input_sample, fixed_grid=False,
-            dep_measure="KendallTau", output_ID=0, seed=None):
+    def run(self, n_dep_param, n_input_sample, grid='rand',
+            dep_measure="KendallTau", seed=None, use_grid=None, save_grid=None):
         """Run the problem. It creates and evaluates the sample from different
         dependence parameter values.
 
@@ -191,12 +210,12 @@ class ImpactOfDependence(object):
         all_params_ : :class:`~numpy.ndarray`
             The dependence parameters associated to each output observation.
         """
-        if seed:  # Initialises the seed
+        if seed is not None:  # Initialises the seed
             np.random.seed(seed)
             ot.RandomGenerator.SetSeed(seed)
 
         # Creates the sample of dependence parameters
-        self._build_corr_sample(n_dep_param, fixed_grid, dep_measure)
+        self._build_corr_sample(n_dep_param, grid, dep_measure, use_grid, save_grid)
 
         # Creates the sample of input parameters
         self._build_input_sample(n_input_sample)
@@ -204,31 +223,44 @@ class ImpactOfDependence(object):
         # Evaluates the input sample
         self._all_output_sample = self.model_func(self._input_sample)
 
-        # Arange output for multidimensional output
-        self._fix_output(output_ID)
+        # Get output dimension
+        self._output_info()
 
-    def minmax_run(self, n_input_sample, output_ID=0, seed=None, eps=1.E-4):
+    def minmax_run(self, n_input_sample, seed=None, eps=1.E-5, store_input_sample=True):
         """
         """
         p = self._n_corr_vars
-        dep_configs = np.asarray(tuple(itertools.product([-1 + eps, 1 - eps],
-                                                         repeat=p)))
+        self._n_param = 3**p
+        self._params = np.zeros((self._n_param, self._corr_dim), dtype=float)
 
-        self._n_param = 2**p
-        self._params = np.zeros((self._n_param, self._corr_dim))
-        self._params[:, self._corr_vars] = dep_configs
+        tmp = tuple(itertools.product([-1. + eps, 1. - eps, 0.], repeat=p))
+        self._params[:, self._corr_vars] = np.asarray(tmp, dtype=float)
 
         # Creates the sample of input parameters
         self._build_input_sample(n_input_sample)
 
         # Evaluates the input sample
         self._all_output_sample = self.model_func(self._input_sample)
-        del self._input_sample
+        if not store_input_sample:
+            del self._input_sample
 
-        # Arange output for multidimensional output
-        self._fix_output(output_ID)
+        # Get output dimension
+        self._output_info()
 
-    def _build_corr_sample(self, n_param, fixed_grid, dep_measure):
+    def run_independence(self, n_input_sample, seed=None):
+        self._n_param = 1
+        self._params = np.zeros((1, self._corr_dim), dtype=float)
+
+        # Creates the sample of input parameters
+        self._build_input_sample(n_input_sample)
+
+        # Evaluates the input sample
+        self._all_output_sample = self.model_func(self._input_sample)
+
+        # Get output dimension
+        self._output_info()
+
+    def _build_corr_sample(self, n_param, grid, dep_measure, use_grid, save_grid):
         """Creates the sample of dependence parameters.
 
         Parameters
@@ -245,44 +277,125 @@ class ImpactOfDependence(object):
             - "PearsonRho": The Pearson Rho parameter. Also called linear correlation parameter.
             - "KendallTau": The Tau Kendall parameter.
         """
-        if dep_measure == "KendallTau":
-            if fixed_grid:
-                d = self._n_corr_vars
-
-                # Number of points per dimension
-                n_d = int((n_param) ** (1./d))
-                v = []
-                for i in self._corr_vars:
-                    tau_min, tau_max = get_tau_interval(self._family_list[i])
-                    v.append(np.linspace(tau_min, tau_max, n_d+1, endpoint=False)[1:])
-
-                tmp = np.vstack(np.meshgrid(*v)).reshape(d,-1).T
-
-                # The final total number is not always the initial one.
-                n_param = n_d ** d
-                meas_param = np.zeros((n_param, self._corr_dim))
-                for i, k in enumerate(self._corr_vars):
-                    meas_param[:, k] = tmp[:, i]
+        grid_filename = None
+        p = self._n_corr_vars
+        if grid == 'lhs':
+            gridname = '%s_crit_%s' % (grid, self._lhs_grid_criterion)
+        else:
+            gridname = grid
+        # If the design is loaded
+        if use_grid is not None:
+            # TODO: let the code load the latest design which have the same configs           
+            if isinstance(use_grid, str):
+                filename = use_grid
+                assert gridname in use_grid, \
+                    "Not the same configurations"
+                name = os.path.basename(filename)
+            elif isinstance(use_grid, (int, bool)):
+                k = int(use_grid)
+                name = '%s_p_%d_n_%d_%s_%d.csv' % (gridname, p, n_param, dep_measure, k)
+                filename = os.path.join(self._grid_folder, name)
+            else:
+                raise AttributeError('Unknow use_grid')
                 
-            else:  # Random grid
-                if self._copula_type == "vine":
-                    meas_param = np.zeros((n_param, self._corr_dim))
+            assert os.path.exists(filename), \
+                'Grid file %s does not exists' % name
+            print 'loading file %s' % name
+            sample = np.loadtxt(filename).reshape(n_param, -1)
+            assert n_param == sample.shape[0], \
+                'Wrong grid size'
+            assert p == sample.shape[1], \
+                'Wrong dimension'
+                
+            meas_param = np.zeros((n_param, self._corr_dim))
+            for k, i in enumerate(self._corr_vars):
+                tau_min, tau_max = get_tau_interval(self._family_list[i])
+                meas_param[:, i] = sample[:, k]
+
+            grid_filename = filename
+        else:
+            sample = np.zeros((n_param, p))
+            if dep_measure == "KendallTau":
+                if grid == 'fixed':    
+                    # Number of points per dimension
+                    n_p = int((n_param) ** (1./p))
+                    v = []
                     for i in self._corr_vars:
                         tau_min, tau_max = get_tau_interval(self._family_list[i])
-                        meas_param[:, i] = np.random.uniform(tau_min, tau_max, n_param)
-                elif self._copula_type == "normal":
-                    meas_param = create_random_kendall_tau(self._families, 
-                                                       n_param)
+                        v.append(np.linspace(tau_min, tau_max, n_p+1, endpoint=False)[1:])
+    
+                    tmp = np.vstack(np.meshgrid(*v)).reshape(p,-1).T
+    
+                    # The final total number is not always the initial one.
+                    n_param = n_p ** p
+                    meas_param = np.zeros((n_param, self._corr_dim))
+                    for k, i in enumerate(self._corr_vars):
+                        meas_param[:, i] = tmp[:, k]
+                        tau_min, tau_max = get_tau_interval(self._family_list[i])
+                        sample[:, k] = (meas_param[:, i] - tau_min) / (tau_max - tau_min)
+                    
+                elif grid == 'rand':  # Random grid
+                    if self._copula_type == "vine":
+                        meas_param = np.zeros((n_param, self._corr_dim))
+                        for k, i in enumerate(self._corr_vars):
+                            tau_min, tau_max = get_tau_interval(self._family_list[i])
+                            meas_param[:, i] = np.random.uniform(tau_min, tau_max, n_param)
+                            sample[:, k] = (meas_param[:, i] - tau_min) / (tau_max - tau_min)
+                    elif self._copula_type == "normal":
+                        meas_param = create_random_kendall_tau(self._families, 
+                                                           n_param)
+                        for k, i in enumerate(self._corr_vars):
+                            tau_min, tau_max = get_tau_interval(self._family_list[i])
+                            sample[:, k] = (meas_param[:, i] - tau_min) / (tau_max - tau_min)
+                    else:
+                        raise AttributeError('Unknow copula type:', self._copula_type)
+                        
+                elif grid == 'lhs':
+                    meas_param = np.zeros((n_param, self._corr_dim))
+                    sample = pyDOE.lhs(p, samples=n_param, 
+                                       criterion=self._lhs_grid_criterion)
+                    for k, i in enumerate(self._corr_vars):
+                        tau_min, tau_max = get_tau_interval(self._family_list[i])
+                        meas_param[:, i] = sample[:, k]*(tau_max - tau_min) + tau_min
                 else:
-                    raise AttributeError('Unknow copula type:', self._copula_type)
+                    raise AttributeError('%s is unknow for DOE type' % grid)
+                    
+            elif dep_measure == "PearsonRho":
+                NotImplementedError("Work in progress.")
+            elif dep_measure == "SpearmanRho":
+                raise NotImplementedError("Not yet implemented")
+            else:
+                raise AttributeError("Unkown dependence parameter")
 
-        elif dep_measure == "PearsonRho":
-            NotImplementedError("Work in progress.")
-        elif dep_measure == "SpearmanRho":
-            raise NotImplementedError("Not yet implemented")
-        else:
-            raise AttributeError("Unkown dependence parameter")
-
+        if save_grid is not None and use_grid is None:
+            # The grid is saved
+            if save_grid is True: # No filename provided
+                dirname = self._grid_folder
+                if not os.path.exists(dirname):
+                    os.mkdir(dirname)
+                    
+                k = 0
+                do_save = True
+                name = '%s_p_%d_n_%d_%s_%d.csv' % (gridname, p, n_param, dep_measure, k)
+                filename = os.path.join(dirname, name)
+                # If this file already exists
+                while os.path.exists(filename):
+                    existing_sample = np.loadtxt(filename).reshape(n_param, -1)
+                    if np.allclose(np.sort(existing_sample, axis=0), np.sort(sample, axis=0)):
+                        do_save = False
+                        print 'The DOE already exist in %s' % (name)
+                        break
+                    k += 1
+                    name = '%s_p_%d_n_%d_%s_%d.csv' % (gridname, p, n_param, dep_measure, k)
+                    filename = os.path.join(dirname, name)
+                
+            grid_filename = filename
+            # It is saved
+            if do_save:
+                np.savetxt(filename, sample)
+            
+        self._grid_filename = grid_filename
+        self._grid = grid
         self._n_param = n_param
         self._params = np.zeros((n_param, self._corr_dim))
 
@@ -301,18 +414,12 @@ class ImpactOfDependence(object):
         n_sample = n * self._n_param
         self._n_sample = n_sample
         self._n_input_sample = n
-        self._input_sample = np.empty((n_sample, self._input_dim))
-        self._all_params = np.empty((n_sample, self._corr_dim))
+        self._input_sample = np.empty((n_sample, self._input_dim), dtype=float)
 
         # We loop for each copula param and create observations for each
-        for i, param in enumerate(self._params):  # For each copula parameter
-            tmp = self._get_sample(param, n)
-
+        for i, param in enumerate(self._params):
             # We save the input sample
-            self._input_sample[n*i:n*(i+1), :] = tmp
-
-            # As well for the dependence parameter
-            self._all_params[n*i:n*(i+1), :] = param
+            self._input_sample[n*i:n*(i+1), :] = self._get_sample(param, n)
 
     def _get_sample(self, param, n_obs, param2=None):
         """Creates the sample from the Vine Copula.
@@ -328,7 +435,6 @@ class ImpactOfDependence(object):
         """
         dim = self._input_dim
         structure = self._vine_structure
-
         matrix_param = to_matrix(param, dim)
 
         if self._copula_type == 'vine':
@@ -342,33 +448,31 @@ class ImpactOfDependence(object):
             # Create the correlation matrix
             cor_matrix = matrix_param + matrix_param.T + np.identity(dim)
             cop = ot.NormalCopula(ot.CorrelationMatrix(cor_matrix))
-            cop_sample = np.asarray(cop.getSample(n_obs))
+            cop_sample = np.asarray(cop.getSample(n_obs), dtype=float)
         else:
             raise AttributeError('Unknown type of copula.')
 
         # Applied to the inverse transformation to get the sample of the joint distribution
-        joint_sample = np.zeros((n_obs, dim))
+        joint_sample = np.zeros((n_obs, dim), dtype=float)
         for i, inv_CDF in enumerate(self._margins_inv_CDF):
             joint_sample[:, i] = np.asarray(inv_CDF(cop_sample[:, i])).ravel()
 
         return joint_sample
 
-    def _fix_output(self, output_ID):
+    def _output_info(self):
         # If the output dimension is one
         if self._all_output_sample.shape[0] == self._all_output_sample.size:
             self._output_dim = 1
-            self._output_sample = self._all_output_sample
         else:
             self._output_dim = self._all_output_sample.shape[1]
-            self._output_sample = self._all_output_sample[:, output_ID]
 
     def build_forest(self, quant_forest=QuantileForest()):
         """Build a Quantile Random Forest to estimate conditional quantiles.
         """
         # We take only used params (i.e. the zero cols are taken off)
         # Actually, it should not mind to RF, but it's better for clarity.
-        used_params = self._all_params[:, self._corr_vars]
-        quant_forest.fit(used_params, self._output_sample)
+        used_params = self.all_params_[:, self._corr_vars]
+        quant_forest.fit(used_params, self.output_sample_)
         self._quant_forest = quant_forest
         self._forest_built = True
 
@@ -417,7 +521,8 @@ class ImpactOfDependence(object):
             raise TypeError("Unknow input variable quantity_func")
 
     def compute_probability(self, threshold, estimation_method='empirical',
-                            confidence_level=0.95, operator='>', bootstrap=False):
+                            confidence_level=0.95, operator='>', bootstrap=False,
+                            output_ID=0):
         """Computes conditional probabilities for each parameters.
         
         Compute the probability of the current sample for each dependence
@@ -445,7 +550,7 @@ class ImpactOfDependence(object):
         assert isinstance(estimation_method, str), \
             TypeError("Method name should be a string")
 
-        out_sample = self.reshaped_output_sample_
+        self._output_ID = output_ID
         configs = {'Quantity Name': 'Probability',
                   'Threshold': threshold,
                   'Confidence Level': confidence_level,
@@ -456,12 +561,12 @@ class ImpactOfDependence(object):
         op_func = OPERATORS[operator]
 
         if estimation_method == "empirical":
+            out_sample = self.reshaped_output_sample_
             probability = (op_func(out_sample, threshold).astype(float)).mean(axis=1)
             tmp = np.sqrt(probability * (1. - probability) /
                           self._n_input_sample)
             # Quantile of a Gaussian distribution
-            q_normal = np.asarray(ot.Normal().computeQuantile(
-                (1 + confidence_level) / 2.))
+            q_normal = norm.ppf((1 + confidence_level) / 2.)
             interval = q_normal * tmp  # Confidence interval
             cond_params = self._params[:, self._corr_vars]
         elif estimation_method == 'randomforest':
@@ -472,7 +577,8 @@ class ImpactOfDependence(object):
         return DependenceResult(configs, self, probability, interval, cond_params)
 
     def compute_quantiles(self, alpha, estimation_method='empirical',
-                          confidence_level=0.95, grid_size=None, bootstrap=False):
+                          confidence_level=0.95, grid_size=None, bootstrap=False,
+                          output_ID=0):
         """Computes conditional quantiles.
 
         Compute the alpha-quantiles of the current sample for each dependence
@@ -501,7 +607,8 @@ class ImpactOfDependence(object):
                 ValueError("alpha should be a probability")
         else:
             TypeError("Method name should be a float")
-
+            
+        self._output_ID = output_ID
         configs = {'Quantity Name': 'Quantile',
                   'Quantile Probability': alpha,
                   'Confidence Level': confidence_level,
@@ -513,9 +620,11 @@ class ImpactOfDependence(object):
         cond_params = self._params[:, self._corr_vars]
         if estimation_method == 'empirical':
             out_sample = self.reshaped_output_sample_
-            quantiles = np.percentile(out_sample, alpha * 100., axis=1)
-            if bootstrap:
-                func_bootstrap(out_sample, 5, np.percentile, alpha)
+            if not bootstrap:
+                quantiles = np.percentile(out_sample, alpha * 100., axis=1).reshape(1, -1)
+            else:
+                quantiles, interval = bootstrap_quantile(out_sample, alpha, 20, 0.01)
+                
             # TODO: think about using the check function instead of the percentile.
 
         elif estimation_method == "randomforest":
@@ -549,18 +658,12 @@ class ImpactOfDependence(object):
 
         return DependenceResult(configs, self, quantiles, interval, cond_params)
 
-    def save_input_data(self, path=".", fname="inputSampleCop", ftype=".csv"):
-        """
-        """
-        full_fname = path + '/' + fname + ftype
-        np.savetxt(full_fname, self._all_params)
-
     def save_all_data(self, path=".", fname="full_data", ftype=".csv"):
         """
 
         """
         full_fname = path + '/' + fname + ftype
-        out = np.c_[self._all_params, self._input_sample, self._output_sample]
+        out = np.c_[self.all_params_, self._input_sample, self.output_sample_]
         np.savetxt(full_fname, out)
 
     def save_data(self, input_names=[], output_names=[],
@@ -571,9 +674,10 @@ class ImpactOfDependence(object):
         output_dim = self._output_dim
 
         # List of correlated variable names
+        # TODO: git the bug...
         labels = []
         for i in range(self._input_dim):
-            for j in range(i + 1, self._input_dim):
+            for j in range(i):
                 labels.append("r_%d%d" % (i + 1, j + 1))
 
         # List of input variable names
@@ -595,7 +699,7 @@ class ImpactOfDependence(object):
                 labels.append("y_%d" % (i + 1))
 
         path_fname = path + '/' + data_fname + ftype
-        out = np.c_[self._all_params, self._input_sample,
+        out = np.c_[self.all_params_, self._input_sample,
                     self._all_output_sample]
         out_df = pd.DataFrame(out, columns=labels)
         out_df.to_csv(path_fname, index=False)
@@ -605,6 +709,12 @@ class ImpactOfDependence(object):
         dict_output['Input Dimension'] = self._input_dim
         dict_output['Parameter Number'] = self._n_param
         dict_output['Sample Size'] = self._n_input_sample
+        dict_output['Grid'] = self._grid
+        if self._grid_filename:
+            dict_output['Grid Filename'] = os.path.basename(self._grid_filename)
+        if self._grid == 'lhs':
+            dict_output['LHS Criterion'] = self._lhs_grid_criterion
+        
 
         dict_copula = {'Families': self._families.tolist(),
                        'Structure': self._vine_structure.tolist()}
@@ -627,14 +737,6 @@ class ImpactOfDependence(object):
         with open(path_fname, 'w') as outfile:
             json.dump(dict_output, outfile, indent=4)
 
-    def get_corresponding_sample(self, corr_value):
-        """
-        """
-        id_corr = np.where((self._all_params == corr_value).all(axis=1))[0]
-        x = self._input_sample[id_corr]
-        y = self._output_sample[id_corr]
-        return x, y
-
     def draw_matrix_plot(self, corr_id=None, copula_space=False, figsize=(10, 10),
                          savefig=False):
         """
@@ -642,7 +744,7 @@ class ImpactOfDependence(object):
         if corr_id is None:
             id_corr = np.ones(self._n_sample, dtype=bool)
         else:
-            id_corr = np.where((self._all_params == self._params[corr_id]).all(axis=1))[0]
+            id_corr = np.where((self.all_params_ == self._params[corr_id]).all(axis=1))[0]
 
         data = self._input_sample[id_corr]
         
@@ -671,11 +773,20 @@ class ImpactOfDependence(object):
                     ax.set_yticks([])
 
         fig.tight_layout()
+        
+        if savefig:
+            if isinstance(savefig, str):
+                fname = savefig + '/'
+            else:
+                fname = "./"
+            fname += "matrix_plot"
+            fig.savefig(fname + ".png", dpi=200)
+
+        return fig
 
     def draw_design_space(self, corr_id=None, figsize=(10, 6),
                           savefig=False, color_map="jet", output_name=None,
-                          input_names=None, return_fig=False, color_lims=None,
-                          display_quantile_value=None):
+                          input_names=None, return_fig=False, color_lims=None):
         """
         """
         assert self._input_dim in [2, 3], "Cannot draw quantiles for dim > 3"
@@ -685,7 +796,7 @@ class ImpactOfDependence(object):
         if corr_id is None:
             id_corr = np.ones(self._n_sample, dtype=bool)
         else:
-            id_corr = np.where((self._all_params == self._params[corr_id]).all(axis=1))[0]
+            id_corr = np.where((self.all_params_ == self._params[corr_id]).all(axis=1))[0]
 
         if input_names:
             param_name = input_names
@@ -698,24 +809,15 @@ class ImpactOfDependence(object):
             output_label = "Output value"
 
         x = self._input_sample[id_corr]
-        y = self._output_sample[id_corr]
+        y = self.output_sample_[id_corr]
         color_scale = y
         cm = plt.get_cmap(color_map)
         if color_lims is None:
             c_min, c_max = min(color_scale), max(color_scale)
         else:
             c_min, c_max = color_lims[0], color_lims[1]
-        cNorm = plt.colors.Normalize(vmin=c_min, vmax=c_max)
+        cNorm = matplotlib.colors.Normalize(vmin=c_min, vmax=c_max)
         scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=cm)
-        if display_quantile_value:
-            alpha = display_quantile_value
-            self.compute_quantiles(alpha, 1)
-            if self._input_dim == 2:
-                id_quant = np.where(self._params == corr_value)[0]
-            else:
-                id_quant = np.where(
-                    (self._params == corr_value).all(axis=1))[0]
-            quant = self._quantiles[id_quant]
 
         if self._input_dim == 2:  # If input dimension is 2
             ax = fig.add_subplot(111)  # Creat the ax object
@@ -745,10 +847,7 @@ class ImpactOfDependence(object):
 
         title = "Design Space with $n = %d$ observations" % len(id_corr)
         if corr_id is not None:
-            if display_quantile_value:
-                title += "\n$q_\\alpha = %.1f$ - $\\rho = " % (quant)
-            else:
-                title += "\n$\\rho = "
+            title += "\n$\\rho = "
             p = self._params[corr_id]
             if self._corr_dim == 1:
                 title += "%.1f$" % (p)
@@ -878,21 +977,11 @@ class ImpactOfDependence(object):
         self._vine_structure = structure
 
     @property
-    def rand_vars(self):
-        """The random variable describing the input joint density of the problem.
-        """
-        return self._rand_vars
-
-    @rand_vars.setter
-    def rand_vars(self, rand_vars):
-        assert isinstance(rand_vars, ot.ComposedDistribution), \
-            TypeError("The variables must be OpenTURNS Distributions.")
-
-        self._rand_vars = rand_vars
-
-    @property
     def output_sample_(self):
-        return self._output_sample
+        if self._output_dim == 1:
+            return self._all_output_sample
+        else:
+            return self._all_output_sample[:, self._output_ID]
 
     @output_sample_.setter
     def output_sample_(self, value):
@@ -906,26 +995,25 @@ class ImpactOfDependence(object):
     def input_sample_(self, value):
         raise EnvironmentError("You cannot set this variable")
 
+    # TODO: there is a compromise between speed and memory efficiency...
     @property
     def all_params_(self):
-        return self._all_params
-
-    @all_params_.setter
-    def all_params_(self, value):
-        raise EnvironmentError("You cannot set this variable")
+#        if self._load_data:
+#            return self._all_params
+#        else:
+        params = np.zeros((self._n_sample, self._corr_dim), dtype=float)
+        n = self._n_input_sample
+        for i, param in enumerate(self._params):
+            params[n*i:n*(i+1), :] = param
+        return params
+#
+#    @all_params_.setter
+#    def all_params_(self, value):
+#        self._all_params = value
 
     @property
     def reshaped_output_sample_(self):
-        if not self._load_data:
-            return self._output_sample.reshape((self._n_param, self._n_input_sample))
-            
-        else:
-            # TODO: this is not consistent. Find a way to presort the sample.
-            out_sample = np.zeros((self._n_param, self._n_input_sample))
-            for i, par in enumerate(self._params):
-                id_p = (self._all_params == par).all(axis=1)
-                out_sample[i, :] = self._output_sample[id_p]
-            return out_sample
+        return self.output_sample_.reshape((self._n_param, self._n_input_sample))
 
     @reshaped_output_sample_.setter
     def reshaped_output_sample_(self, value):
@@ -939,6 +1027,7 @@ class DependenceResult(object):
         """
         """
         #TODO: think of a way to delete the dependence object.
+        #TODO: Use a ** object to pass the arguments
         self.configs = configs
         self.quantity = quantity
         self.confidence_interval = confidence_interval
@@ -994,7 +1083,24 @@ class DependenceResult(object):
                  100, self.confidence_interval)
         return to_print
 
-    def draw(self, dep_meas="KendallTau", figsize=(10, 6), 
+    def draw_bounds(self, indep_quant=None, figsize=(10, 6)):
+        """
+        """
+        min_quantile = self.quantity.min(axis=1)
+        max_quantile = self.quantity.max(axis=1)
+
+        fig, ax = plt.subplots()
+        if indep_quant is not None:
+            ax.plot(indep_quant._alpha, indep_quant.quantity, 'b')
+        ax.plot(self._alpha, min_quantile, '--b')
+        ax.plot(self._alpha, max_quantile, '--b')
+
+        ax.set_ylabel(self._quantity_name)
+        ax.set_xlabel('$\\alpha$')
+        ax.axis('tight')
+        fig.tight_layout()
+
+    def draw(self, id_alpha=0, dep_meas="KendallTau", figsize=(10, 6), 
              color_map="jet", max_eps=1.E-1,
              savefig=False, figpath='.'):
         """Draw the quantity with the dependence measure or copula
@@ -1022,9 +1128,13 @@ class DependenceResult(object):
         else:
             raise AttributeError("Undefined param")
 
+        
         # Output quantities of interest
-        quantity = self.quantity
-        interval = self.confidence_interval
+        quantity = self.quantity[id_alpha, :].reshape(n_param, -1)
+        if self.confidence_interval is not None:
+            interval = self.confidence_interval[id_alpha, :]
+        else:
+            interval = None
         quantity_name = self._quantity_name
 
         # Find the "almost" independent configuration
@@ -1059,7 +1169,7 @@ class DependenceResult(object):
             id_sorted_params = np.argsort(params, axis=0).ravel()
 
             # Plot of the quantile conditionally to the correlation parameter
-            ax.plot(params[id_sorted_params], quantity[id_sorted_params],
+            ax.plot(params[id_sorted_params], quantity[id_sorted_params, :],
                     'ob', label=quantity_name, linewidth=2)
 
             # Plot the confidence bounds
@@ -1172,7 +1282,7 @@ class DependenceResult(object):
         ax.set_title(title, fontsize=18)
         ax.axis("tight")
         fig.tight_layout()
-
+    
         # Saving the figure
         if savefig:
             fname = figpath + '/'
@@ -1182,17 +1292,20 @@ class DependenceResult(object):
                 fname += "fig" + quantity_name
             fig.savefig(fname + ".pdf")
             fig.savefig(fname + ".png")
+            
+        return ax
 
 
-def func_bootstrap(data, num_samples, statistic, alpha, args):
+def bootstrap_quantile(data, alpha, n_boot, alpha_boot):
     """Returns bootstrap estimate of 100.0*(1-alpha) CI for statistic."""
     n = len(data)
-    idx = np.random.randint(0, n, (num_samples, n))
+    idx = np.random.randint(0, n, (n_boot, n))
     samples = data[idx]
-    stat = np.sort(statistic(samples, 1, *args))
+    stat = np.sort(np.percentile(samples, alpha * 100., axis=1))
 
-    return (stat[int((alpha / 2.0) * num_samples)],
-            stat[int((1 - alpha / 2.0) * num_samples)])
+    return stat.mean(axis=0), np.c_[stat[int((alpha_boot*0.5) * n_boot)],
+            stat[int((1. - alpha_boot*0.5) * n_boot)]]
+    
 
 def to_matrix(param, dim):
     """

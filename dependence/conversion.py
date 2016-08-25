@@ -6,25 +6,6 @@ import numpy as np
 from rpy2.robjects.packages import importr
 from rpy2.robjects.numpy2ri import numpy2ri
 
-INFO_COPULA = {0: 'Independence',
-               1: 'Gaussian',
-               2: 't',
-               3: 'Clayton',
-               4: 'Gumbel',
-               5: 'Frank',
-               6: 'Joe',
-               13: 'Survival Clayton',
-               14: 'Survival Gumbel',
-               16: 'Survival Joe',
-               23: 'Rotated Clayton 90 degrees',
-               24: 'Rotated Gumbel 90 degrees',
-               26: 'Rotated Joe 90 degrees',
-               33: 'Rotated Clayton 270 degrees',
-               34: 'Rotated Gumbel 270 degrees',
-               36: 'Rotated Joe 270 degrees'               
-              }
-
-
 VINECOPULA = importr('VineCopula')
 
 def get_param1_interval(copula):
