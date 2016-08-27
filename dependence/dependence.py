@@ -9,13 +9,12 @@ import json
 import warnings
 import itertools
 import os
-import time
 
 import numpy as np
 import pandas as pd
 import openturns as ot
+import h5py
 import matplotlib
-matplotlib.use('Agg') # Must be before importing matplotlib.pyplot or pylab!
 import matplotlib.pyplot as plt
 import matplotlib.cm as cmx
 from mpl_toolkits.mplot3d import Axes3D
@@ -72,7 +71,7 @@ class ImpactOfDependence(object):
         self._grid_folder = './experiment_designs'
 
     @classmethod
-    def from_data(cls, data_sample, params, out_ID=0):
+    def from_data(cls, data_sample, params, out_ID=0, with_input_sample=True):
         """Load from data.
 
         This method initialise the class using built data from previous simulations.
@@ -115,7 +114,8 @@ class ImpactOfDependence(object):
         obj._n_sample = n_sample
         obj._n_input_sample = n
         
-        obj._input_sample = data_sample_ordered[:, obj._corr_dim:obj._corr_dim + dim]
+        if with_input_sample:
+            obj._input_sample = data_sample_ordered[:, obj._corr_dim:obj._corr_dim + dim]
         obj._all_output_sample = data_sample_ordered[:, obj._corr_dim + dim:]
         obj._output_dim = obj._all_output_sample.shape[1]
         obj._output_ID = out_ID
@@ -124,7 +124,7 @@ class ImpactOfDependence(object):
 
     @classmethod
     def from_structured_data(cls, loaded_data="full_structured_data.csv",
-                             info_params='info_params.json'):
+                             info_params='info_params.json', with_input_sample=True):
         """
         Load from structured with labels.
 
@@ -163,7 +163,96 @@ class ImpactOfDependence(object):
         with open(info_params, 'r') as param_f:
             params = json.load(param_f)
 
-        return cls.from_data(data.values, params)
+        return cls.from_data(data.values, params, with_input_sample=with_input_sample)
+        
+    @classmethod
+    def from_hdf(cls, loaded_data="output_result.hdf5", id_exp='all', out_ID=0, with_input_sample=True):
+        """
+        """
+        # Ghost function
+        def tmp(): return None
+        
+        # Load of the hdf5 file
+        with h5py.File(loaded_data, 'r') as store:
+            # The file may contain multiple experiments. The user can load one 
+            # or multiple if they have similiar configurations.
+            if id_exp == 'all':
+                # We load and concatenate every groups of experiments
+                list_index = store.keys()
+            else:
+                list_index = [str(id_exp)]
+            
+            # TODO: add verification that the groups have the same configurations
+            for k, index in enumerate(list_index):
+                grp = store[str(index)] # Group of the experiment
+                
+                data_in = grp['input_sample']
+                data_out = grp['output_sample']
+
+                # k-th sample
+                input_sample_k = data_in.value
+                output_sample_k = data_out.value
+
+                # These 
+                if k == 0:
+                    input_sample = input_sample_k
+                    output_sample = output_sample_k
+                    data_dep = grp['dependence_params']
+                    params = data_dep.value
+                    n_params = params.shape[0]
+                    dep_measure = data_dep.attrs['Dependence Measure']
+                    families = data_dep.attrs['Copula Families']
+                    structure = data_dep.attrs['Copula Structure']
+                    grid_type = data_dep.attrs['Grid Type']
+                    copula_type = data_dep.attrs['Copula Type']
+                    if 'Grid Filename' in data_dep.attrs.keys():
+                        grid_filename = data_dep.attrs['Grid Filename']
+                    else:
+                        grid_filename = None
+                    if grid_type == 'lhs':
+                        lhs_grid_criterion = data_dep.attrs['LHS Criterion']
+    
+                    dim = input_sample_k.shape[1]
+                    input_names = data_in.attrs['Input Names']
+                    margins = []
+                    for i in range(dim):
+                        marg_f = 'Marginal_%d Family' % (i)
+                        marg_p = 'Marginal_%d Parameters' % (i)
+                        marginal = getattr(ot, data_in.attrs[marg_f])(*data_in.attrs[marg_p])
+                        margins.append(marginal)
+                        
+                    output_dim = output_sample_k.shape[1]
+                    output_names = data_out.attrs['Output Names']
+                else:
+                    input_sample = np.r_[input_sample, input_sample_k]
+                    output_sample = np.r_[output_sample, output_sample_k]
+
+        obj = cls(tmp, margins, families, structure)
+        
+        n_sample = output_sample.shape[0]
+        n_params = params.shape[0]
+        n = n_sample / n_params
+                
+        obj._params = params
+        obj._n_param = n_params
+        obj._n_sample = n_sample
+        obj._n_input_sample = n
+        
+        if with_input_sample:
+            obj._input_sample = input_sample
+        obj._all_output_sample = output_sample
+        obj._output_dim = output_dim
+        obj._output_ID = out_ID
+        obj._load_data = True
+        obj._dep_measure = dep_measure
+        obj._copula_type = copula_type
+        obj._grid = grid_type
+        obj._grid_filename = grid_filename
+        obj._lhs_grid_criterion = lhs_grid_criterion
+        obj._input_names = input_names
+        obj._output_names = output_names
+        
+        return obj
 
     def run(self, n_dep_param, n_input_sample, grid='rand',
             dep_measure="KendallTau", seed=None, use_grid=None, save_grid=None):
@@ -225,6 +314,8 @@ class ImpactOfDependence(object):
 
         # Get output dimension
         self._output_info()
+        
+        self._run_type = 'Classic'
 
     def minmax_run(self, n_input_sample, seed=None, eps=1.E-5, store_input_sample=True):
         """
@@ -246,6 +337,8 @@ class ImpactOfDependence(object):
 
         # Get output dimension
         self._output_info()
+        
+        self._run_type = 'Perfect Dependence'
 
     def run_independence(self, n_input_sample, seed=None):
         self._n_param = 1
@@ -259,6 +352,8 @@ class ImpactOfDependence(object):
 
         # Get output dimension
         self._output_info()
+        
+        self._run_type = 'Independence'
 
     def _build_corr_sample(self, n_param, grid, dep_measure, use_grid, save_grid):
         """Creates the sample of dependence parameters.
@@ -395,6 +490,7 @@ class ImpactOfDependence(object):
                 np.savetxt(filename, sample)
             
         self._grid_filename = grid_filename
+        self._dep_measure = dep_measure
         self._grid = grid
         self._n_param = n_param
         self._params = np.zeros((n_param, self._corr_dim))
@@ -657,14 +753,70 @@ class ImpactOfDependence(object):
                 "Unknow estimation method: %s" % estimation_method)
 
         return DependenceResult(configs, self, quantiles, interval, cond_params)
-
-    def save_all_data(self, path=".", fname="full_data", ftype=".csv"):
+        
+    def save_data_hdf(self, input_names=[], output_names=[],
+                  path=".", file_name="output_result.hdf5"):
         """
-
         """
-        full_fname = path + '/' + fname + ftype
-        out = np.c_[self.all_params_, self._input_sample, self.output_sample_]
-        np.savetxt(full_fname, out)
+        # List of correlated variable names
+        param_names = []
+        for i in range(self._input_dim):
+            for j in range(i):
+                param_names.append("r_%d%d" % (i + 1, j + 1))
+
+        # List of input variable names
+        if input_names:
+            assert len(input_names) == self._input_dim, \
+                AttributeError("Dimension problem for input_names")
+        else:
+            for i in range(self._input_dim):
+                input_names.append("x_%d" % (i + 1))
+                
+        # List of output variable names
+        if output_names:
+            assert len(output_names) == self._output_dim,\
+                AttributeError("Dimension problem for output_names")
+        else:
+            for i in range(self._output_dim):
+                output_names.append("y_%d" % (i + 1))
+                
+        with h5py.File(os.path.join(path, file_name), 'a') as store:
+            grp_number = 0
+            if store.keys():
+                grp_number = int(store.keys()[-1]) + 1
+
+            grp = store.create_group(str(grp_number))
+            grp.attrs['n'] = self._n_input_sample
+            grp.attrs['K'] = self._n_param
+            grp.attrs['Run Type'] = self._run_type
+
+            data_dep = grp.create_dataset('dependence_params', data=self._params)
+            data_dep.attrs['Dependence Measure'] = self._dep_measure
+            data_dep.attrs['Copula Families'] = self._families
+            data_dep.attrs['Copula Structure'] = self._vine_structure
+            data_dep.attrs['Grid Type'] = self._grid
+            data_dep.attrs['Copula Type'] = self._copula_type
+            data_dep.attrs['Parameter Names'] = param_names
+
+            if self._grid_filename:
+                data_dep.attrs['Grid Filename'] = os.path.basename(self._grid_filename)
+            if self._grid == 'lhs':
+                data_dep.attrs['LHS Criterion'] = self._lhs_grid_criterion
+            
+            data_input = grp.create_dataset('input_sample', data=self._input_sample)
+            data_input.attrs['Input Names'] = input_names
+                  
+            # TODO: Find a way to get the name of the variable for
+            # Scipy frozen rv_continous instances
+            if isinstance(self._margins[0], ot.DistributionImplementation):
+                for i, marginal in enumerate(self._margins):
+                    name = marginal.getName()
+                    params = list(marginal.getParameter())
+                    data_input.attrs['Marginal_%d Family' % (i)] = name
+                    data_input.attrs['Marginal_%d Parameters' % (i)] = params
+                                                 
+            data_output = grp.create_dataset('output_sample', data=self._all_output_sample)
+            data_output.attrs['Output Names'] = output_names
 
     def save_data(self, input_names=[], output_names=[],
                   path=".", data_fname="full_structured_data",
@@ -674,7 +826,6 @@ class ImpactOfDependence(object):
         output_dim = self._output_dim
 
         # List of correlated variable names
-        # TODO: git the bug...
         labels = []
         for i in range(self._input_dim):
             for j in range(i):
@@ -998,18 +1149,11 @@ class ImpactOfDependence(object):
     # TODO: there is a compromise between speed and memory efficiency...
     @property
     def all_params_(self):
-#        if self._load_data:
-#            return self._all_params
-#        else:
         params = np.zeros((self._n_sample, self._corr_dim), dtype=float)
         n = self._n_input_sample
         for i, param in enumerate(self._params):
             params[n*i:n*(i+1), :] = param
         return params
-#
-#    @all_params_.setter
-#    def all_params_(self, value):
-#        self._all_params = value
 
     @property
     def reshaped_output_sample_(self):

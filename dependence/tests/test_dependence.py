@@ -196,7 +196,7 @@ def test_last():
     id_min = quant_res.quantity.argmax()
     impact.draw_matrix_plot(id_min, copula_space=True)
 
-@profile
+    
 def test_bounds():
     dim = 4
     alpha = 0.05
@@ -215,4 +215,19 @@ def test_bounds():
     id_min = quant_res.quantity.argmin()
 
 if __name__ == '__main__':
-    test_bounds()
+    dim = 3
+    alpha = 0.05
+    threshold = 2.
+    measure = "KendallTau"
+    margins = [ot.Weibull(), ot.Normal(), ot.Normal()]
+
+    families = np.zeros((dim, dim), dtype=int)
+    families[1, 0] = 1
+    families[2, 0] = 0
+    families[2, 1] = 0
+  
+    impact = ImpactOfDependence(model_func=add_function, margins=margins, families=families)
+
+    impact.run(n_dep_param=10, n_input_sample=100, seed=0)
+
+    impact.save_data_hdf()
