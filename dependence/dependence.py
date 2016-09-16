@@ -20,6 +20,8 @@ import matplotlib.cm as cmx
 from mpl_toolkits.mplot3d import Axes3D
 from scipy.stats import rv_continuous, norm
 import pyDOE
+from scipy.optimize import minimize
+import nlopt
 
 from pyquantregForest import QuantileForest
 
@@ -69,6 +71,7 @@ class ImpactOfDependence(object):
         self._forest_built = False
         self._lhs_grid_criterion = 'centermaximin'
         self._grid_folder = './experiment_designs'
+        self._dep_measure = None
 
     @classmethod
     def from_data(cls, data_sample, params, out_ID=0, with_input_sample=True):
@@ -166,72 +169,84 @@ class ImpactOfDependence(object):
         return cls.from_data(data.values, params, with_input_sample=with_input_sample)
         
     @classmethod
-    def from_hdf(cls, loaded_data="output_result.hdf5", id_exp='all', out_ID=0, with_input_sample=True):
+    def from_hdf(cls, loaded_data="./output_result.hdf5", id_exp='all', out_ID=0, with_input_sample=True):
         """
         """
         # Ghost function
         def tmp(): return None
         
         # Load of the hdf5 file
-        with h5py.File(loaded_data, 'r') as store:
+        with h5py.File(loaded_data, 'r') as hdf_store:
             # The file may contain multiple experiments. The user can load one 
             # or multiple if they have similiar configurations.
             if id_exp == 'all':
                 # We load and concatenate every groups of experiments
-                list_index = store.keys()
+                list_index = hdf_store.keys()
+                list_index.remove('dependence_params')
             else:
                 list_index = [str(id_exp)]
             
-            # TODO: add verification that the groups have the same configurations
+            params = hdf_store['dependence_params'].value
+            run_type = hdf_store.attrs['Run Type']
+            n_params = hdf_store.attrs['K']
+            families = hdf_store.attrs['Copula Families']
+            structure = hdf_store.attrs['Copula Structure']
+            copula_type = hdf_store.attrs['Copula Type']
+            input_dim = hdf_store.attrs['Input Dimension']
+            input_names = hdf_store.attrs['Input Names']
+
+            margins = []
+            for i in range(input_dim):
+                marg_f = 'Marginal_%d Family' % (i)
+                marg_p = 'Marginal_%d Parameters' % (i)
+                marginal = getattr(ot, hdf_store.attrs[marg_f])(*hdf_store.attrs[marg_p])
+                margins.append(marginal)
+                
+            if run_type == 'Classic':
+                dep_measure = hdf_store.attrs['Dependence Measure']
+                grid_type = hdf_store.attrs['Grid Type']
+                if 'Grid Filename' in hdf_store.attrs.keys():
+                    grid_filename = hdf_store.attrs['Grid Filename']
+                else:
+                    grid_filename = None
+                if grid_type == 'lhs':
+                    lhs_grid_criterion = hdf_store.attrs['LHS Criterion']
+                else:
+                    lhs_grid_criterion = None
+                
+            output_dim = hdf_store.attrs['Output Dimension']
+            output_names = hdf_store.attrs['Output Names']
+            
+            list_input_sample = []
+            list_output_sample = []
+            list_n = []
+            n = 0
             for k, index in enumerate(list_index):
-                grp = store[str(index)] # Group of the experiment
+                grp = hdf_store[index] # Group of the experiment
                 
                 data_in = grp['input_sample']
                 data_out = grp['output_sample']
 
-                # k-th sample
-                input_sample_k = data_in.value
-                output_sample_k = data_out.value
+                list_input_sample.append(data_in.value)
+                list_output_sample.append(data_out.value)
+                list_n.append(grp.attrs['n'])
 
-                # These 
-                if k == 0:
-                    input_sample = input_sample_k
-                    output_sample = output_sample_k
-                    data_dep = grp['dependence_params']
-                    params = data_dep.value
-                    n_params = params.shape[0]
-                    dep_measure = data_dep.attrs['Dependence Measure']
-                    families = data_dep.attrs['Copula Families']
-                    structure = data_dep.attrs['Copula Structure']
-                    grid_type = data_dep.attrs['Grid Type']
-                    copula_type = data_dep.attrs['Copula Type']
-                    if 'Grid Filename' in data_dep.attrs.keys():
-                        grid_filename = data_dep.attrs['Grid Filename']
-                    else:
-                        grid_filename = None
-                    if grid_type == 'lhs':
-                        lhs_grid_criterion = data_dep.attrs['LHS Criterion']
-    
-                    dim = input_sample_k.shape[1]
-                    input_names = data_in.attrs['Input Names']
-                    margins = []
-                    for i in range(dim):
-                        marg_f = 'Marginal_%d Family' % (i)
-                        marg_p = 'Marginal_%d Parameters' % (i)
-                        marginal = getattr(ot, data_in.attrs[marg_f])(*data_in.attrs[marg_p])
-                        margins.append(marginal)
-                        
-                    output_dim = output_sample_k.shape[1]
-                    output_names = data_out.attrs['Output Names']
-                else:
-                    input_sample = np.r_[input_sample, input_sample_k]
-                    output_sample = np.r_[output_sample, output_sample_k]
-
-        obj = cls(tmp, margins, families, structure)
+        # The sample are reordered
+        n = sum(list_n)
+        n_sample = n*n_params
+        input_sample = np.zeros((n_sample, input_dim))
+        output_sample = np.zeros((n_sample, output_dim))
         
-        n_sample = output_sample.shape[0]
-        n_params = params.shape[0]
-        n = n_sample / n_params
+        a = 0
+        for i, ni in enumerate(list_n):
+            for k in range(n_params):
+                start = a + k*n
+                end = start + ni
+                input_sample[start:end, :] = list_input_sample[i][k*ni:(k+1)*ni, :]
+                output_sample[start:end, :] = list_output_sample[i][k*ni:(k+1)*ni, :]
+            a += ni
+                    
+        obj = cls(tmp, margins, families, structure)
                 
         obj._params = params
         obj._n_param = n_params
@@ -242,15 +257,19 @@ class ImpactOfDependence(object):
             obj._input_sample = input_sample
         obj._all_output_sample = output_sample
         obj._output_dim = output_dim
-        obj._output_ID = out_ID
-        obj._load_data = True
-        obj._dep_measure = dep_measure
         obj._copula_type = copula_type
-        obj._grid = grid_type
-        obj._grid_filename = grid_filename
-        obj._lhs_grid_criterion = lhs_grid_criterion
         obj._input_names = input_names
         obj._output_names = output_names
+        obj._run_type = run_type
+        
+        obj._output_ID = out_ID
+        obj._load_data = True
+        
+        if run_type == 'Classic':
+            obj._dep_measure = dep_measure
+            obj._grid = grid_type
+            obj._grid_filename = grid_filename
+            obj._lhs_grid_criterion = lhs_grid_criterion
         
         return obj
 
@@ -317,9 +336,13 @@ class ImpactOfDependence(object):
         
         self._run_type = 'Classic'
 
-    def minmax_run(self, n_input_sample, seed=None, eps=1.E-5, store_input_sample=True):
+    def minmax_run(self, n_input_sample, seed=None, eps=1.E-8, store_input_sample=True):
         """
         """
+        if seed is not None:  # Initialises the seed
+            np.random.seed(seed)
+            ot.RandomGenerator.SetSeed(seed)
+            
         p = self._n_corr_vars
         self._n_param = 3**p
         self._params = np.zeros((self._n_param, self._corr_dim), dtype=float)
@@ -341,6 +364,12 @@ class ImpactOfDependence(object):
         self._run_type = 'Perfect Dependence'
 
     def run_independence(self, n_input_sample, seed=None):
+        """
+        """
+        if seed is not None:  # Initialises the seed
+            np.random.seed(seed)
+            ot.RandomGenerator.SetSeed(seed)
+            
         self._n_param = 1
         self._params = np.zeros((1, self._corr_dim), dtype=float)
 
@@ -354,6 +383,53 @@ class ImpactOfDependence(object):
         self._output_info()
         
         self._run_type = 'Independence'
+        
+    def func_quant(self, param, alpha, n_input_sample):
+        """
+        """
+        self._n_param = 1
+        self._params = np.zeros((1, self._corr_dim), dtype=float)
+        self._params[self._corr_vars] = param
+        
+        # Creates the sample of input parameters
+        self._build_input_sample(n_input_sample)
+        
+        # Evaluates the input sample
+        self._all_output_sample = self.model_func(self._input_sample)
+        
+        # Get output dimension
+        self._output_info()
+        
+        self._run_type = 'Minimising'
+        
+        return np.percentile(self.output_sample_, alpha * 100.)
+        
+    def minimise_quantile(self, alpha, n_input_sample, eps=1.E-5):
+        """
+        """
+        theta_0 = [.2]
+#        return minimize(self.func_quant, theta_0, args=(alpha, n_input_sample),
+#                        method='SLSQP',
+#                        bounds=((-1. + eps, 1. - eps), ), tol=1.E-2,
+#options={'eps': 1e-2, 'disp': True})        
+        def func(param, grad):
+            if grad.size > 0:  
+                print grad
+            return self.func_quant(param, alpha, n_input_sample)
+            
+        algorithm = nlopt.GN_DIRECT        
+        opt = nlopt.opt(algorithm, self._n_corr_vars)
+        opt.set_lower_bounds([-0.9])
+        opt.set_upper_bounds([0.9])  
+#        opt.set_xtol_rel(1e-3)
+        opt.maxeval=10
+
+        opt.set_min_objective(func)
+        
+        xopt = opt.optimize(theta_0)
+        
+        return xopt
+
 
     def _build_corr_sample(self, n_param, grid, dep_measure, use_grid, save_grid):
         """Creates the sample of dependence parameters.
@@ -510,12 +586,8 @@ class ImpactOfDependence(object):
         n_sample = n * self._n_param
         self._n_sample = n_sample
         self._n_input_sample = n
-        self._input_sample = np.empty((n_sample, self._input_dim), dtype=float)
-
-        # We loop for each copula param and create observations for each
-        for i, param in enumerate(self._params):
-            # We save the input sample
-            self._input_sample[n*i:n*(i+1), :] = self._get_sample(param, n)
+        res_list = map(lambda param: self._get_sample(param, n), self._params)
+        self._input_sample = np.concatenate(res_list)
 
     def _get_sample(self, param, n_obs, param2=None):
         """Creates the sample from the Vine Copula.
@@ -758,12 +830,6 @@ class ImpactOfDependence(object):
                   path=".", file_name="output_result.hdf5"):
         """
         """
-        # List of correlated variable names
-        param_names = []
-        for i in range(self._input_dim):
-            for j in range(i):
-                param_names.append("r_%d%d" % (i + 1, j + 1))
-
         # List of input variable names
         if input_names:
             assert len(input_names) == self._input_dim, \
@@ -774,50 +840,91 @@ class ImpactOfDependence(object):
                 
         # List of output variable names
         if output_names:
-            assert len(output_names) == self._output_dim,\
+            assert len(output_names) == self._output_dim, \
                 AttributeError("Dimension problem for output_names")
         else:
             for i in range(self._output_dim):
                 output_names.append("y_%d" % (i + 1))
                 
-        with h5py.File(os.path.join(path, file_name), 'a') as store:
-            grp_number = 0
-            if store.keys():
-                grp_number = int(store.keys()[-1]) + 1
+        margin_dict = {}
+        # List of marginal names
+        for i, marginal in enumerate(self._margins):
+                name = marginal.getName()
+                params = list(marginal.getParameter())
+                margin_dict['Marginal_%d Family' % (i)] = name
+                margin_dict['Marginal_%d Parameters' % (i)] = params
+               
+        filename_exists = True
+        k = 0
+        while filename_exists:
+            try:
+                with h5py.File(os.path.join(path, file_name), 'a') as hdf_store:
+                    # General attributes
+                    # Check the attributes of the file, if it already exists
+                    if hdf_store.attrs.keys():                        
+                        np.testing.assert_allclose(hdf_store['dependence_params'].value, self._params)
+                        assert hdf_store.attrs['Input Dimension'] == self._input_dim
+                        assert hdf_store.attrs['Output Dimension'] == self._output_dim
+                        assert hdf_store.attrs['Run Type'] == self._run_type
+                        np.testing.assert_array_equal(hdf_store.attrs['Copula Families'], self._families)
+                        np.testing.assert_array_equal(hdf_store.attrs['Copula Structure'], self._vine_structure)
+                        assert hdf_store.attrs['Copula Type'] == self._copula_type
+                        np.testing.assert_array_equal(hdf_store.attrs['Input Names'], input_names)
+                        np.testing.assert_array_equal(hdf_store.attrs['Output Names'], output_names)
+                        for i in range(self._input_dim):
+                            assert hdf_store.attrs['Marginal_%d Family' % (i)] == margin_dict['Marginal_%d Family' % (i)]
+                            np.testing.assert_array_equal(hdf_store.attrs['Marginal_%d Parameters' % (i)], margin_dict['Marginal_%d Parameters' % (i)])
+                            
+                        if self._run_type == 'Classic':
+                            assert hdf_store.attrs['Dependence Measure'] == self._dep_measure
+                            assert hdf_store.attrs['Grid Type'] == self._grid
+                    else:
+                        # We save the attributes in this empty new file                        
+                        hdf_store.create_dataset('dependence_params', data=self._params)
+                        hdf_store.attrs['K'] = self._n_param
+                        hdf_store.attrs['Input Dimension'] = self._input_dim
+                        hdf_store.attrs['Output Dimension'] = self._output_dim
+                        hdf_store.attrs['Run Type'] = self._run_type
+                        hdf_store.attrs['Copula Families'] = self._families
+                        hdf_store.attrs['Copula Structure'] = self._vine_structure
+                        hdf_store.attrs['Copula Type'] = self._copula_type
+                        hdf_store.attrs['Input Names'] = input_names
+                        hdf_store.attrs['Output Names'] = output_names
+                        for i in range(self._input_dim):
+                            hdf_store.attrs['Marginal_%d Family' % (i)] = margin_dict['Marginal_%d Family' % (i)]
+                            hdf_store.attrs['Marginal_%d Parameters' % (i)] = margin_dict['Marginal_%d Parameters' % (i)]
+                        
+                        if self._run_type == 'Classic':
+                            hdf_store.attrs['Dependence Measure'] = self._dep_measure
+                            hdf_store.attrs['Grid Type'] = self._grid
+                            if self._grid_filename:
+                                hdf_store.attrs['Grid Filename'] = os.path.basename(self._grid_filename)
+                            if self._grid == 'lhs':
+                                hdf_store.attrs['LHS Criterion'] = self._lhs_grid_criterion      
+                    
+                    # Check the number of experiments
+                    grp_number = 0
+                    list_groups = hdf_store.keys()
+                    list_groups.remove('dependence_params')
+                    list_groups = [int(g) for g in list_groups]
+                    list_groups.sort()
+                    if list_groups:
+                        grp_number = list_groups[-1] + 1
+        
+                    grp = hdf_store.create_group(str(grp_number))
+                    grp.attrs['n'] = self._n_input_sample
+                    grp.create_dataset('input_sample', data=self._input_sample)
+                    grp.create_dataset('output_sample', data=self._all_output_sample.reshape((self._n_sample, self._output_dim)))
+                    filename_exists = False
+            except AssertionError:
+                print 'File %s already has different configurations' % (file_name)
+                file_name = '%s_%d.hdf5' % (file_name[:-5], k)
+                k += 1
 
-            grp = store.create_group(str(grp_number))
-            grp.attrs['n'] = self._n_input_sample
-            grp.attrs['K'] = self._n_param
-            grp.attrs['Run Type'] = self._run_type
-
-            data_dep = grp.create_dataset('dependence_params', data=self._params)
-            data_dep.attrs['Dependence Measure'] = self._dep_measure
-            data_dep.attrs['Copula Families'] = self._families
-            data_dep.attrs['Copula Structure'] = self._vine_structure
-            data_dep.attrs['Grid Type'] = self._grid
-            data_dep.attrs['Copula Type'] = self._copula_type
-            data_dep.attrs['Parameter Names'] = param_names
-
-            if self._grid_filename:
-                data_dep.attrs['Grid Filename'] = os.path.basename(self._grid_filename)
-            if self._grid == 'lhs':
-                data_dep.attrs['LHS Criterion'] = self._lhs_grid_criterion
+        print 'Data saved in %s' % (file_name)
+        
+        return file_name
             
-            data_input = grp.create_dataset('input_sample', data=self._input_sample)
-            data_input.attrs['Input Names'] = input_names
-                  
-            # TODO: Find a way to get the name of the variable for
-            # Scipy frozen rv_continous instances
-            if isinstance(self._margins[0], ot.DistributionImplementation):
-                for i, marginal in enumerate(self._margins):
-                    name = marginal.getName()
-                    params = list(marginal.getParameter())
-                    data_input.attrs['Marginal_%d Family' % (i)] = name
-                    data_input.attrs['Marginal_%d Parameters' % (i)] = params
-                                                 
-            data_output = grp.create_dataset('output_sample', data=self._all_output_sample)
-            data_output.attrs['Output Names'] = output_names
-
     def save_data(self, input_names=[], output_names=[],
                   path=".", data_fname="full_structured_data",
                   ftype=".csv", param_fname='info_params'):
@@ -1162,6 +1269,18 @@ class ImpactOfDependence(object):
     @reshaped_output_sample_.setter
     def reshaped_output_sample_(self, value):
         raise EnvironmentError("You cannot set this variable")
+        
+                
+    def get_params(self, dep_meas='Kendall Tau', only_corr_vars=True):
+        if dep_meas == 'Kendall Tau':
+            params = np.zeros((self._n_param, self._corr_dim))
+            for k in self._corr_vars:
+                params[:, k] = self._copula[k].to_Kendall(self._params[:, k])
+        
+        if only_corr_vars:
+            return params[:, self._corr_vars]
+        else:
+            return params
 
 
 class DependenceResult(object):

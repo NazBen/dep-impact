@@ -3,7 +3,6 @@ from numpy.testing import assert_allclose
 import openturns as ot
 import numpy as np
 from itertools import combinations
-from memory_profiler import profile
 
 from dependence import ImpactOfDependence
 
@@ -213,8 +212,9 @@ def test_bounds():
     quant_res = impact.compute_quantiles(alpha)
 
     id_min = quant_res.quantity.argmin()
-
-if __name__ == '__main__':
+    
+    
+def test_hdf():
     dim = 3
     alpha = 0.05
     threshold = 2.
@@ -228,6 +228,23 @@ if __name__ == '__main__':
   
     impact = ImpactOfDependence(model_func=add_function, margins=margins, families=families)
 
-    impact.run(n_dep_param=10, n_input_sample=100, seed=0)
+    impact.run(n_dep_param=20, n_input_sample=100, grid='fixed')
 
-    impact.save_data_hdf()
+    filename = impact.save_data_hdf()
+    impact_load = ImpactOfDependence.from_hdf(filename)
+    impact.compute_quantiles(alpha).draw()
+    impact_load.compute_quantiles(alpha).draw()
+
+if __name__ == '__main__':
+    dim = 2
+    alpha = 0.1
+    n = 1000
+    measure = "KendallTau"
+    margins = [ot.Normal(), ot.Normal()]
+
+    families = np.zeros((dim, dim), dtype=int)
+    families[1, 0] = 1
+  
+    impact = ImpactOfDependence(model_func=add_function, margins=margins, families=families)
+    
+    opt = impact.minimise_quantile(alpha, n)
