@@ -383,6 +383,27 @@ class ImpactOfDependence(object):
         self._output_info()
         
         self._run_type = 'Independence'
+
+    def run_custom_param(self, param, n_input_sample, seed=None):
+        """
+        """
+        if seed is not None:  # Initialises the seed
+            np.random.seed(seed)
+            ot.RandomGenerator.SetSeed(seed)
+
+        self._n_param = 1
+        self._params = param
+
+        # Creates the sample of input parameters
+        self._build_input_sample(n_input_sample)
+
+        # Evaluates the input sample
+        self._all_output_sample = self.model_func(self._input_sample)
+
+        # Get output dimension
+        self._output_info()
+        
+        self._run_type = 'Custom'
         
     def func_quant(self, param, alpha, n_input_sample):
         """
