@@ -1,7 +1,7 @@
 ﻿"""Impact of Dependencies.
 
-The main class inspect the impact that dependencies can have on a quantity
-of interest of the output of a model.
+The main class inspect the impact of correlation on a quantity
+of interest of the output of a model. 
 """
 
 import operator
@@ -72,6 +72,8 @@ class ImpactOfDependence(object):
         self._lhs_grid_criterion = 'centermaximin'
         self._grid_folder = './experiment_designs'
         self._dep_measure = None
+        self._fixed_corr_vars = []
+        self._fixed_params = []
 
     @classmethod
     def from_data(cls, data_sample, params, out_ID=0, with_input_sample=True):
@@ -350,6 +352,9 @@ class ImpactOfDependence(object):
         tmp = tuple(itertools.product([-1. + eps, 1. - eps, 0.], repeat=p))
         self._params[:, self._corr_vars] = np.asarray(tmp, dtype=float)
 
+        if self._fixed_corr_vars is not None:
+            self._params[:, self._fixed_corr_vars] = self._fixed_params
+
         # Creates the sample of input parameters
         self._build_input_sample(n_input_sample)
 
@@ -411,6 +416,9 @@ class ImpactOfDependence(object):
         self._n_param = 1
         self._params = np.zeros((1, self._corr_dim), dtype=float)
         self._params[self._corr_vars] = param
+                            
+        if self._fixed_corr_vars is not None:
+            self._params[:, self._fixed_corr_vars] = self._fixed_params
         
         # Creates the sample of input parameters
         self._build_input_sample(n_input_sample)
@@ -551,7 +559,7 @@ class ImpactOfDependence(object):
                         meas_param[:, i] = sample[:, k]*(tau_max - tau_min) + tau_min
                 else:
                     raise AttributeError('%s is unknow for DOE type' % grid)
-                    
+
             elif dep_measure == "PearsonRho":
                 NotImplementedError("Work in progress.")
             elif dep_measure == "SpearmanRho":
@@ -847,6 +855,22 @@ class ImpactOfDependence(object):
 
         return DependenceResult(configs, self, quantiles, interval, cond_params)
         
+    def fix_pair_param(self, pair, param):
+        """
+        """
+        # TODO: do it in one line...
+        k = 0
+        for i in range(1, self._input_dim):
+            for j in range(i):
+                if (pair[0] == i) and (pair[1] == j):
+                    fixed_corr_var = k
+                    break
+                k += 1
+        self._fixed_corr_vars.append(fixed_corr_var)
+        self._n_corr_vars -= 1
+        self._fixed_params.append(param)
+        self._corr_vars.remove(fixed_corr_var)
+
     def save_data_hdf(self, input_names=[], output_names=[],
                   path=".", file_name="output_result.hdf5"):
         """
