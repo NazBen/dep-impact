@@ -13,15 +13,15 @@ import os
 import numpy as np
 import pandas as pd
 import openturns as ot
+from scipy.stats import rv_continuous, norm
+import pyDOE
+from scipy.optimize import minimize
+import nlopt
 import h5py
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.cm as cmx
 from mpl_toolkits.mplot3d import Axes3D
-from scipy.stats import rv_continuous, norm
-import pyDOE
-from scipy.optimize import minimize
-import nlopt
 
 from pyquantregForest import QuantileForest
 
@@ -68,6 +68,7 @@ class ImpactOfDependence(object):
         self.families = families
         self.vine_structure = vine_structure
         self.copula_type = copula_type
+
         self._forest_built = False
         self._lhs_grid_criterion = 'centermaximin'
         self._grid_folder = './experiment_designs'
@@ -320,7 +321,8 @@ class ImpactOfDependence(object):
         all_params_ : :class:`~numpy.ndarray`
             The dependence parameters associated to each output observation.
         """
-        if seed is not None:  # Initialises the seed
+        # Set the seed
+        if seed is not None:
             np.random.seed(seed)
             ot.RandomGenerator.SetSeed(seed)
 
@@ -337,7 +339,8 @@ class ImpactOfDependence(object):
     def minmax_run(self, n_input_sample, seed=None, eps=1.E-8):
         """
         """
-        if seed is not None:  # Initialises the seed
+        # Set the seed
+        if seed is not None:
             np.random.seed(seed)
             ot.RandomGenerator.SetSeed(seed)
             
@@ -379,6 +382,21 @@ class ImpactOfDependence(object):
         self._build_and_run(n_input_sample)        
         self._run_type = 'Custom'        
 
+    def func_quant(self, param, alpha, n_input_sample):
+        """
+        """
+        self._n_param = 1
+        self._params = np.zeros((1, self._corr_dim), dtype=float)
+        self._params[self._corr_vars] = param
+
+        if self._fixed_corr_vars is not None:
+            self._params[:, self._fixed_corr_vars] = self._fixed_params
+        
+        self._build_and_run(n_input_sample)
+        self._run_type = 'Minimising'
+        
+        return np.percentile(self.output_sample_, alpha * 100.)
+
     def _build_and_run(self, n_input_sample):
         """
         """
@@ -391,29 +409,6 @@ class ImpactOfDependence(object):
         # Get output dimension
         self._output_info()
 
-    def func_quant(self, param, alpha, n_input_sample):
-        """
-        """
-        self._n_param = 1
-        self._params = np.zeros((1, self._corr_dim), dtype=float)
-        self._params[self._corr_vars] = param
-                            
-        if self._fixed_corr_vars is not None:
-            self._params[:, self._fixed_corr_vars] = self._fixed_params
-        
-        # Creates the sample of input parameters
-        self._build_input_sample(n_input_sample)
-        
-        # Evaluates the input sample
-        self._all_output_sample = self.model_func(self._input_sample)
-        
-        # Get output dimension
-        self._output_info()
-        
-        self._run_type = 'Minimising'
-        
-        return np.percentile(self.output_sample_, alpha * 100.)
-        
     def minimise_quantile(self, alpha, n_input_sample, eps=1.E-5):
         """
         """
@@ -433,30 +428,37 @@ class ImpactOfDependence(object):
         opt.set_upper_bounds([0.9])  
 #        opt.set_xtol_rel(1e-3)
         opt.maxeval=10
-
-        opt.set_min_objective(func)
-        
+        opt.set_min_objective(func)        
         xopt = opt.optimize(theta_0)
         
         return xopt
 
 
     def _build_corr_sample(self, n_param, grid, dep_measure, use_grid, save_grid):
-        """Creates the sample of dependence parameters.
+        """Generates the dependence parameters.
+
+        The method discretises the dependence parameter support :math:`\boldsymbol \Theta` into
+        a design of experiment :math:`\boldsymbol \Theta_K` of cardinality :math:`K`. The discretisation
+        can be made by a regular grid, an LHS design or a random Monte-Carlo. It is also made using
+        a concordance measure such as the Kendall Tau, but in some cases, 
+        it can also be made using the copula dependence parameter. 
 
         Parameters
         ----------
         n_param : int
-            The number of dependence parameters.
+            The number of dependence parameters and the cardinality of the :math:`K` of :math:`\boldsymbol \Theta_K`.
 
-        fixed_grid : bool
-            The sampling of :math:`\mathbf X` is fixed or random.
+        grid : string
+            The discretisation type. Such as
+            - 'fixed': regular grid,
+            - 'lhs': Latin Hypercube Sampling grid,
+            - 'random': random Monte-Carlo grid.
 
         dep_measure : string
-            The dependence measure used in the problem to explore the dependence 
-            structures. Available dependence measures: 
-            - "PearsonRho": The Pearson Rho parameter. Also called linear correlation parameter.
-            - "KendallTau": The Tau Kendall parameter.
+            The measure used to describe the dependence between variables
+            - "KendallTau": the Tau Kendall parameter,
+            - "PearsonRho": the Pearson Rho parameter,
+            - "SpearmanRho": the Spearman Rho parameter.
         """
         grid_filename = None
         p = self._n_corr_vars
@@ -464,6 +466,7 @@ class ImpactOfDependence(object):
             gridname = '%s_crit_%s' % (grid, self._lhs_grid_criterion)
         else:
             gridname = grid
+
         # If the design is loaded
         if use_grid is not None:
             # TODO: let the code load the latest design which have the same configs           
@@ -478,7 +481,7 @@ class ImpactOfDependence(object):
                 filename = os.path.join(self._grid_folder, name)
             else:
                 raise AttributeError('Unknow use_grid')
-                
+
             assert os.path.exists(filename), \
                 'Grid file %s does not exists' % name
             print 'loading file %s' % name
@@ -487,7 +490,7 @@ class ImpactOfDependence(object):
                 'Wrong grid size'
             assert p == sample.shape[1], \
                 'Wrong dimension'
-                
+
             meas_param = np.zeros((n_param, self._corr_dim))
             for k, i in enumerate(self._corr_vars):
                 tau_min, tau_max = get_tau_interval(self._family_list[i])
@@ -504,9 +507,9 @@ class ImpactOfDependence(object):
                     for i in self._corr_vars:
                         tau_min, tau_max = get_tau_interval(self._family_list[i])
                         v.append(np.linspace(tau_min, tau_max, n_p+1, endpoint=False)[1:])
-    
+
                     tmp = np.vstack(np.meshgrid(*v)).reshape(p,-1).T
-    
+
                     # The final total number is not always the initial one.
                     n_param = n_p ** p
                     meas_param = np.zeros((n_param, self._corr_dim))
@@ -514,7 +517,7 @@ class ImpactOfDependence(object):
                         meas_param[:, i] = tmp[:, k]
                         tau_min, tau_max = get_tau_interval(self._family_list[i])
                         sample[:, k] = (meas_param[:, i] - tau_min) / (tau_max - tau_min)
-                    
+
                 elif grid == 'rand':  # Random grid
                     if self._copula_type == "vine":
                         meas_param = np.zeros((n_param, self._corr_dim))
@@ -530,7 +533,7 @@ class ImpactOfDependence(object):
                             sample[:, k] = (meas_param[:, i] - tau_min) / (tau_max - tau_min)
                     else:
                         raise AttributeError('Unknow copula type:', self._copula_type)
-                        
+
                 elif grid == 'lhs':
                     meas_param = np.zeros((n_param, self._corr_dim))
                     sample = pyDOE.lhs(p, samples=n_param, 
@@ -554,7 +557,7 @@ class ImpactOfDependence(object):
                 dirname = self._grid_folder
                 if not os.path.exists(dirname):
                     os.mkdir(dirname)
-                    
+
                 k = 0
                 do_save = True
                 name = '%s_p_%d_n_%d_%s_%d.csv' % (gridname, p, n_param, dep_measure, k)
@@ -586,42 +589,41 @@ class ImpactOfDependence(object):
             self._params[:, i] = self._copula[i].to_copula_parameter(meas_param[:, i], dep_measure)
 
     def _build_input_sample(self, n):
-        """Creates the observations for differents dependence parameters.
+        """Creates the observations of each dependence measure of :math:`\boldsymbol \Theta_K`.
 
         Parameters
         ----------
         n : int
-            The number of observations in the sampling of :math:`\mathbf X`.
+            The number of observations.
         """
-        n_sample = n * self._n_param
+        n_sample = n * self._n_param  # Total number of observations
         self._n_sample = n_sample
         self._n_input_sample = n
         res_list = map(lambda param: self._get_sample(param, n), self._params)
         self._input_sample = np.concatenate(res_list)
 
     def _get_sample(self, param, n_obs, param2=None):
-        """Creates the sample from the Vine Copula.
+        """Creates the observations of the joint input distribution.
 
         Parameters
         ----------
         param : :class:`~numpy.ndarray`
-            The copula parameters.
+            A list of :math:`p` copula dependence parameters.
         n_obs : int
             The number of observations.
         param2 : :class:`~numpy.ndarray`, optional (default=None)
             The 2nd copula parameters. Usefull for certain copula families like Student.
         """
         dim = self._input_dim
-        structure = self._vine_structure
         matrix_param = to_matrix(param, dim)
 
         if self._copula_type == 'vine':
             # TODO: One param is used. Do it for two parameters copulas.
-            vine_copula = VineCopula(structure, self._families, matrix_param)
+            vine_copula = VineCopula(self._vine_structure, self._families, matrix_param)
 
             # Sample from the copula
             # The reshape is in case there is only one sample (for RF tests)
-            cop_sample = vine_copula.get_sample(n_obs).reshape(n_obs, self._input_dim)
+            cop_sample = vine_copula.get_sample(n_obs).reshape(n_obs, dim)
         elif self._copula_type == 'normal':
             # Create the correlation matrix
             cor_matrix = matrix_param + matrix_param.T + np.identity(dim)
