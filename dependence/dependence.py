@@ -13,7 +13,6 @@ import os
 import numpy as np
 import pandas as pd
 import openturns as ot
-from scipy.stats import rv_continuous, norm
 import pyDOE
 from scipy.optimize import minimize
 import nlopt
@@ -37,28 +36,36 @@ class ImpactOfDependence(object):
     """
     Quantify the impact of dependencies.
 
-    This class study the impact of eventual dependencies of random variables on
-    a quantity of interest of the output distribution. Different forms of
-    dependencies, using the notion of copulas, are availaible to study the
-    relation between the output and the dependencies.
+    This class studies the influence of dependencies on the quantity of interest
+    of a function output. The dependence structure is described using the 
+    copula theory.
 
     Parameters
     ----------
-    model_func : callable
-        The evaluation model such as :math:`Y = g(\mathbf X)`.
+    model_func: callable
+        The evaluation model :math:`g : \mathbb R^d \rightarrow \mathbb R`
+        such as :math:`Y = g(\mathbf X) \in \mathbb R`.
 
-    margins : list of :class:`~openturns.Distribution`
-        The probabilistic distribution :math:`f_{X_i}` for :math:`i \in 1 \dots d` of the margins.
+    margins: list of :class:`~openturns.Distribution`
+        The :math:`p` marginal distributions.
 
-    copula_name : string, optional (default="NormalCopula")
-        The copula name $C$ to describes the dependence structure.
-        The copula name must be supported and in the list of available copulas.
+    families: :class:`~numpy.ndarray`
+        The copula family matrix. It describes the family type of each pair
+        of variables. See the Vine Copula package for a description of the
+        available copulas and their respective indexes.
+
+    vine_structure: :class:`~numpy.ndarray`, optional (default=None)
+        The Vine copula structure matrix. It describes the construction of the
+        vine tree.
+
+    copula_type: string, optionnal (default='vine')
+        The type of copula. Available types:
+        - 'vine': Vine Copula construction
+        - 'normal': Multi dimensionnal Gaussian copula.
 
     Attributes
     ----------
-    rand_vars : :class:`~openturns.ComposedDistribution`
-        The random variable :math:`\mathbf X` describing the marginals and
-        the copula.
+
     """
     _load_data = False
 
@@ -333,7 +340,7 @@ class ImpactOfDependence(object):
         if self._fixed_corr_vars:
             self._params[:, self._fixed_corr_vars] = self._fixed_params
 
-        self._build_and_run(n_input_sample)        
+        self._build_and_run(n_input_sample)
         self._run_type = 'Classic'
 
     def minmax_run(self, n_input_sample, seed=None, eps=1.E-8):
@@ -355,7 +362,7 @@ class ImpactOfDependence(object):
         if self._fixed_corr_vars:
             self._params[:, self._fixed_corr_vars] = self._fixed_params
 
-        self._build_and_run(n_input_sample)        
+        self._build_and_run(n_input_sample)
         self._run_type = 'Perfect Dependence'
 
     def run_independence(self, n_input_sample, seed=None):
@@ -367,7 +374,7 @@ class ImpactOfDependence(object):
             
         self._n_param = 1
         self._params = np.zeros((1, self._corr_dim), dtype=float)
-        self._build_and_run(n_input_sample)        
+        self._build_and_run(n_input_sample)
         self._run_type = 'Independence'
 
     def run_custom_param(self, param, n_input_sample, seed=None):
@@ -379,8 +386,8 @@ class ImpactOfDependence(object):
 
         self._n_param = param.shape[1]
         self._params = param
-        self._build_and_run(n_input_sample)        
-        self._run_type = 'Custom'        
+        self._build_and_run(n_input_sample)
+        self._run_type = 'Custom'
 
     def func_quant(self, param, alpha, n_input_sample):
         """
@@ -1189,10 +1196,8 @@ class ImpactOfDependence(object):
         for marginal in list_margins:
             if isinstance(marginal, ot.DistributionImplementation):
                 self._margins_inv_CDF.append(marginal.computeQuantile)
-            elif isinstance(marginal, rv_continuous):
-                self._margins_inv_CDF.append(marginal.ppf)
             else:
-                TypeError("Must be scipy or OpenTURNS distribution objects.")
+                TypeError("Must be an OpenTURNS distribution objects.")
 
         self._margins = list_margins
         self._input_dim = len(list_margins)
