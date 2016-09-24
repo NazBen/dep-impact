@@ -326,19 +326,15 @@ class ImpactOfDependence(object):
 
         # Creates the sample of dependence parameters
         self._build_corr_sample(n_dep_param, grid, dep_measure, use_grid, save_grid)
-
-        # Creates the sample of input parameters
-        self._build_input_sample(n_input_sample)
-
-        # Evaluates the input sample
-        self._all_output_sample = self.model_func(self._input_sample)
-
-        # Get output dimension
-        self._output_info()
         
+        # If some pairs parameters are fixed
+        if self._fixed_corr_vars:
+            self._params[:, self._fixed_corr_vars] = self._fixed_params
+
+        self._build_and_run(n_input_sample)        
         self._run_type = 'Classic'
 
-    def minmax_run(self, n_input_sample, seed=None, eps=1.E-8, store_input_sample=True):
+    def minmax_run(self, n_input_sample, seed=None, eps=1.E-8):
         """
         """
         if seed is not None:  # Initialises the seed
@@ -352,20 +348,11 @@ class ImpactOfDependence(object):
         tmp = tuple(itertools.product([-1. + eps, 1. - eps, 0.], repeat=p))
         self._params[:, self._corr_vars] = np.asarray(tmp, dtype=float)
 
-        if self._fixed_corr_vars is not None:
+        # If some pairs parameters are fixed
+        if self._fixed_corr_vars:
             self._params[:, self._fixed_corr_vars] = self._fixed_params
 
-        # Creates the sample of input parameters
-        self._build_input_sample(n_input_sample)
-
-        # Evaluates the input sample
-        self._all_output_sample = self.model_func(self._input_sample)
-        if not store_input_sample:
-            del self._input_sample
-
-        # Get output dimension
-        self._output_info()
-        
+        self._build_and_run(n_input_sample)        
         self._run_type = 'Perfect Dependence'
 
     def run_independence(self, n_input_sample, seed=None):
@@ -377,16 +364,7 @@ class ImpactOfDependence(object):
             
         self._n_param = 1
         self._params = np.zeros((1, self._corr_dim), dtype=float)
-
-        # Creates the sample of input parameters
-        self._build_input_sample(n_input_sample)
-
-        # Evaluates the input sample
-        self._all_output_sample = self.model_func(self._input_sample)
-
-        # Get output dimension
-        self._output_info()
-        
+        self._build_and_run(n_input_sample)        
         self._run_type = 'Independence'
 
     def run_custom_param(self, param, n_input_sample, seed=None):
@@ -396,9 +374,14 @@ class ImpactOfDependence(object):
             np.random.seed(seed)
             ot.RandomGenerator.SetSeed(seed)
 
-        self._n_param = 1
+        self._n_param = param.shape[1]
         self._params = param
+        self._build_and_run(n_input_sample)        
+        self._run_type = 'Custom'        
 
+    def _build_and_run(self, n_input_sample):
+        """
+        """
         # Creates the sample of input parameters
         self._build_input_sample(n_input_sample)
 
@@ -407,9 +390,7 @@ class ImpactOfDependence(object):
 
         # Get output dimension
         self._output_info()
-        
-        self._run_type = 'Custom'
-        
+
     def func_quant(self, param, alpha, n_input_sample):
         """
         """
