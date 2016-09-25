@@ -70,12 +70,14 @@ class ImpactOfDependence(object):
     """
     _load_data = False
 
-    def __init__(self, model_func, margins, families, vine_structure=None, copula_type='vine'):
+    def __init__(self, model_func, margins, families, min_tau=None, max_tau=None, vine_structure=None, copula_type='vine'):
         self.model_func = model_func
         self.margins = margins
         self.families = families
         self.vine_structure = vine_structure
         self.copula_type = copula_type
+        self.min_tau = min_tau
+        self.max_tau = max_tau
 
         self._forest_built = False
         self._lhs_grid_criterion = 'centermaximin'
@@ -1348,6 +1350,43 @@ class ImpactOfDependence(object):
         else:
             check_matrix(structure)
         self._vine_structure = structure
+
+    @property
+    def min_tau(self):
+        return self._min_tau
+
+    @min_param.setter
+    def min_tau(self, params):
+        if params is None:
+            dim = self._input_dim
+            params = np.zeros((dim, dim), dtype=float)
+            for i in range(1, dim):
+                for j in range(i):
+                    params[i, j] = -1.
+        # TODO: add checking
+        self._min_tau = params
+
+    @property
+    def max_tau(self):
+        return self._max_tau
+
+    @max_tau.setter
+    def max_tau(self, params):
+        """Set the upper bound of the Kendall Tau parameter space.
+
+        Parameters
+        ----------
+        param : :class:`~numpy.ndarray`
+            Matrix of parameters
+        """
+        if params is None:
+            dim = self._input_dim
+            params = np.zeros((dim, dim), dtype=float)
+            for i in range(1, dim):
+                for j in range(i):
+                    params[i, j] = 1.
+        # TODO: add checking
+        self._max_tau = params
 
     @property
     def output_sample_(self):
