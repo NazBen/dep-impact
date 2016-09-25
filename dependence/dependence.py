@@ -42,23 +42,24 @@ class ImpactOfDependence(object):
 
     Parameters
     ----------
-    model_func: callable
+    model_func : callable
         The evaluation model :math:`g : \mathbb R^d \rightarrow \mathbb R`
         such as :math:`Y = g(\mathbf X) \in \mathbb R`.
 
-    margins: list of :class:`~openturns.Distribution`
+    margins : list of :class:`~openturns.Distribution`
         The :math:`p` marginal distributions.
 
-    families: :class:`~numpy.ndarray`
+    families : :class:`~numpy.ndarray`
         The copula family matrix. It describes the family type of each pair
         of variables. See the Vine Copula package for a description of the
         available copulas and their respective indexes.
 
-    vine_structure: :class:`~numpy.ndarray`, optional (default=None)
+    vine_structure : :class:`~numpy.ndarray` or None, optional (default=None)
         The Vine copula structure matrix. It describes the construction of the
         vine tree.
+        If None, a default matrix is created.
 
-    copula_type: string, optionnal (default='vine')
+    copula_type : string, optionnal (default='vine')
         The type of copula. Available types:
         - 'vine': Vine Copula construction
         - 'normal': Multi dimensionnal Gaussian copula.
@@ -283,39 +284,51 @@ class ImpactOfDependence(object):
         
         return obj
 
-    def run(self, n_dep_param, n_input_sample, grid='rand',
+    def run(self, n_dep_param, n_input_sample, grid='lhs',
             dep_measure="KendallTau", seed=None, use_grid=None, save_grid=None):
-        """Run the problem. It creates and evaluates the sample from different
-        dependence parameter values.
+        """Generates and evaluates observations of the multiple dependence parameters
+        obtained by the discretised space :math:`\boldsymbol \Theta_K`.
 
-        Because the sampling can be difficult for some copula parameters with
-        infinite range of definition. The use of dependence measure is
-        a good approach to have a normalised measure. Moreover, it can 
-        easily compared with other copulas.
+        The method creates the design space :math:`\boldsymbol \Theta_K`, generates
+        observations of the input variables for each dependence parameters, and
+        evaluate them.
 
         Parameters
         ----------
-        n_dep_param : int
-            The number of dependence parameters.
+        n_param : int
+            The number :math:`K` of dependence parameters of :math:`\boldsymbol \Theta_K`.
 
         n_input_sample : int
             The number of observations in the sampling of :math:`\mathbf{X}`.
 
-        fixed_grid : bool, optional (default=False)
-            The sampling of :math:`\mathbf{X}` is fixed or random.
+        grid : string, optional (default='lhs')
+            The discretisation type. Such as
+            - 'lhs': Latin Hypercube Sampling grid,
+            - 'fixed': regular grid,
+            - 'rand': random Monte-Carlo grid.
 
         dep_measure : string, optional (default="KendallTau")
-            The dependence measure used in the problem to explore the dependence 
-            structures. Available dependence measures: 
-            - "PearsonRho": The Pearson Rho parameter. Also called linear correlation parameter.
-            - "KendallTau": The Tau Kendall parameter.
+            The discretisation can be difficult for some copula, where their parameter
+            supports are non-bounded. The use of concordance measure is therefore needed.
+            Available dependence measures: =
+            - "KendallTau": the Tau Kendall parameter,
+            - "PearsonRho": the Pearson Rho parameter,
+            - "SpearmanRho": the Spearman Rho parameter.
 
-        output_ID : int, optional (default=0)
+        out_ID : int, optional (default=0)
             The index of the output if the output is multidimensional.
 
         seed : int or None, optional (default=None)
             If int, ``seed`` is the seed used by the random number generator;
             If None, ``seed`` is the seed is random.
+
+        use_grid : string or None, optional (default=None)
+            The path to the `csv` file of the grid of dependence parameters.
+            If None, the grid is generated.
+
+        save_grid : string or None, optional (default=None)
+            The path to the `csv` file to save the grid.
+            If None, the grid is not saved.
 
         Attributes
         ----------
@@ -344,7 +357,24 @@ class ImpactOfDependence(object):
         self._run_type = 'Classic'
 
     def minmax_run(self, n_input_sample, seed=None, eps=1.E-8):
-        """
+        """Generates and evaluates observations for dependence parameters
+        of perfect dependences.
+
+        Parameters
+        ----------
+        The method creates the design space :math:`\boldsymbol \Theta_K`, generates
+        observations of the input variables for each dependence parameters, and
+        evaluate them.
+
+        n_input_sample : int
+            The number of observations in the sampling of :math:`\mathbf{X}`.
+
+        seed : int or None, optional (default=None)
+            If int, ``seed`` is the seed used by the random number generator;
+            If None, ``seed`` is the seed is random.
+
+        eps : float, optional (default=1.E-8)
+            How far we are from the perfect dependence.
         """
         # Set the seed
         if seed is not None:
@@ -366,7 +396,17 @@ class ImpactOfDependence(object):
         self._run_type = 'Perfect Dependence'
 
     def run_independence(self, n_input_sample, seed=None):
-        """
+        """Generates and evaluates observations at the independence
+        configuration.
+
+        Parameters
+        ----------
+        n_input_sample : int
+            The number of observations in the sampling of :math:`\mathbf{X}`.
+
+        seed : int or None, optional (default=None)
+            If int, ``seed`` is the seed used by the random number generator;
+            If None, ``seed`` is the seed is random.
         """
         if seed is not None:  # Initialises the seed
             np.random.seed(seed)
@@ -378,7 +418,21 @@ class ImpactOfDependence(object):
         self._run_type = 'Independence'
 
     def run_custom_param(self, param, n_input_sample, seed=None):
-        """
+        """Generates and evaluates observations for custom dependence
+        parameters.
+
+        Parameters
+        ----------
+        param : :class:`~numpy.ndarray`
+            The dependence parameters.
+
+        n_input_sample : int
+            The number of observations in the sampling of :math:`\mathbf{X}`.
+
+        seed : int or None, optional (default=None)
+            If int, ``seed`` is the seed used by the random number generator;
+            If None, ``seed`` is the seed is random.
+
         """
         if seed is not None:  # Initialises the seed
             np.random.seed(seed)
@@ -388,6 +442,24 @@ class ImpactOfDependence(object):
         self._params = param
         self._build_and_run(n_input_sample)
         self._run_type = 'Custom'
+        
+    def _build_and_run(self, n_input_sample):
+        """Creates the input sample of each dependence parameters
+        and evaluates the observations.
+
+        Parameters
+        ----------
+        n_input_sample : int
+            The number of observations in the sampling of :math:`\mathbf{X}`.
+        """
+        # Creates the sample of input parameters
+        self._build_input_sample(n_input_sample)
+
+        # Evaluates the input sample
+        self._all_output_sample = self.model_func(self._input_sample)
+
+        # Get output dimension
+        self._output_info()
 
     def func_quant(self, param, alpha, n_input_sample):
         """
@@ -403,18 +475,6 @@ class ImpactOfDependence(object):
         self._run_type = 'Minimising'
         
         return np.percentile(self.output_sample_, alpha * 100.)
-
-    def _build_and_run(self, n_input_sample):
-        """
-        """
-        # Creates the sample of input parameters
-        self._build_input_sample(n_input_sample)
-
-        # Evaluates the input sample
-        self._all_output_sample = self.model_func(self._input_sample)
-
-        # Get output dimension
-        self._output_info()
 
     def minimise_quantile(self, alpha, n_input_sample, eps=1.E-5):
         """
@@ -440,7 +500,6 @@ class ImpactOfDependence(object):
         
         return xopt
 
-
     def _build_corr_sample(self, n_param, grid, dep_measure, use_grid, save_grid):
         """Generates the dependence parameters.
 
@@ -453,19 +512,27 @@ class ImpactOfDependence(object):
         Parameters
         ----------
         n_param : int
-            The number of dependence parameters and the cardinality of the :math:`K` of :math:`\boldsymbol \Theta_K`.
+            The number :math:`K` of dependence parameters of :math:`\boldsymbol \Theta_K`.
 
         grid : string
             The discretisation type. Such as
-            - 'fixed': regular grid,
             - 'lhs': Latin Hypercube Sampling grid,
-            - 'random': random Monte-Carlo grid.
+            - 'fixed': regular grid,
+            - 'rand': random Monte-Carlo grid.
 
         dep_measure : string
             The measure used to describe the dependence between variables
             - "KendallTau": the Tau Kendall parameter,
             - "PearsonRho": the Pearson Rho parameter,
             - "SpearmanRho": the Spearman Rho parameter.
+            
+        use_grid : string or None, optional (default=None)
+            The path to the `csv` file of the grid of dependence parameters.
+            If None, the grid is generated.
+
+        save_grid : string or None, optional (default=None)
+            The path to the `csv` file to save the grid.
+            If None, the grid is not saved.
         """
         grid_filename = None
         p = self._n_corr_vars
@@ -655,6 +722,11 @@ class ImpactOfDependence(object):
 
     def build_forest(self, quant_forest=QuantileForest()):
         """Build a Quantile Random Forest to estimate conditional quantiles.
+
+        Parameters
+        ----------
+        quant_forest : :class:`~QuantileForest`
+            The Quantile Regression Forest object.
         """
         # We take only used params (i.e. the zero cols are taken off)
         # Actually, it should not mind to RF, but it's better for clarity.
@@ -664,15 +736,22 @@ class ImpactOfDependence(object):
         self._forest_built = True
 
     def compute_quantity(self, quantity_func, options, boostrap=False):
-        """Compute the output quantity of interest.
-        quantity_func: can be many things
-            - a callable function that compute the quantity of interest
-            given the output sample,
-            - "quantile" to compute the quantiles,
-            - "probability" to compute the probability,
-            - "variance" to compute the output variance,
-            - "mean" to compute the output mean,
-            - "super-quantile" to compute the super quantile.
+        """Compute the output quantity of interest of each dependence parameters.
+
+        Parameters
+        ----------
+        quantity_func : string or callable
+            The function of the quantity of interest. It can be:
+            - 'quantile' to compute the quantiles,
+            -'"probability' to compute the probability,
+            - a custom function that compute the quantity of interest
+            given the output sample.
+
+        options : list
+            Aditionnal arguments of `quantity_func`.
+
+        bootstrap : bool
+            If True, a bootrap is made on the quantity of interest.
         """
         if isinstance(quantity_func, str):
             if quantity_func == "quantile":
@@ -766,19 +845,21 @@ class ImpactOfDependence(object):
     def compute_quantiles(self, alpha, estimation_method='empirical',
                           confidence_level=0.95, grid_size=None, bootstrap=False,
                           output_ID=0):
-        """Computes conditional quantiles.
+        """Computes quantiles of each dependence parameters.
 
         Compute the alpha-quantiles of the current sample for each dependence
         parameter.
 
         Parameters
         ----------
-        alpha : float
+        alpha : float or :class:`~numpy.ndarray`
             Probability of the quantile.
+
         estimation_method : string, optional (default='empirical')
             The quantile estimation method. Available methods: 
             - 'empirical': The percentile of the output sample.
             - 'randomforest': Not yet implemented.
+
         confidence_level : float, optional (default=0.95)
             The confidence level probability.
         """
@@ -804,6 +885,7 @@ class ImpactOfDependence(object):
 
         interval = None
 
+        # TODO: correct the bootstrap for the quantile.
         cond_params = self._params[:, self._corr_vars]
         if estimation_method == 'empirical':
             out_sample = self.reshaped_output_sample_
