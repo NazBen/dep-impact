@@ -182,17 +182,38 @@ class ImpactOfDependence(object):
         return cls.from_data(data.values, params, with_input_sample=with_input_sample)
         
     @classmethod
-    def from_hdf(cls, loaded_data="./output_result.hdf5", id_exp='all', out_ID=0, with_input_sample=True):
-        """
+    def from_hdf(cls, filepath_or_buffer, id_of_experiment='all', out_ID=0, with_input_sample=True):
+        """Load result from HDF5 file.
+
+        This class method creates an instance of :class:`~ImpactOfDependence` by loading
+        a HDF5 with the saved result of a previous run.
+
+        Parameters
+        ----------
+        filepath_or_buffer : str
+            The path of the file to hdf5 file read.
+        id_of_experiments : str or int, optional (default='all')
+            The experiments to load. The hdf5 file can gather multiple experiments with
+            the same metadatas. The user can chose to load all or one experiments.
+        out_ID : int, optional (default=0)
+            The index of the output if the function output is multidimensional.
+        with_input_sample : bool, optional (default=True)
+            If False the samples of input observations are not loaded. Input observations are
+            not necessary to compute output quantity of interests.
+
+        Returns
+        -------
+        obj : :class:`~ImpactOfDependence`
+
         """
         # Ghost function
         def tmp(): return None
         
         # Load of the hdf5 file
-        with h5py.File(loaded_data, 'r') as hdf_store:
+        with h5py.File(filepath_or_buffer, 'r') as hdf_store:
             # The file may contain multiple experiments. The user can load one 
             # or multiple if they have similiar configurations.
-            if id_exp == 'all':
+            if id_of_experiment == 'all':
                 # We load and concatenate every groups of experiments
                 list_index = hdf_store.keys()
                 list_index.remove('dependence_params')
@@ -318,7 +339,7 @@ class ImpactOfDependence(object):
             - "SpearmanRho": the Spearman Rho parameter.
 
         out_ID : int, optional (default=0)
-            The index of the output if the output is multidimensional.
+            The index of the output if the function output is multidimensional.
 
         seed : int or None, optional (default=None)
             If int, ``seed`` is the seed used by the random number generator;
@@ -716,6 +737,8 @@ class ImpactOfDependence(object):
         return joint_sample
 
     def _output_info(self):
+        """Information about the output dimension.
+        """
         # If the output dimension is one
         if self._all_output_sample.shape[0] == self._all_output_sample.size:
             self._output_dim = 1
@@ -1722,7 +1745,7 @@ def bootstrap_quantile(data, alpha, n_boot, alpha_boot):
 
     return stat.mean(axis=0), np.c_[stat[int((alpha_boot*0.5) * n_boot)],
             stat[int((1. - alpha_boot*0.5) * n_boot)]]
-    
+
 
 def to_matrix(param, dim):
     """
