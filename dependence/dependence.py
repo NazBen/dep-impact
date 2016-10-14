@@ -1,7 +1,7 @@
 ﻿"""Impact of Dependencies.
 
 The main class inspect the impact of correlation on a quantity
-of interest of the output of a model. 
+of interest of a model output.
 """
 
 import operator
@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import openturns as ot
 import pyDOE
-from scipy.optimize import minimize
+from scipy.stats import norm
 import nlopt
 import h5py
 import matplotlib
@@ -38,7 +38,7 @@ class ImpactOfDependence(object):
 
     This class studies the influence of dependencies on the quantity of interest
     of a function output. The dependence structure is described using the 
-    copula theory.
+    copula theory. Vines Copula are used to build multidimensional copulas.
 
     Parameters
     ----------
@@ -218,7 +218,7 @@ class ImpactOfDependence(object):
                 list_index = hdf_store.keys()
                 list_index.remove('dependence_params')
             else:
-                list_index = [str(id_exp)]
+                list_index = [str(id_of_experiment)]
             
             params = hdf_store['dependence_params'].value
             run_type = hdf_store.attrs['Run Type']
@@ -379,7 +379,7 @@ class ImpactOfDependence(object):
         self._build_and_run(n_input_sample)
         self._run_type = 'Classic'
 
-    def minmax_run(self, n_input_sample, seed=None, eps=1.E-8):
+    def minmax_run(self, n_input_sample, seed=None, eps=1.E-8, with_indep=True):
         """Generates and evaluates observations for dependence parameters
         of perfect dependences.
 
@@ -405,10 +405,15 @@ class ImpactOfDependence(object):
             ot.RandomGenerator.SetSeed(seed)
             
         p = self._n_corr_vars
-        self._n_param = 3**p
+        if with_indep:
+            grid = [-1. + eps, 1. - eps, 0.]
+        else:            
+            grid = [-1. + eps, 1. - eps]
+
+        self._n_param = len(grid)**p
         self._params = np.zeros((self._n_param, self._corr_dim), dtype=float)
 
-        tmp = tuple(itertools.product([-1. + eps, 1. - eps, 0.], repeat=p))
+        tmp = tuple(itertools.product(grid, repeat=p))
         self._params[:, self._corr_vars] = np.asarray(tmp, dtype=float)
 
         # If some pairs parameters are fixed
@@ -662,6 +667,7 @@ class ImpactOfDependence(object):
                 # If this file already exists
                 while os.path.exists(filename):
                     existing_sample = np.loadtxt(filename).reshape(n_param, -1)
+                    # We check if the build sample and the existing one are equivalents
                     if np.allclose(np.sort(existing_sample, axis=0), np.sort(sample, axis=0)):
                         do_save = False
                         print 'The DOE already exist in %s' % (name)
@@ -1378,7 +1384,7 @@ class ImpactOfDependence(object):
     def min_tau(self):
         return self._min_tau
 
-    @min_param.setter
+    @min_tau.setter
     def min_tau(self, params):
         if params is None:
             dim = self._input_dim
@@ -1759,3 +1765,4 @@ def to_matrix(param, dim):
             k += 1
 
     return matrix
+

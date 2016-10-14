@@ -238,7 +238,7 @@ def test_hdf():
 if __name__ == '__main__':
     dim = 2
     alpha = 0.1
-    n = 1000
+    n = 10
     measure = "KendallTau"
     margins = [ot.Normal(), ot.Normal()]
 
@@ -247,4 +247,4 @@ if __name__ == '__main__':
   
     impact = ImpactOfDependence(model_func=add_function, margins=margins, families=families)
     
-    opt = impact.minimise_quantile(alpha, n)
+    opt = impact.run(10, n)
