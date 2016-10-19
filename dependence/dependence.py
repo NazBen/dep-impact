@@ -70,22 +70,30 @@ class ImpactOfDependence(object):
     """
     _load_data = False
 
-    def __init__(self, model_func, margins, families, min_tau=None, max_tau=None, vine_structure=None, copula_type='vine'):
+    def __init__(self,
+                 model_func,
+                 margins,
+                 families,
+                 fixed_params=None,
+                 min_tau=None,
+                 max_tau=None,
+                 vine_structure=None,
+                 copula_type='vine'):
         self.model_func = model_func
         self.margins = margins
         self.families = families
-        self.vine_structure = vine_structure
-        self.copula_type = copula_type
+        self.fixed_params = fixed_params
         self.min_tau = min_tau
         self.max_tau = max_tau
+        self.vine_structure = vine_structure
+        self.copula_type = copula_type
 
         self._forest_built = False
         self._lhs_grid_criterion = 'centermaximin'
         self._grid_folder = './experiment_designs'
         self._dep_measure = None
-        self._fixed_corr_vars = []
-        self._fixed_params = []
-
+        
+            
     @classmethod
     def from_data(cls, data_sample, params, out_ID=0, with_input_sample=True):
         """Load from data.
@@ -310,16 +318,16 @@ class ImpactOfDependence(object):
     def run(self, n_dep_param, n_input_sample, grid='lhs',
             dep_measure="KendallTau", seed=None, use_grid=None, save_grid=None):
         """Generates and evaluates observations of the multiple dependence parameters
-        obtained by the discretised space :math:`\boldsymbol \Theta_K`.
+        obtained by the discretised space :math:`\Theta_K`.
 
-        The method creates the design space :math:`\boldsymbol \Theta_K`, generates
+        The method creates the design space :math:`\Theta_K`, generates
         observations of the input variables for each dependence parameters, and
         evaluate them.
 
         Parameters
         ----------
         n_param : int
-            The number :math:`K` of dependence parameters of :math:`\boldsymbol \Theta_K`.
+            The number :math:`K` of dependence parameters of :math:`\Theta_K`.
 
         n_input_sample : int
             The number of observations in the sampling of :math:`\mathbf{X}`.
@@ -373,8 +381,8 @@ class ImpactOfDependence(object):
         self._build_corr_sample(n_dep_param, grid, dep_measure, use_grid, save_grid)
         
         # If some pairs parameters are fixed
-        if self._fixed_corr_vars:
-            self._params[:, self._fixed_corr_vars] = self._fixed_params
+        if self._fixed_pairs:
+            self._params[:, self._fixed_pairs] = self._fixed_params
 
         self._build_and_run(n_input_sample)
         self._run_type = 'Classic'
@@ -404,7 +412,7 @@ class ImpactOfDependence(object):
             np.random.seed(seed)
             ot.RandomGenerator.SetSeed(seed)
             
-        p = self._n_corr_vars
+        p = self._n_pairs
         if with_indep:
             grid = [-1. + eps, 1. - eps, 0.]
         else:            
@@ -414,11 +422,11 @@ class ImpactOfDependence(object):
         self._params = np.zeros((self._n_param, self._corr_dim), dtype=float)
 
         tmp = tuple(itertools.product(grid, repeat=p))
-        self._params[:, self._corr_vars] = np.asarray(tmp, dtype=float)
+        self._params[:, self._pairs] = np.asarray(tmp, dtype=float)
 
         # If some pairs parameters are fixed
-        if self._fixed_corr_vars:
-            self._params[:, self._fixed_corr_vars] = self._fixed_params
+        if self._fixed_pairs:
+            self._params[:, self._fixed_pairs] = self._fixed_params
 
         self._build_and_run(n_input_sample)
         self._run_type = 'Perfect Dependence'
@@ -494,39 +502,34 @@ class ImpactOfDependence(object):
         """
         self._n_param = 1
         self._params = np.zeros((1, self._corr_dim), dtype=float)
-        self._params[self._corr_vars] = param
+        self._params[self._pairs] = param
 
-        if self._fixed_corr_vars is not None:
-            self._params[:, self._fixed_corr_vars] = self._fixed_params
+        if self._fixed_pairs is not None:
+            self._params[:, self._fixed_pairs] = self._fixed_params
         
         self._build_and_run(n_input_sample)
         self._run_type = 'Minimising'
         
         return np.percentile(self.output_sample_, alpha * 100.)
 
-    def minimise_quantile(self, alpha, n_input_sample, eps=1.E-5):
+    def minimise_quantile(self, alpha, n_input_sample, theta_init=None, eps=1.E-5):
         """
         """
-        theta_0 = [.2]
-#        return minimize(self.func_quant, theta_0, args=(alpha, n_input_sample),
-#                        method='SLSQP',
-#                        bounds=((-1. + eps, 1. - eps), ), tol=1.E-2,
-#options={'eps': 1e-2, 'disp': True})        
+        if theta_init is not None:
+            theta_init = [0.]*self._n_pairs
         def func(param, grad):
             if grad.size > 0:  
                 print grad
             return self.func_quant(param, alpha, n_input_sample)
             
         algorithm = nlopt.GN_DIRECT        
-        opt = nlopt.opt(algorithm, self._n_corr_vars)
+        opt = nlopt.opt(algorithm, self._n_pairs)
         opt.set_lower_bounds([-0.9])
-        opt.set_upper_bounds([0.9])  
-#        opt.set_xtol_rel(1e-3)
+        opt.set_upper_bounds([0.9])
         opt.maxeval=10
-        opt.set_min_objective(func)        
-        xopt = opt.optimize(theta_0)
-        
-        return xopt
+        opt.set_min_objective(func)
+        theta_opt = opt.optimize(theta_init)
+        return theta_opt
 
     def _build_corr_sample(self, n_param, grid, dep_measure, use_grid, save_grid):
         """Generates the dependence parameters.
@@ -563,7 +566,7 @@ class ImpactOfDependence(object):
             If None, the grid is not saved.
         """
         grid_filename = None
-        p = self._n_corr_vars
+        p = self._n_pairs
         if grid == 'lhs':
             gridname = '%s_crit_%s' % (grid, self._lhs_grid_criterion)
         else:
@@ -571,51 +574,33 @@ class ImpactOfDependence(object):
 
         # If the design is loaded
         if use_grid is not None:
-            # TODO: let the code load the latest design which have the same configs           
-            if isinstance(use_grid, str):
-                filename = use_grid
-                assert gridname in use_grid, \
-                    "Not the same configurations"
-                name = os.path.basename(filename)
-            elif isinstance(use_grid, (int, bool)):
-                k = int(use_grid)
-                name = '%s_p_%d_n_%d_%s_%d.csv' % (gridname, p, n_param, dep_measure, k)
-                filename = os.path.join(self._grid_folder, name)
-            else:
-                raise AttributeError('Unknow use_grid')
-
-            assert os.path.exists(filename), \
-                'Grid file %s does not exists' % name
-            print 'loading file %s' % name
-            sample = np.loadtxt(filename).reshape(n_param, -1)
-            assert n_param == sample.shape[0], \
-                'Wrong grid size'
-            assert p == sample.shape[1], \
-                'Wrong dimension'
+            # Load the sample from file and get the filename
+            sample, grid_filename = self._load_grid(n_param, dep_measure, use_grid, gridname)
 
             meas_param = np.zeros((n_param, self._corr_dim))
-            for k, i in enumerate(self._corr_vars):
+            for k, i in enumerate(self._pairs):
                 tau_min, tau_max = get_tau_interval(self._family_list[i])
                 meas_param[:, i] = sample[:, k]
-
-            grid_filename = filename
         else:
             sample = np.zeros((n_param, p))
             if dep_measure == "KendallTau":
-                if grid == 'fixed':    
-                    # Number of points per dimension
+                if grid == 'fixed':
+                    # Number of configurations per dimension
                     n_p = int((n_param) ** (1./p))
+                    if n_p < 3:
+                        print 'There is only %d configuration per dimension' % (n_p)
+                        
+                    # Creates the p-dim grid
                     v = []
-                    for i in self._corr_vars:
+                    for i in self._pairs:
                         tau_min, tau_max = get_tau_interval(self._family_list[i])
                         v.append(np.linspace(tau_min, tau_max, n_p+1, endpoint=False)[1:])
-
-                    tmp = np.vstack(np.meshgrid(*v)).reshape(p,-1).T
+                    tmp = np.vstack(np.meshgrid(*v)).reshape(p, -1).T
 
                     # The final total number is not always the initial one.
                     n_param = n_p ** p
                     meas_param = np.zeros((n_param, self._corr_dim))
-                    for k, i in enumerate(self._corr_vars):
+                    for k, i in enumerate(self._pairs):
                         meas_param[:, i] = tmp[:, k]
                         tau_min, tau_max = get_tau_interval(self._family_list[i])
                         sample[:, k] = (meas_param[:, i] - tau_min) / (tau_max - tau_min)
@@ -623,14 +608,14 @@ class ImpactOfDependence(object):
                 elif grid == 'rand':  # Random grid
                     if self._copula_type == "vine":
                         meas_param = np.zeros((n_param, self._corr_dim))
-                        for k, i in enumerate(self._corr_vars):
+                        for k, i in enumerate(self._pairs):
                             tau_min, tau_max = get_tau_interval(self._family_list[i])
                             meas_param[:, i] = np.random.uniform(tau_min, tau_max, n_param)
                             sample[:, k] = (meas_param[:, i] - tau_min) / (tau_max - tau_min)
                     elif self._copula_type == "normal":
                         meas_param = create_random_kendall_tau(self._families, 
                                                            n_param)
-                        for k, i in enumerate(self._corr_vars):
+                        for k, i in enumerate(self._pairs):
                             tau_min, tau_max = get_tau_interval(self._family_list[i])
                             sample[:, k] = (meas_param[:, i] - tau_min) / (tau_max - tau_min)
                     else:
@@ -640,19 +625,20 @@ class ImpactOfDependence(object):
                     meas_param = np.zeros((n_param, self._corr_dim))
                     sample = pyDOE.lhs(p, samples=n_param, 
                                        criterion=self._lhs_grid_criterion)
-                    for k, i in enumerate(self._corr_vars):
+                    for k, i in enumerate(self._pairs):
                         tau_min, tau_max = get_tau_interval(self._family_list[i])
                         meas_param[:, i] = sample[:, k]*(tau_max - tau_min) + tau_min
                 else:
                     raise AttributeError('%s is unknow for DOE type' % grid)
 
             elif dep_measure == "PearsonRho":
-                NotImplementedError("Work in progress.")
+                raise NotImplementedError("Work in progress.")
             elif dep_measure == "SpearmanRho":
                 raise NotImplementedError("Not yet implemented")
             else:
                 raise AttributeError("Unkown dependence parameter")
 
+        # The grid is save if it was asked and if it does not already exists
         if save_grid is not None and use_grid is None:
             # The grid is saved
             if save_grid is True: # No filename provided
@@ -663,10 +649,10 @@ class ImpactOfDependence(object):
                 k = 0
                 do_save = True
                 name = '%s_p_%d_n_%d_%s_%d.csv' % (gridname, p, n_param, dep_measure, k)
-                filename = os.path.join(dirname, name)
+                grid_filename = os.path.join(dirname, name)
                 # If this file already exists
-                while os.path.exists(filename):
-                    existing_sample = np.loadtxt(filename).reshape(n_param, -1)
+                while os.path.exists(grid_filename):
+                    existing_sample = np.loadtxt(grid_filename).reshape(n_param, -1)
                     # We check if the build sample and the existing one are equivalents
                     if np.allclose(np.sort(existing_sample, axis=0), np.sort(sample, axis=0)):
                         do_save = False
@@ -674,12 +660,11 @@ class ImpactOfDependence(object):
                         break
                     k += 1
                     name = '%s_p_%d_n_%d_%s_%d.csv' % (gridname, p, n_param, dep_measure, k)
-                    filename = os.path.join(dirname, name)
+                    grid_filename = os.path.join(dirname, name)
                 
-            grid_filename = filename
             # It is saved
             if do_save:
-                np.savetxt(filename, sample)
+                np.savetxt(grid_filename, sample)
             
         self._grid_filename = grid_filename
         self._dep_measure = dep_measure
@@ -688,7 +673,7 @@ class ImpactOfDependence(object):
         self._params = np.zeros((n_param, self._corr_dim))
 
         # Convert the dependence measure to copula parameters
-        for i in self._corr_vars:
+        for i in self._pairs:
             self._params[:, i] = self._copula[i].to_copula_parameter(meas_param[:, i], dep_measure)
 
     def _build_input_sample(self, n):
@@ -751,6 +736,34 @@ class ImpactOfDependence(object):
         else:
             self._output_dim = self._all_output_sample.shape[1]
 
+    def _load_grid(self, n_param, dep_measure, use_grid, gridname):
+        """
+        """
+        p = self._n_pairs
+        # TODO: let the code load the latest design which have the same configs           
+        if isinstance(use_grid, str):
+            assert gridname in use_grid, \
+                "Not the same configurations"
+            filename = use_grid
+            name = os.path.basename(filename)
+        elif isinstance(use_grid, (int, bool)):
+            k = int(use_grid)
+            name = '%s_p_%d_n_%d_%s_%d.csv' % (gridname, p, n_param, dep_measure, k)
+            filename = os.path.join(self._grid_folder, name)
+        else:
+            raise AttributeError('Unknow use_grid')
+
+        assert os.path.exists(filename), \
+            'Grid file %s does not exists' % name
+        print 'loading file %s' % name
+        sample = np.loadtxt(filename).reshape(n_param, -1)
+        assert n_param == sample.shape[0], \
+            'Wrong grid size'
+        assert p == sample.shape[1], \
+            'Wrong dimension'
+            
+        return sample, filename
+
     def build_forest(self, quant_forest=QuantileForest()):
         """Build a Quantile Random Forest to estimate conditional quantiles.
 
@@ -761,7 +774,7 @@ class ImpactOfDependence(object):
         """
         # We take only used params (i.e. the zero cols are taken off)
         # Actually, it should not mind to RF, but it's better for clarity.
-        used_params = self.all_params_[:, self._corr_vars]
+        used_params = self.all_params_[:, self._pairs]
         quant_forest.fit(used_params, self.output_sample_)
         self._quant_forest = quant_forest
         self._forest_built = True
@@ -865,7 +878,7 @@ class ImpactOfDependence(object):
             # Quantile of a Gaussian distribution
             q_normal = norm.ppf((1 + confidence_level) / 2.)
             interval = q_normal * tmp  # Confidence interval
-            cond_params = self._params[:, self._corr_vars]
+            cond_params = self._params[:, self._pairs]
         elif estimation_method == 'randomforest':
             raise NotImplementedError('Not Yet Done...')
         else:
@@ -917,7 +930,7 @@ class ImpactOfDependence(object):
         interval = None
 
         # TODO: correct the bootstrap for the quantile.
-        cond_params = self._params[:, self._corr_vars]
+        cond_params = self._params[:, self._pairs]
         if estimation_method == 'empirical':
             out_sample = self.reshaped_output_sample_
             if not bootstrap:
@@ -937,8 +950,8 @@ class ImpactOfDependence(object):
 
             if grid_size:
                 # Create the grid of params
-                grid = np.zeros((self._n_corr_vars, grid_size))
-                for i, k in enumerate(self._corr_vars):
+                grid = np.zeros((self._n_pairs, grid_size))
+                for i, k in enumerate(self._pairs):
                     # The bounds are taken from data, no need to go further.
                     p_min = self._copula[k].to_Kendall(self._params[:, k].min())
                     p_max = self._copula[k].to_Kendall(self._params[:, k].max())
@@ -948,7 +961,7 @@ class ImpactOfDependence(object):
                     grid[i, :] = self._copula[k].to_copula_parameter(tmp, 'KendallTau')
 
                 # This is all the points from the grid.
-                cond_params = np.vstack(np.meshgrid(*grid)).reshape(self._n_corr_vars,-1).T
+                cond_params = np.vstack(np.meshgrid(*grid)).reshape(self._n_pairs,-1).T
 
             # Compute the quantiles
             quantiles = self._quant_forest.compute_quantile(cond_params, alpha)
@@ -969,10 +982,10 @@ class ImpactOfDependence(object):
                     fixed_corr_var = k
                     break
                 k += 1
-        self._fixed_corr_vars.append(fixed_corr_var)
-        self._n_corr_vars -= 1
+        self._fixed_pairs.append(fixed_corr_var)
+        self._n_pairs -= 1
         self._fixed_params.append(param)
-        self._corr_vars.remove(fixed_corr_var)
+        self._pairs.remove(fixed_corr_var)
 
     def save_data_hdf(self, input_names=[], output_names=[],
                   path=".", file_name="output_result.hdf5"):
@@ -1289,6 +1302,8 @@ class ImpactOfDependence(object):
 
     @model_func.setter
     def model_func(self, func):
+        """
+        """
         if callable(func):
             self._model_func = func
         else:
@@ -1324,25 +1339,29 @@ class ImpactOfDependence(object):
 
     @families.setter
     def families(self, matrix):
+        """
+        """
         matrix = matrix.astype(int)
         check_matrix(matrix)
         self._families = matrix
         self._family_list = []
-        self._n_corr_vars = 0
-        self._corr_vars = []
+        self._n_pairs = 0
+        self._pairs = []
         k = 0
         list_vars = []
-        for i in range(self._input_dim):
+        for i in range(1, self._input_dim):
             for j in range(i):
                 self._family_list.append(matrix[i, j])
                 if matrix[i, j] > 0:
-                    self._corr_vars.append(k)
-                    self._n_corr_vars += 1
+                    self._pairs.append(k)
+                    self._n_pairs += 1
                     list_vars.append([i, j])
                 k += 1
 
-        self._copula = [Conversion(family) for family in self._family_list]
-        self._corr_vars_ids = list_vars
+        self._copula_converteurs = [Conversion(family) for family in self._family_list]
+                                    
+        # TODO: delete this attr
+        self._pairs_ids = list_vars
 
     @property
     def copula_type(self):
@@ -1452,18 +1471,47 @@ class ImpactOfDependence(object):
     @reshaped_output_sample_.setter
     def reshaped_output_sample_(self, value):
         raise EnvironmentError("You cannot set this variable")
-        
-                
-    def get_params(self, dep_meas='Kendall Tau', only_corr_vars=True):
+
+    def get_params(self, dep_meas='Kendall Tau', only_pairs=True):
         if dep_meas == 'Kendall Tau':
             params = np.zeros((self._n_param, self._corr_dim))
-            for k in self._corr_vars:
+            for k in self._pairs:
                 params[:, k] = self._copula[k].to_Kendall(self._params[:, k])
         
-        if only_corr_vars:
-            return params[:, self._corr_vars]
+        if only_pairs:
+            return params[:, self._pairs]
         else:
             return params
+            
+    @property
+    def fixed_params(self):
+        return self._fixed_params
+        
+    @fixed_params.setter
+    def fixed_params(self, matrix):
+        """
+        Setter of the matrix of fixed params.
+        """
+        if matrix is None:
+            # There is no fixed pairs
+            matrix = np.zeros((self._input_dim, self._input_dim), dtype=float)
+            matrix[:] = None
+        else:
+            # The matrix should be checked
+            check_matrix(matrix)
+            
+            # The lists only contains the fixed pairs informations
+            self._fixed_pairs = []
+            self._fixed_params = []
+            k = 0
+            for i in range(1, self._input_dim):
+                for j in range(i):
+                    if matrix[i, j] == 0.:
+                        print 'The pair %d-%d is set to 0. Check if this is correct.' % (i, j)
+                    elif not np.isnan(matrix[i, j]):
+                        self._fixed_pairs.append(k)
+                        self._fixed_params.append(matrix[i, j])
+                    k += 1
 
 
 class DependenceResult(object):
@@ -1554,14 +1602,14 @@ class DependenceResult(object):
         """
         obj = self._dependence
         copula_params = self._cond_params
-        n_param, n_corr_vars = copula_params.shape
+        n_param, n_pairs = copula_params.shape
 
-        assert n_corr_vars in [1, 2, 3],\
+        assert n_pairs in [1, 2, 3],\
             EnvironmentError("Cannot draw the quantity for dim > 3")
 
         if dep_meas == "KendallTau":
-            params = np.zeros((n_param, n_corr_vars))
-            for i, k in enumerate(obj._corr_vars):
+            params = np.zeros((n_param, n_pairs))
+            for i, k in enumerate(obj._pairs):
                 params[:, i] = obj._copula[k].to_Kendall(copula_params[:, i])
             param_name = "\\tau"
         elif dep_meas == "CopulaParam":
@@ -1584,7 +1632,7 @@ class DependenceResult(object):
         quantity_name = self._quantity_name
 
         # Find the "almost" independent configuration
-        if n_corr_vars == 1:
+        if n_pairs == 1:
             id_indep = (np.abs(params)).argmin()
         else:
             id_indep = np.abs(params).sum(axis=1).argmin()
@@ -1608,7 +1656,7 @@ class DependenceResult(object):
 
         fig = plt.figure(figsize=figsize)  # Create the fig object
 
-        if n_corr_vars == 1:  # One used correlation parameter
+        if n_pairs == 1:  # One used correlation parameter
             ax = fig.add_subplot(111)  # Create the axis object
 
             # Ids of the sorted parameters for the plot
@@ -1636,12 +1684,12 @@ class DependenceResult(object):
                     ax.plot([p_min, p_max], [indep_quant_l_bound] * 2, "r--")
                     ax.plot([p_min, p_max], [indep_quant_u_bound] * 2, "r--")
 
-            i, j = obj._corr_vars_ids[0][0], obj._corr_vars_ids[0][1]
+            i, j = obj._pairs_ids[0][0], obj._pairs_ids[0][1]
             ax.set_xlabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
             ax.set_ylabel(quantity_name)
             ax.legend(loc="best")
 
-        elif n_corr_vars == 2:  # For 2 correlation parameters
+        elif n_pairs == 2:  # For 2 correlation parameters
             view = "3d"
             if view == "3d":
                 # Dependence parameters values
@@ -1682,14 +1730,14 @@ class DependenceResult(object):
                     #    ax.plot([p_min, p_max], [indep_quant_u_bound] * 2,
                     #    "r--")
                 # Labels
-                i, j = obj._corr_vars_ids[0][0], obj._corr_vars_ids[0][1]
+                i, j = obj._pairs_ids[0][0], obj._pairs_ids[0][1]
                 ax.set_xlabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
-                i, j = obj._corr_vars_ids[1][0], obj._corr_vars_ids[1][1]
+                i, j = obj._pairs_ids[1][0], obj._pairs_ids[1][1]
                 ax.set_ylabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
 
                 ax.set_zlabel(quantity_name)
 
-        elif n_corr_vars == 3:  # For 2 correlation parameters
+        elif n_pairs == 3:  # For 2 correlation parameters
             color_scale = quantity
             cm = plt.get_cmap(color_map)
             c_min, c_max = min(color_scale), max(color_scale)
