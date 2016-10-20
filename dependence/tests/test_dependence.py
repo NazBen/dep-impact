@@ -251,15 +251,11 @@ if __name__ == '__main__':
     fixed_params[2, 0] = 2.27
     fixed_params[2, 1] = None
 
-    min_tau = np.zeros((dim, dim), dtype=float)
+    bounds_tau = np.zeros((dim, dim), dtype=float)
     min_tau[1, 0] = 0.
-    min_tau[2, 0] = 0.
+    max_tau[0, 1] = None
     min_tau[2, 1] = None
-
-    max_tau = np.zeros((dim, dim), dtype=float)
-    max_tau[1, 0] = None
-    max_tau[2, 0] = 0.
-    max_tau[2, 1] = 0.
+    max_tau[1, 2] = 0.
     
     alpha = 0.1
 
@@ -269,9 +265,10 @@ if __name__ == '__main__':
                                 margins=margins, 
                                 families=families,
                                 fixed_params=fixed_params,
-                                min_tau=min_tau,
-                                max_tau=min_tau)
+                                bounds_tau=bounds_tau)
     
     impact.run(n_dep_param=K, n_input_sample=n, seed=0)
-    
+    quantile = impact.compute_quantiles(alpha)
+
+    print quantile
     

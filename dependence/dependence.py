@@ -75,16 +75,14 @@ class ImpactOfDependence(object):
                  margins,
                  families,
                  fixed_params=None,
-                 min_tau=None,
-                 max_tau=None,
+                 bounds_tau=None,
                  vine_structure=None,
                  copula_type='vine'):
         self.model_func = model_func
         self.margins = margins
         self.families = families
         self.fixed_params = fixed_params
-        self.min_tau = min_tau
-        self.max_tau = max_tau
+        self.bounds_tau = bounds_tau
         self.vine_structure = vine_structure
         self.copula_type = copula_type
 
@@ -92,8 +90,7 @@ class ImpactOfDependence(object):
         self._lhs_grid_criterion = 'centermaximin'
         self._grid_folder = './experiment_designs'
         self._dep_measure = None
-        
-            
+
     @classmethod
     def from_data(cls, data_sample, params, out_ID=0, with_input_sample=True):
         """Load from data.
@@ -674,7 +671,7 @@ class ImpactOfDependence(object):
 
         # Convert the dependence measure to copula parameters
         for i in self._pairs:
-            self._params[:, i] = self._copula[i].to_copula_parameter(meas_param[:, i], dep_measure)
+            self._params[:, i] = self._copula_converters[i].to_copula_parameter(meas_param[:, i], dep_measure)
 
     def _build_input_sample(self, n):
         """Creates the observations of each dependence measure of :math:`\boldsymbol \Theta_K`.
@@ -1358,7 +1355,7 @@ class ImpactOfDependence(object):
                     list_vars.append([i, j])
                 k += 1
 
-        self._copula_converteurs = [Conversion(family) for family in self._family_list]
+        self._copula_converters = [Conversion(family) for family in self._family_list]
                                     
         # TODO: delete this attr
         self._pairs_ids = list_vars
@@ -1400,41 +1397,28 @@ class ImpactOfDependence(object):
         self._vine_structure = structure
 
     @property
-    def min_tau(self):
-        return self._min_tau
+    def bounds_tau(self):
+        return self._bounds_tau
 
-    @min_tau.setter
-    def min_tau(self, params):
-        if params is None:
-            dim = self._input_dim
-            params = np.zeros((dim, dim), dtype=float)
-            for i in range(1, dim):
-                for j in range(i):
-                    params[i, j] = -1.
-        # TODO: add checking
-        self._min_tau = params
-
-    @property
-    def max_tau(self):
-        return self._max_tau
-
-    @max_tau.setter
-    def max_tau(self, params):
+    @bounds_tau.setter
+    def bounds_tau(self, bounds):
         """Set the upper bound of the Kendall Tau parameter space.
 
         Parameters
         ----------
-        param : :class:`~numpy.ndarray`
-            Matrix of parameters
+        bounds : :class:`~numpy.ndarray`
+            Matrix of bounds.
         """
-        if params is None:
+        if bounds is None:
             dim = self._input_dim
-            params = np.zeros((dim, dim), dtype=float)
+            params = np.zeros((dim, dim))
             for i in range(1, dim):
                 for j in range(i):
-                    params[i, j] = 1.
-        # TODO: add checking
-        self._max_tau = params
+                    params[i, j] = -1.
+                    params[j, i] = 1.
+        check_matrix(bounds)
+        self._bounds_tau = bounds
+        # TODO: maybe convert to copula params now
 
     @property
     def output_sample_(self):
