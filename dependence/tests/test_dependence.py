@@ -235,6 +235,7 @@ def test_hdf():
     impact.compute_quantiles(alpha).draw()
     impact_load.compute_quantiles(alpha).draw()
 
+# TODO: add a test for the saving and loading of a DOE sample
 if __name__ == '__main__':
     #%%
     dim = 3
@@ -243,7 +244,7 @@ if __name__ == '__main__':
     margins = [ot.Normal()]*dim
     families = np.zeros((dim, dim), dtype=int)
     families[1, 0] = 1
-    families[2, 0] = 3
+    families[2, 0] = 4
     families[2, 1] = 1
 
     fixed_params = np.zeros((dim, dim), dtype=float)
@@ -252,10 +253,10 @@ if __name__ == '__main__':
     fixed_params[2, 1] = None
 
     bounds_tau = np.zeros((dim, dim), dtype=float)
-    min_tau[1, 0] = 0.
-    max_tau[0, 1] = None
-    min_tau[2, 1] = None
-    max_tau[1, 2] = 0.
+    bounds_tau[1, 0] = 0.
+    bounds_tau[0, 1] = None
+    bounds_tau[2, 1] = None
+    bounds_tau[1, 2] = 0.
     
     alpha = 0.1
 

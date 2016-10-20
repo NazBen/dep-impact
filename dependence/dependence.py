@@ -573,11 +573,11 @@ class ImpactOfDependence(object):
         if use_grid is not None:
             # Load the sample from file and get the filename
             sample, grid_filename = self._load_grid(n_param, dep_measure, use_grid, gridname)
+            # TODO: the sample is normalized, make it normal
 
             meas_param = np.zeros((n_param, self._corr_dim))
             for k, i in enumerate(self._pairs):
-                tau_min, tau_max = get_tau_interval(self._family_list[i])
-                meas_param[:, i] = sample[:, k]
+                meas_param[:, i] = sample[:, k]*(tau_max - tau_min) + tau_min
         else:
             sample = np.zeros((n_param, p))
             if dep_measure == "KendallTau":
@@ -590,7 +590,7 @@ class ImpactOfDependence(object):
                     # Creates the p-dim grid
                     v = []
                     for i in self._pairs:
-                        tau_min, tau_max = get_tau_interval(self._family_list[i])
+                        tau_min, tau_max = self._bounds_tau_list[i]
                         v.append(np.linspace(tau_min, tau_max, n_p+1, endpoint=False)[1:])
                     tmp = np.vstack(np.meshgrid(*v)).reshape(p, -1).T
 
@@ -599,21 +599,20 @@ class ImpactOfDependence(object):
                     meas_param = np.zeros((n_param, self._corr_dim))
                     for k, i in enumerate(self._pairs):
                         meas_param[:, i] = tmp[:, k]
-                        tau_min, tau_max = get_tau_interval(self._family_list[i])
+                        tau_min, tau_max = self._bounds_tau_list[i]
                         sample[:, k] = (meas_param[:, i] - tau_min) / (tau_max - tau_min)
 
                 elif grid == 'rand':  # Random grid
                     if self._copula_type == "vine":
                         meas_param = np.zeros((n_param, self._corr_dim))
                         for k, i in enumerate(self._pairs):
-                            tau_min, tau_max = get_tau_interval(self._family_list[i])
+                            tau_min, tau_max = self._bounds_tau_list[i]
                             meas_param[:, i] = np.random.uniform(tau_min, tau_max, n_param)
                             sample[:, k] = (meas_param[:, i] - tau_min) / (tau_max - tau_min)
                     elif self._copula_type == "normal":
-                        meas_param = create_random_kendall_tau(self._families, 
-                                                           n_param)
+                        meas_param = create_random_kendall_tau(self._families, n_param)
                         for k, i in enumerate(self._pairs):
-                            tau_min, tau_max = get_tau_interval(self._family_list[i])
+                            tau_min, tau_max = self._bounds_tau_list[i]
                             sample[:, k] = (meas_param[:, i] - tau_min) / (tau_max - tau_min)
                     else:
                         raise AttributeError('Unknow copula type:', self._copula_type)
@@ -623,7 +622,7 @@ class ImpactOfDependence(object):
                     sample = pyDOE.lhs(p, samples=n_param, 
                                        criterion=self._lhs_grid_criterion)
                     for k, i in enumerate(self._pairs):
-                        tau_min, tau_max = get_tau_interval(self._family_list[i])
+                        tau_min, tau_max = self._bounds_tau_list[i]
                         meas_param[:, i] = sample[:, k]*(tau_max - tau_min) + tau_min
                 else:
                     raise AttributeError('%s is unknow for DOE type' % grid)
@@ -1409,16 +1408,31 @@ class ImpactOfDependence(object):
         bounds : :class:`~numpy.ndarray`
             Matrix of bounds.
         """
+        dim = self._input_dim
+        # If no bounds given, we take the min and max, depending on the copula family
         if bounds is None:
-            dim = self._input_dim
-            params = np.zeros((dim, dim))
+            bounds = np.zeros((dim, dim))
             for i in range(1, dim):
                 for j in range(i):
-                    params[i, j] = -1.
-                    params[j, i] = 1.
+                    bounds[i, j], bounds[j, i] = get_tau_interval(self._families[i, j])
+
+        bounds_list = []
+        for i in range(1, dim):
+            for j in range(i):
+                tau_min, tau_max = get_tau_interval(self._families[i, j])
+                if np.isnan(bounds[i, j]):
+                    tau_min = tau_min
+                else:
+                    tau_min = max(bounds[i, j], tau_min)
+                if np.isnan(bounds[j, i]):
+                    tau_max = tau_max
+                else:
+                    tau_max = min(bounds[j, i], tau_max)
+                bounds_list.append([tau_min, tau_max])
+
         check_matrix(bounds)
         self._bounds_tau = bounds
-        # TODO: maybe convert to copula params now
+        self._bounds_tau_list = bounds_list
 
     @property
     def output_sample_(self):
@@ -1480,22 +1494,26 @@ class ImpactOfDependence(object):
             # There is no fixed pairs
             matrix = np.zeros((self._input_dim, self._input_dim), dtype=float)
             matrix[:] = None
-        else:
-            # The matrix should be checked
-            check_matrix(matrix)
+
+        # The matrix should be checked
+        check_matrix(matrix)
             
-            # The lists only contains the fixed pairs informations
-            self._fixed_pairs = []
-            self._fixed_params = []
-            k = 0
-            for i in range(1, self._input_dim):
-                for j in range(i):
-                    if matrix[i, j] == 0.:
-                        print 'The pair %d-%d is set to 0. Check if this is correct.' % (i, j)
-                    elif not np.isnan(matrix[i, j]):
-                        self._fixed_pairs.append(k)
-                        self._fixed_params.append(matrix[i, j])
-                    k += 1
+        # The lists only contains the fixed pairs informations
+        self._fixed_pairs = []
+        self._fixed_params = []
+        k = 0
+        for i in range(1, self._input_dim):
+            for j in range(i):
+                if matrix[i, j] == 0.:
+                    print 'The pair param %d-%d is set to 0. Check if this is correct.' % (i, j)
+                if not np.isnan(matrix[i, j]):
+                    # The pair is fixed we add it in the list
+                    self._fixed_pairs.append(k)
+                    self._fixed_params.append(matrix[i, j])
+                    # And we remove it from the list of dependent pairs
+                    self._pairs.remove(k)
+                    self._n_pairs -= 1
+                k += 1
 
 
 class DependenceResult(object):
