@@ -579,7 +579,6 @@ class ImpactOfDependence(object):
             for k, i in enumerate(self._pairs):
                 meas_param[:, i] = sample[:, k]*(tau_max - tau_min) + tau_min
         else:
-            sample = np.zeros((n_param, p))
             if dep_measure == "KendallTau":
                 if grid == 'fixed':
                     # Number of configurations per dimension
@@ -599,8 +598,6 @@ class ImpactOfDependence(object):
                     meas_param = np.zeros((n_param, self._corr_dim))
                     for k, i in enumerate(self._pairs):
                         meas_param[:, i] = tmp[:, k]
-                        tau_min, tau_max = self._bounds_tau_list[i]
-                        sample[:, k] = (meas_param[:, i] - tau_min) / (tau_max - tau_min)
 
                 elif grid == 'rand':  # Random grid
                     if self._copula_type == "vine":
@@ -608,12 +605,8 @@ class ImpactOfDependence(object):
                         for k, i in enumerate(self._pairs):
                             tau_min, tau_max = self._bounds_tau_list[i]
                             meas_param[:, i] = np.random.uniform(tau_min, tau_max, n_param)
-                            sample[:, k] = (meas_param[:, i] - tau_min) / (tau_max - tau_min)
                     elif self._copula_type == "normal":
                         meas_param = create_random_kendall_tau(self._families, n_param)
-                        for k, i in enumerate(self._pairs):
-                            tau_min, tau_max = self._bounds_tau_list[i]
-                            sample[:, k] = (meas_param[:, i] - tau_min) / (tau_max - tau_min)
                     else:
                         raise AttributeError('Unknow copula type:', self._copula_type)
 
@@ -642,6 +635,12 @@ class ImpactOfDependence(object):
                 if not os.path.exists(dirname):
                     os.mkdir(dirname)
 
+                # The sample variable exist only for lhs sampling
+                if grid != 'lhs':
+                    sample = np.zeros((n_param, p))
+                    for k, i in enumerate(self._pairs):
+                        tau_min, tau_max = self._bounds_tau_list[i]
+                        sample[:, k] = (meas_param[:, i] - tau_min) / (tau_max - tau_min)
                 k = 0
                 do_save = True
                 name = '%s_p_%d_n_%d_%s_%d.csv' % (gridname, p, n_param, dep_measure, k)

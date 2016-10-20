@@ -268,8 +268,10 @@ if __name__ == '__main__':
                                 fixed_params=fixed_params,
                                 bounds_tau=bounds_tau)
     
-    impact.run(n_dep_param=K, n_input_sample=n, seed=0)
+    impact.run(n_dep_param=K, n_input_sample=n, grid='fixed', seed=0)
     quantile = impact.compute_quantiles(alpha)
 
-    print quantile
+    impact.draw_matrix_plot()
+    print quantile.cond_params
+    print quantile.quantity
     
