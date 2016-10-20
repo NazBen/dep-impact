@@ -1418,16 +1418,17 @@ class ImpactOfDependence(object):
         bounds_list = []
         for i in range(1, dim):
             for j in range(i):
-                tau_min, tau_max = get_tau_interval(self._families[i, j])
-                if np.isnan(bounds[i, j]):
-                    tau_min = tau_min
-                else:
-                    tau_min = max(bounds[i, j], tau_min)
-                if np.isnan(bounds[j, i]):
-                    tau_max = tau_max
-                else:
-                    tau_max = min(bounds[j, i], tau_max)
-                bounds_list.append([tau_min, tau_max])
+                if self._families[i, j] > 0:
+                    tau_min, tau_max = get_tau_interval(self._families[i, j])
+                    if np.isnan(bounds[i, j]):
+                        tau_min = tau_min
+                    else:
+                        tau_min = max(bounds[i, j], tau_min)
+                    if np.isnan(bounds[j, i]):
+                        tau_max = tau_max
+                    else:
+                        tau_max = min(bounds[j, i], tau_max)
+                    bounds_list.append([tau_min, tau_max])
 
         check_matrix(bounds)
         self._bounds_tau = bounds
@@ -1503,15 +1504,16 @@ class ImpactOfDependence(object):
         k = 0
         for i in range(1, self._input_dim):
             for j in range(i):
-                if matrix[i, j] == 0.:
-                    print 'The pair param %d-%d is set to 0. Check if this is correct.' % (i, j)
-                if not np.isnan(matrix[i, j]):
-                    # The pair is fixed we add it in the list
-                    self._fixed_pairs.append(k)
-                    self._fixed_params.append(matrix[i, j])
-                    # And we remove it from the list of dependent pairs
-                    self._pairs.remove(k)
-                    self._n_pairs -= 1
+                if self._families[i, j] > 0:
+                    if matrix[i, j] == 0.:
+                        print 'The pair param %d-%d is set to 0. Check if this is correct.' % (i, j)
+                    if not np.isnan(matrix[i, j]):
+                        # The pair is fixed we add it in the list
+                        self._fixed_pairs.append(k)
+                        self._fixed_params.append(matrix[i, j])
+                        # And we remove it from the list of dependent pairs
+                        self._pairs.remove(k)
+                        self._n_pairs -= 1
                 k += 1
 
 

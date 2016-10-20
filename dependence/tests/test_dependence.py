@@ -238,7 +238,7 @@ def test_hdf():
 # TODO: add a test for the saving and loading of a DOE sample
 if __name__ == '__main__':
     #%%
-    dim = 3
+    dim = 4
     n = 100
     K = 10
     margins = [ot.Normal()]*dim
