@@ -2,6 +2,13 @@
 
 The main class inspect the impact of correlation on a quantity
 of interest of a model output.
+
+TODO:
+    - Add a method to read the constraints from a csv or excel file. It would be more 
+    easier for the user to write the matrices.
+    - Make test functions
+    - Clean the code
+    - Add the algorithm in the class or a seperated one
 """
 
 import operator

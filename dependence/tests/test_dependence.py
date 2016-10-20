@@ -11,8 +11,7 @@ def add_function(x):
     """
     return x.sum(axis=1)
     
-    
-def true_quantile(alpha, dim, params):
+def true__additive_gaussian_quantile(alpha, dim, params):
     sigma = np.sqrt(dim + 2 * params.sum(axis=1))
     return sigma * np.sqrt(2.) * erfinv(2 * alpha - 1.)
         
@@ -237,7 +236,6 @@ def test_hdf():
 
 # TODO: add a test for the saving and loading of a DOE sample
 if __name__ == '__main__':
-    #%%
     dim = 4
     n = 100
     K = 10
@@ -253,14 +251,12 @@ if __name__ == '__main__':
     fixed_params[2, 1] = None
 
     bounds_tau = np.zeros((dim, dim), dtype=float)
+    bounds_tau[:] = None
     bounds_tau[1, 0] = 0.
     bounds_tau[0, 1] = None
     bounds_tau[2, 1] = None
     bounds_tau[1, 2] = 0.
-    
     alpha = 0.1
-
-    #%%
   
     impact = ImpactOfDependence(model_func=add_function, 
                                 margins=margins, 
@@ -274,4 +270,3 @@ if __name__ == '__main__':
     impact.draw_matrix_plot()
     print quantile.cond_params
     print quantile.quantity
-    
