@@ -4,15 +4,12 @@ The main class inspect the impact of correlation on a quantity
 of interest of a model output.
 
 TODO:
-    - Add a method to read the constraints from a csv or excel file. It would be more 
-    easier for the user to write the matrices.
     - Make test functions
     - Clean the code
     - Add the algorithm in the class or a seperated one
 """
 
 import operator
-import json
 import warnings
 import itertools
 import os
@@ -60,6 +57,18 @@ class ImpactOfDependence(object):
         The copula family matrix. It describes the family type of each pair
         of variables. See the Vine Copula package for a description of the
         available copulas and their respective indexes.
+        
+    fixed_params : :class:`~numpy.ndarray`, str or None, optional(default=None)
+        The matrix of copula parameters for the fixed copula. Warning: the 
+        matrix should contains NaN for all parameters which are not fixed.
+        If str, it should be the path to a csv file describing the matrix.
+        If None, no parameters are fixed and a default matrix is created.
+        
+    bounds_tau : :class:`~numpy.ndarray`, str or None, optional(default=None)
+        The matrix of bounds for the exploration of dependencies. The bounds
+        have to be on the Kendall's Tau.
+        If str, it should be the path to a csv file describing the matrix.
+        If None, no bounds are setted and a default matrix is created.
 
     vine_structure : :class:`~numpy.ndarray` or None, optional (default=None)
         The Vine copula structure matrix. It describes the construction of the
@@ -75,8 +84,6 @@ class ImpactOfDependence(object):
     ----------
 
     """
-    _load_data = False
-
     def __init__(self,
                  model_func,
                  margins,
@@ -97,126 +104,34 @@ class ImpactOfDependence(object):
         self._lhs_grid_criterion = 'centermaximin'
         self._grid_folder = './experiment_designs'
         self._dep_measure = None
-
-    @classmethod
-    def from_data(cls, data_sample, params, out_ID=0, with_input_sample=True):
-        """Load from data.
-
-        This method initialise the class using built data from previous simulations.
-
-        Parameters
-        ----------
-        data_sample : :class:`~numpy.ndarray`
-            The sample of built data.
-        dim : int
-            The input dimension.
-        out_ID : int, optional (default=0)
-            The output ID to take care of when multiple output are available.
-        """
-        # Creates the class object from ghost parameters.
-        def tmp(): return None
-        dim = params['Input Dimension']
-        families = np.asarray(params['Families'])
-        structure = np.asarray(params['Structure'])
-        margins = []
-        for i in range(dim):
-            d_marg = params['Marginal_%d' % (i)]
-            marginal = getattr(ot, d_marg['Family'])(*d_marg['Parameters'])
-            margins.append(marginal)
-            
-        obj = cls(tmp, margins, families, structure)
-        all_params = data_sample[:, :obj._corr_dim]
-        params = pd.DataFrame(all_params).drop_duplicates().values
-        n_sample = all_params.shape[0]
-        n_params = params.shape[0]
-        n = n_sample / n_params
-        
-        data_sample_ordered = np.zeros(data_sample.shape)
-        for i, par in enumerate(params):
-            id_p = (all_params == par).all(axis=1)
-            data_sample_ordered[i*n:(i+1)*n, :] = data_sample[id_p, :]
-        
-        #obj.all_params_ = data_sample_ordered[:, :obj._corr_dim]
-        obj._params = params
-        obj._n_param = n_params
-        obj._n_sample = n_sample
-        obj._n_input_sample = n
-        
-        if with_input_sample:
-            obj._input_sample = data_sample_ordered[:, obj._corr_dim:obj._corr_dim + dim]
-        obj._all_output_sample = data_sample_ordered[:, obj._corr_dim + dim:]
-        obj._output_dim = obj._all_output_sample.shape[1]
-        obj._output_ID = out_ID
-        obj._load_data = True
-        return obj
-
-    @classmethod
-    def from_structured_data(cls, loaded_data="full_structured_data.csv",
-                             info_params='info_params.json', with_input_sample=True):
-        """
-        Load from structured with labels.
-
-        loaded_data: a string, a DataFrame, a list of strings.
-        """
-        if isinstance(loaded_data, str):
-            data = pd.read_csv(loaded_data)
-        elif isinstance(loaded_data, pd.DataFrame):
-            data = loaded_data
-        elif isinstance(loaded_data, list):
-            labels = ""
-            data = None  # Init the data
-            # For each data sample
-            for i, load_dat in enumerate(loaded_data):
-                # If it's a string
-                if isinstance(load_dat, str):
-                    # Load it in a DataFrame
-                    dat_i = pd.read_csv(load_dat)
-                # If it's a DataFrame
-                elif isinstance(load_dat, pd.DataFrame):
-                    dat_i = load_dat
-                else:
-                    raise TypeError("Uncorrect type for data")
-                if i == 0:  # For the first file
-                    data = dat_i  # Data
-                    labels = data.columns.values  # Labels
-                else:  # For the other files
-                    # Check if the data have the sample features
-                    assert (data.columns.values == labels).all(), \
-                        "Different data files"
-                    # Append all
-                    data = data.append(dat_i)
-        else:
-            raise TypeError("Uncorrect type for loaded_data")
-
-        with open(info_params, 'r') as param_f:
-            params = json.load(param_f)
-
-        return cls.from_data(data.values, params, with_input_sample=with_input_sample)
+        self._load_data = False
         
     @classmethod
     def from_hdf(cls, filepath_or_buffer, id_of_experiment='all', out_ID=0, with_input_sample=True):
         """Load result from HDF5 file.
 
-        This class method creates an instance of :class:`~ImpactOfDependence` by loading
-        a HDF5 with the saved result of a previous run.
+        This class method creates an instance of :class:`~ImpactOfDependence` 
+        by loading a HDF5 with the saved result of a previous run.
 
         Parameters
         ----------
         filepath_or_buffer : str
             The path of the file to hdf5 file read.
-        id_of_experiments : str or int, optional (default='all')
-            The experiments to load. The hdf5 file can gather multiple experiments with
-            the same metadatas. The user can chose to load all or one experiments.
+        id_of_experiment : str or int, optional (default='all')
+            The experiments to load. The hdf5 file can gather multiple 
+            experiments with the same metadatas. The user can chose to load all
+            or one experiments.
         out_ID : int, optional (default=0)
             The index of the output if the function output is multidimensional.
         with_input_sample : bool, optional (default=True)
-            If False the samples of input observations are not loaded. Input observations are
-            not necessary to compute output quantity of interests.
+            If False the samples of input observations are not loaded. Input 
+            observations are not necessary to compute output quantity of 
+            interests.
 
         Returns
         -------
         obj : :class:`~ImpactOfDependence`
-
+            The Impact Of Dependence instance with the loaded informations.
         """
         # Ghost function
         def tmp(): return None
@@ -224,12 +139,14 @@ class ImpactOfDependence(object):
         # Load of the hdf5 file
         with h5py.File(filepath_or_buffer, 'r') as hdf_store:
             # The file may contain multiple experiments. The user can load one 
-            # or multiple if they have similiar configurations.
+            # or multiple experiments if they have similiar configurations.
             if id_of_experiment == 'all':
-                # We load and concatenate every groups of experiments
+                # All groups of experiments are loaded and concatenated
                 list_index = hdf_store.keys()
                 list_index.remove('dependence_params')
             else:
+                # Only the specified experiment is loaded
+                assert isinstance(id_of_experiment, int), 'It should be an int'
                 list_index = [str(id_of_experiment)]
             
             params = hdf_store['dependence_params'].value
@@ -240,6 +157,17 @@ class ImpactOfDependence(object):
             copula_type = hdf_store.attrs['Copula Type']
             input_dim = hdf_store.attrs['Input Dimension']
             input_names = hdf_store.attrs['Input Names']
+            # Many previous experiments did not have this attribute. 
+            # The checking is temporary and should be deleted in future
+            # versions.
+            if 'Fixed Parameters' in hdf_store.attrs.keys():
+                fixed_params = hdf_store.attrs['Fixed Parameters']
+            else:
+                fixed_params = None
+            if 'Bounds Tau' in hdf_store.attrs.keys():
+                bounds_tau = hdf_store.attrs['Bounds Tau']
+            else:
+                bounds_tau = None
 
             margins = []
             for i in range(input_dim):
@@ -292,13 +220,13 @@ class ImpactOfDependence(object):
                 output_sample[start:end, :] = list_output_sample[i][k*ni:(k+1)*ni, :]
             a += ni
                     
-        obj = cls(tmp, margins, families, structure)
+        obj = cls(tmp, margins, families, fixed_params=fixed_params, 
+                  bounds_tau=bounds_tau, vine_structure=structure)
                 
         obj._params = params
         obj._n_param = n_params
         obj._n_sample = n_sample
-        obj._n_input_sample = n
-        
+        obj._n_input_sample = n        
         if with_input_sample:
             obj._input_sample = input_sample
         obj._all_output_sample = output_sample
@@ -382,11 +310,12 @@ class ImpactOfDependence(object):
             ot.RandomGenerator.SetSeed(seed)
 
         # Creates the sample of dependence parameters
-        self._build_corr_sample(n_dep_param, grid, dep_measure, use_grid, save_grid)
+        self._generate_dependence_grid(n_dep_param, grid, dep_measure,
+                                       use_grid, save_grid)
         
         # If some pairs parameters are fixed
         if self._fixed_pairs:
-            self._params[:, self._fixed_pairs] = self._fixed_params
+            self._params[:, self._fixed_pairs] = self._fixed_params_list
 
         self._build_and_run(n_input_sample)
         self._run_type = 'Classic'
@@ -423,14 +352,14 @@ class ImpactOfDependence(object):
             grid = [-1. + eps, 1. - eps]
 
         self._n_param = len(grid)**p
-        self._params = np.zeros((self._n_param, self._corr_dim), dtype=float)
+        self._params = np.zeros((self._n_param, self._corr_dim))
 
         tmp = tuple(itertools.product(grid, repeat=p))
         self._params[:, self._pairs] = np.asarray(tmp, dtype=float)
 
         # If some pairs parameters are fixed
         if self._fixed_pairs:
-            self._params[:, self._fixed_pairs] = self._fixed_params
+            self._params[:, self._fixed_pairs] = self._fixed_params_list
 
         self._build_and_run(n_input_sample)
         self._run_type = 'Perfect Dependence'
@@ -453,7 +382,7 @@ class ImpactOfDependence(object):
             ot.RandomGenerator.SetSeed(seed)
             
         self._n_param = 1
-        self._params = np.zeros((1, self._corr_dim), dtype=float)
+        self._params = np.zeros((1, self._corr_dim))
         self._build_and_run(n_input_sample)
         self._run_type = 'Independence'
 
@@ -509,7 +438,7 @@ class ImpactOfDependence(object):
         self._params[self._pairs] = param
 
         if self._fixed_pairs is not None:
-            self._params[:, self._fixed_pairs] = self._fixed_params
+            self._params[:, self._fixed_pairs] = self._fixed_params_list
         
         self._build_and_run(n_input_sample)
         self._run_type = 'Minimising'
@@ -535,19 +464,22 @@ class ImpactOfDependence(object):
         theta_opt = opt.optimize(theta_init)
         return theta_opt
 
-    def _build_corr_sample(self, n_param, grid, dep_measure, use_grid, save_grid):
+    def _generate_dependence_grid(self, n_param, grid, dep_measure, use_grid, 
+                                  save_grid):
         """Generates the dependence parameters.
 
-        The method discretises the dependence parameter support :math:`\boldsymbol \Theta` into
-        a design of experiment :math:`\boldsymbol \Theta_K` of cardinality :math:`K`. The discretisation
-        can be made by a regular grid, an LHS design or a random Monte-Carlo. It is also made using
-        a concordance measure such as the Kendall Tau, but in some cases, 
-        it can also be made using the copula dependence parameter. 
+        The method discretises the dependence parameter support :math:` \Theta`
+        into a design of experiment :math:` \Theta_K` of cardinality :math:`K`.
+        The discretisation can be made by a regular grid, an LHS design or a 
+        random Monte-Carlo. It is also made using a concordance measure such as
+        the Kendall Tau, but in some cases, it can also be made using the 
+        copula dependence parameter. 
 
         Parameters
         ----------
         n_param : int
-            The number :math:`K` of dependence parameters of :math:`\boldsymbol \Theta_K`.
+            The number :math:`K` of dependence parameters of
+            :math:`\boldsymbol \Theta_K`.
 
         grid : string
             The discretisation type. Such as
@@ -580,10 +512,10 @@ class ImpactOfDependence(object):
         if use_grid is not None:
             # Load the sample from file and get the filename
             sample, grid_filename = self._load_grid(n_param, dep_measure, use_grid, gridname)
-            # TODO: the sample is normalized, make it normal
 
             meas_param = np.zeros((n_param, self._corr_dim))
             for k, i in enumerate(self._pairs):
+                tau_min, tau_max = self._bounds_tau_list[k]
                 meas_param[:, i] = sample[:, k]*(tau_max - tau_min) + tau_min
         else:
             if dep_measure == "KendallTau":
@@ -591,12 +523,12 @@ class ImpactOfDependence(object):
                     # Number of configurations per dimension
                     n_p = int((n_param) ** (1./p))
                     if n_p < 3:
-                        print 'There is only %d configuration per dimension' % (n_p)
+                        warnings.warn('There is only %d configuration per dimension' % (n_p))
                         
                     # Creates the p-dim grid
                     v = []
-                    for i in self._pairs:
-                        tau_min, tau_max = self._bounds_tau_list[i]
+                    for k, i in enumerate(self._pairs):
+                        tau_min, tau_max = self._bounds_tau_list[k]
                         v.append(np.linspace(tau_min, tau_max, n_p+1, endpoint=False)[1:])
                     tmp = np.vstack(np.meshgrid(*v)).reshape(p, -1).T
 
@@ -610,7 +542,7 @@ class ImpactOfDependence(object):
                     if self._copula_type == "vine":
                         meas_param = np.zeros((n_param, self._corr_dim))
                         for k, i in enumerate(self._pairs):
-                            tau_min, tau_max = self._bounds_tau_list[i]
+                            tau_min, tau_max = self._bounds_tau_list[k]
                             meas_param[:, i] = np.random.uniform(tau_min, tau_max, n_param)
                     elif self._copula_type == "normal":
                         meas_param = create_random_kendall_tau(self._families, n_param)
@@ -622,11 +554,10 @@ class ImpactOfDependence(object):
                     sample = pyDOE.lhs(p, samples=n_param, 
                                        criterion=self._lhs_grid_criterion)
                     for k, i in enumerate(self._pairs):
-                        tau_min, tau_max = self._bounds_tau_list[i]
+                        tau_min, tau_max = self._bounds_tau_list[k]
                         meas_param[:, i] = sample[:, k]*(tau_max - tau_min) + tau_min
                 else:
                     raise AttributeError('%s is unknow for DOE type' % grid)
-
             elif dep_measure == "PearsonRho":
                 raise NotImplementedError("Work in progress.")
             elif dep_measure == "SpearmanRho":
@@ -646,7 +577,7 @@ class ImpactOfDependence(object):
                 if grid != 'lhs':
                     sample = np.zeros((n_param, p))
                     for k, i in enumerate(self._pairs):
-                        tau_min, tau_max = self._bounds_tau_list[i]
+                        tau_min, tau_max = self._bounds_tau_list[k]
                         sample[:, k] = (meas_param[:, i] - tau_min) / (tau_max - tau_min)
                 k = 0
                 do_save = True
@@ -679,7 +610,7 @@ class ImpactOfDependence(object):
             self._params[:, i] = self._copula_converters[i].to_copula_parameter(meas_param[:, i], dep_measure)
 
     def _build_input_sample(self, n):
-        """Creates the observations of each dependence measure of :math:`\boldsymbol \Theta_K`.
+        """Creates the observations of each dependence measure of :math:`\Theta_K`.
 
         Parameters
         ----------
@@ -702,15 +633,16 @@ class ImpactOfDependence(object):
         n_obs : int
             The number of observations.
         param2 : :class:`~numpy.ndarray`, optional (default=None)
-            The 2nd copula parameters. Usefull for certain copula families like Student.
+            The 2nd copula parameters. For some copula families
+            (e.g. Student)
         """
         dim = self._input_dim
         matrix_param = to_matrix(param, dim)
 
         if self._copula_type == 'vine':
             # TODO: One param is used. Do it for two parameters copulas.
-            vine_copula = VineCopula(self._vine_structure, self._families, matrix_param)
-
+            vine_copula = VineCopula(self._vine_structure, self._families, 
+                                     matrix_param)
             # Sample from the copula
             # The reshape is in case there is only one sample (for RF tests)
             cop_sample = vine_copula.get_sample(n_obs).reshape(n_obs, dim)
@@ -722,8 +654,8 @@ class ImpactOfDependence(object):
         else:
             raise AttributeError('Unknown type of copula.')
 
-        # Applied to the inverse transformation to get the sample of the joint distribution
-        joint_sample = np.zeros((n_obs, dim), dtype=float)
+        # Applied the inverse transformation to get the sample of the joint distribution
+        joint_sample = np.zeros((n_obs, dim))
         for i, inv_CDF in enumerate(self._margins_inv_CDF):
             joint_sample[:, i] = np.asarray(inv_CDF(cop_sample[:, i])).ravel()
 
@@ -741,11 +673,9 @@ class ImpactOfDependence(object):
     def _load_grid(self, n_param, dep_measure, use_grid, gridname):
         """
         """
-        p = self._n_pairs
-        # TODO: let the code load the latest design which have the same configs           
+        p = self._n_pairs    
         if isinstance(use_grid, str):
-            assert gridname in use_grid, \
-                "Not the same configurations"
+            assert gridname in use_grid, "Not the same configurations"
             filename = use_grid
             name = os.path.basename(filename)
         elif isinstance(use_grid, (int, bool)):
@@ -754,16 +684,11 @@ class ImpactOfDependence(object):
             filename = os.path.join(self._grid_folder, name)
         else:
             raise AttributeError('Unknow use_grid')
-
-        assert os.path.exists(filename), \
-            'Grid file %s does not exists' % name
-        print 'loading file %s' % name
+        assert os.path.exists(filename), 'Grid file %s does not exists' % name
+        print 'loading file %s' % name        
         sample = np.loadtxt(filename).reshape(n_param, -1)
-        assert n_param == sample.shape[0], \
-            'Wrong grid size'
-        assert p == sample.shape[1], \
-            'Wrong dimension'
-            
+        assert n_param == sample.shape[0], 'Wrong grid size'
+        assert p == sample.shape[1], 'Wrong dimension'            
         return sample, filename
 
     def build_forest(self, quant_forest=QuantileForest()):
@@ -772,7 +697,7 @@ class ImpactOfDependence(object):
         Parameters
         ----------
         quant_forest : :class:`~QuantileForest`
-            The Quantile Regression Forest object.
+            A Quantile Regression Forest instance.
         """
         # We take only used params (i.e. the zero cols are taken off)
         # Actually, it should not mind to RF, but it's better for clarity.
@@ -930,7 +855,6 @@ class ImpactOfDependence(object):
                  }
 
         interval = None
-
         # TODO: correct the bootstrap for the quantile.
         cond_params = self._params[:, self._pairs]
         if estimation_method == 'empirical':
@@ -938,8 +862,7 @@ class ImpactOfDependence(object):
             if not bootstrap:
                 quantiles = np.percentile(out_sample, alpha * 100., axis=1).reshape(1, -1)
             else:
-                quantiles, interval = bootstrap_quantile(out_sample, alpha, 20, 0.01)
-                
+                quantiles, interval = bootstrap_quantile(out_sample, alpha, 20, 0.01)                
             # TODO: think about using the check function instead of the percentile.
 
         elif estimation_method == "randomforest":
@@ -972,22 +895,6 @@ class ImpactOfDependence(object):
                 "Unknow estimation method: %s" % estimation_method)
 
         return DependenceResult(configs, self, quantiles, interval, cond_params)
-        
-    def fix_pair_param(self, pair, param):
-        """
-        """
-        # TODO: do it in one line...
-        k = 0
-        for i in range(1, self._input_dim):
-            for j in range(i):
-                if (pair[0] == i) and (pair[1] == j):
-                    fixed_corr_var = k
-                    break
-                k += 1
-        self._fixed_pairs.append(fixed_corr_var)
-        self._n_pairs -= 1
-        self._fixed_params.append(param)
-        self._pairs.remove(fixed_corr_var)
 
     def save_data_hdf(self, input_names=[], output_names=[],
                   path=".", file_name="output_result.hdf5"):
@@ -1018,6 +925,7 @@ class ImpactOfDependence(object):
                 margin_dict['Marginal_%d Parameters' % (i)] = params
                
         filename_exists = True
+        init_file_name = file_name
         k = 0
         while filename_exists:
             try:
@@ -1029,7 +937,16 @@ class ImpactOfDependence(object):
                         assert hdf_store.attrs['Input Dimension'] == self._input_dim
                         assert hdf_store.attrs['Output Dimension'] == self._output_dim
                         assert hdf_store.attrs['Run Type'] == self._run_type
-                        np.testing.assert_array_equal(hdf_store.attrs['Copula Families'], self._families)
+                        np.testing.assert_array_equal(hdf_store.attrs['Copula Families'], self._families)                        
+                        if 'Fixed Parameters' in hdf_store.attrs.keys():
+                            np.testing.assert_array_equal(hdf_store.attrs['Fixed Parameters'], self._fixed_params)  
+                        elif self._fixed_pairs:
+                            # Save only if there is no fixed params
+                            raise ValueError('It should not have constraints to be in the same output file.')
+                        if 'Bounds Tau' in hdf_store.attrs.keys():
+                            np.testing.assert_array_equal(hdf_store.attrs['Bounds Tau'], self._bounds_tau)           
+                        elif self._fixed_pairs:
+                            raise ValueError('It should not have constraints to be in the same output file.')
                         np.testing.assert_array_equal(hdf_store.attrs['Copula Structure'], self._vine_structure)
                         assert hdf_store.attrs['Copula Type'] == self._copula_type
                         np.testing.assert_array_equal(hdf_store.attrs['Input Names'], input_names)
@@ -1042,13 +959,15 @@ class ImpactOfDependence(object):
                             assert hdf_store.attrs['Dependence Measure'] == self._dep_measure
                             assert hdf_store.attrs['Grid Type'] == self._grid
                     else:
-                        # We save the attributes in this empty new file                        
+                        # We save the attributes in the empty new file
                         hdf_store.create_dataset('dependence_params', data=self._params)
                         hdf_store.attrs['K'] = self._n_param
                         hdf_store.attrs['Input Dimension'] = self._input_dim
                         hdf_store.attrs['Output Dimension'] = self._output_dim
                         hdf_store.attrs['Run Type'] = self._run_type
                         hdf_store.attrs['Copula Families'] = self._families
+                        hdf_store.attrs['Fixed Parameters'] = self._fixed_params
+                        hdf_store.attrs['Bounds Tau'] = self._bounds_tau
                         hdf_store.attrs['Copula Structure'] = self._vine_structure
                         hdf_store.attrs['Copula Type'] = self._copula_type
                         hdf_store.attrs['Input Names'] = input_names
@@ -1081,82 +1000,12 @@ class ImpactOfDependence(object):
                     filename_exists = False
             except AssertionError:
                 print 'File %s already has different configurations' % (file_name)
-                file_name = '%s_%d.hdf5' % (file_name[:-5], k)
+                file_name = '%s_%d.hdf5' % (init_file_name[:-5], k)
                 k += 1
 
         print 'Data saved in %s' % (file_name)
         
         return file_name
-            
-    def save_data(self, input_names=[], output_names=[],
-                  path=".", data_fname="full_structured_data",
-                  ftype=".csv", param_fname='info_params'):
-        """
-        """
-        output_dim = self._output_dim
-
-        # List of correlated variable names
-        labels = []
-        for i in range(self._input_dim):
-            for j in range(i):
-                labels.append("r_%d%d" % (i + 1, j + 1))
-
-        # List of input variable names
-        if input_names:
-            assert len(input_names) == self._input_dim, \
-                AttributeError("Dimension problem for input_names")
-            labels.extend(input_names)
-        else:
-            for i in range(self._input_dim):
-                labels.append("x_%d" % (i + 1))
-
-        # List of output variable names
-        if output_names:
-            assert len(output_names) == output_dim,\
-                AttributeError("Dimension problem for output_names")
-            labels.extend(output_names)
-        else:
-            for i in range(output_dim):
-                labels.append("y_%d" % (i + 1))
-
-        path_fname = path + '/' + data_fname + ftype
-        out = np.c_[self.all_params_, self._input_sample,
-                    self._all_output_sample]
-        out_df = pd.DataFrame(out, columns=labels)
-        out_df.to_csv(path_fname, index=False)
-
-        # Save the parameters
-        dict_output = {}
-        dict_output['Input Dimension'] = self._input_dim
-        dict_output['Parameter Number'] = self._n_param
-        dict_output['Sample Size'] = self._n_input_sample
-        dict_output['Grid'] = self._grid
-        if self._grid_filename:
-            dict_output['Grid Filename'] = os.path.basename(self._grid_filename)
-        if self._grid == 'lhs':
-            dict_output['LHS Criterion'] = self._lhs_grid_criterion
-        
-
-        dict_copula = {'Families': self._families.tolist(),
-                       'Structure': self._vine_structure.tolist()}
-                       
-        dict_output.update(dict_copula)
-
-        # TODO: Find a way to get the name of the variable for
-        # Scipy frozen rv_continous instances
-        if isinstance(self._margins[0], ot.DistributionImplementation):
-            dict_margins = {}
-            for i, marginal in enumerate(self._margins):
-                name = marginal.getName()
-                params = list(marginal.getParameter())
-                dict_margins['Marginal_%d' % (i)] = {'Family': name,
-                                                     'Parameters': params}
-    
-            dict_output.update(dict_margins)
-
-        path_fname = path + '/' + param_fname + '.json'
-        with open(path_fname, 'w') as outfile:
-            json.dump(dict_output, outfile, indent=4)
 
     def draw_matrix_plot(self, corr_id=None, copula_space=False, figsize=(10, 10),
                          savefig=False):
@@ -1340,30 +1189,32 @@ class ImpactOfDependence(object):
         return self._families
 
     @families.setter
-    def families(self, matrix):
+    def families(self, value):
         """
         """
+        if isinstance(value, str):
+            # It should be a path to a csv file
+            matrix = pd.read_csv(value, index_col=0).values
+        else:
+            matrix = value
         matrix = matrix.astype(int)
         check_matrix(matrix)
         self._families = matrix
         self._family_list = []
         self._n_pairs = 0
         self._pairs = []
+        self._pairs_ij = []
         k = 0
-        list_vars = []
         for i in range(1, self._input_dim):
             for j in range(i):
                 self._family_list.append(matrix[i, j])
                 if matrix[i, j] > 0:
                     self._pairs.append(k)
                     self._n_pairs += 1
-                    list_vars.append([i, j])
+                    self._pairs_ij.append([i, j])
                 k += 1
 
         self._copula_converters = [Conversion(family) for family in self._family_list]
-                                    
-        # TODO: delete this attr
-        self._pairs_ids = list_vars
 
     @property
     def copula_type(self):
@@ -1406,36 +1257,39 @@ class ImpactOfDependence(object):
         return self._bounds_tau
 
     @bounds_tau.setter
-    def bounds_tau(self, bounds):
+    def bounds_tau(self, value):
         """Set the upper bound of the Kendall Tau parameter space.
 
         Parameters
         ----------
-        bounds : :class:`~numpy.ndarray`
+        bounds : :class:`~numpy.ndarray`, str or None
             Matrix of bounds.
         """
+        
         dim = self._input_dim
         # If no bounds given, we take the min and max, depending on the copula family
-        if bounds is None:
+        if value is None:
             bounds = np.zeros((dim, dim))
-            for i in range(1, dim):
-                for j in range(i):
-                    bounds[i, j], bounds[j, i] = get_tau_interval(self._families[i, j])
+            for i, j in self._pairs_ij:
+                bounds[i, j], bounds[j, i] = get_tau_interval(self._families[i, j])
+        elif isinstance(value, str):
+            # It should be a path to a csv file
+            bounds = pd.read_csv(value, index_col=0).values
+        else:
+            bounds = value
 
         bounds_list = []
-        for i in range(1, dim):
-            for j in range(i):
-                if self._families[i, j] > 0:
-                    tau_min, tau_max = get_tau_interval(self._families[i, j])
-                    if np.isnan(bounds[i, j]):
-                        tau_min = tau_min
-                    else:
-                        tau_min = max(bounds[i, j], tau_min)
-                    if np.isnan(bounds[j, i]):
-                        tau_max = tau_max
-                    else:
-                        tau_max = min(bounds[j, i], tau_max)
-                    bounds_list.append([tau_min, tau_max])
+        for i, j in self._pairs_ij:
+            tau_min, tau_max = get_tau_interval(self._families[i, j])
+            if np.isnan(bounds[i, j]):
+                tau_min = tau_min
+            else:
+                tau_min = max(bounds[i, j], tau_min)
+            if np.isnan(bounds[j, i]):
+                tau_max = tau_max
+            else:
+                tau_max = min(bounds[j, i], tau_max)
+            bounds_list.append([tau_min, tau_max])
 
         check_matrix(bounds)
         self._bounds_tau = bounds
@@ -1460,10 +1314,10 @@ class ImpactOfDependence(object):
     def input_sample_(self, value):
         raise EnvironmentError("You cannot set this variable")
 
-    # TODO: there is a compromise between speed and memory efficiency...
     @property
     def all_params_(self):
-        params = np.zeros((self._n_sample, self._corr_dim), dtype=float)
+        # There is a compromise between speed and memory efficiency.
+        params = np.zeros((self._n_sample, self._corr_dim))
         n = self._n_input_sample
         for i, param in enumerate(self._params):
             params[n*i:n*(i+1), :] = param
@@ -1477,49 +1331,56 @@ class ImpactOfDependence(object):
     def reshaped_output_sample_(self, value):
         raise EnvironmentError("You cannot set this variable")
 
-    def get_params(self, dep_meas='Kendall Tau', only_pairs=True):
-        if dep_meas == 'Kendall Tau':
-            params = np.zeros((self._n_param, self._corr_dim))
-            for k in self._pairs:
-                params[:, k] = self._copula[k].to_Kendall(self._params[:, k])
-        
-        if only_pairs:
-            return params[:, self._pairs]
-        else:
-            return params
-            
+    @property
+    def kendalls_(self):
+        kendalls = np.zeros((self._n_param, self._corr_dim))
+        for k in self._pairs:
+            kendalls[:, k] = self._copula_converters[k].to_Kendall(self._params[:, k])
+        return kendalls
+
+    @property
+    def params_(self):
+        return self._params
+
     @property
     def fixed_params(self):
         return self._fixed_params
         
     @fixed_params.setter
-    def fixed_params(self, matrix):
+    def fixed_params(self, value):
         """
         Setter of the matrix of fixed params.
         """
-        if matrix is None:
+        if value is None:
             # There is no fixed pairs
             matrix = np.zeros((self._input_dim, self._input_dim), dtype=float)
             matrix[:] = None
-
+        elif isinstance(value, str):
+            # It should be a path to a csv file
+            matrix = pd.read_csv(value, index_col=0).values
+        else:
+            matrix = value
+            
         # The matrix should be checked
         check_matrix(matrix)
             
         # The lists only contains the fixed pairs informations
         self._fixed_pairs = []
-        self._fixed_params = []
+        self._fixed_params = matrix
+        self._fixed_params_list = []
         k = 0
         for i in range(1, self._input_dim):
             for j in range(i):
                 if self._families[i, j] > 0:
                     if matrix[i, j] == 0.:
-                        print 'The pair param %d-%d is set to 0. Check if this is correct.' % (i, j)
+                        warnings.warn('The parameter of the pair %d-%d is set to 0. Check if this is correct.' % (i, j))
                     if not np.isnan(matrix[i, j]):
                         # The pair is fixed we add it in the list
                         self._fixed_pairs.append(k)
-                        self._fixed_params.append(matrix[i, j])
+                        self._fixed_params_list.append(matrix[i, j])
                         # And we remove it from the list of dependent pairs
                         self._pairs.remove(k)
+                        self._pairs_ij.remove([i, j])
                         self._n_pairs -= 1
                 k += 1
 
@@ -1694,7 +1555,7 @@ class DependenceResult(object):
                     ax.plot([p_min, p_max], [indep_quant_l_bound] * 2, "r--")
                     ax.plot([p_min, p_max], [indep_quant_u_bound] * 2, "r--")
 
-            i, j = obj._pairs_ids[0][0], obj._pairs_ids[0][1]
+            i, j = obj._pairs_ij[0][0], obj._pairs_ij[0][1]
             ax.set_xlabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
             ax.set_ylabel(quantity_name)
             ax.legend(loc="best")
@@ -1740,9 +1601,9 @@ class DependenceResult(object):
                     #    ax.plot([p_min, p_max], [indep_quant_u_bound] * 2,
                     #    "r--")
                 # Labels
-                i, j = obj._pairs_ids[0][0], obj._pairs_ids[0][1]
+                i, j = obj._pairs_ij[0][0], obj._pairs_ij[0][1]
                 ax.set_xlabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
-                i, j = obj._pairs_ids[1][0], obj._pairs_ids[1][1]
+                i, j = obj._pairs_ij[1][0], obj._pairs_ij[1][1]
                 ax.set_ylabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
 
                 ax.set_zlabel(quantity_name)
@@ -1823,4 +1684,3 @@ def to_matrix(param, dim):
             k += 1
 
     return matrix
-
