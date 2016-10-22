@@ -205,12 +205,13 @@ class ImpactOfDependence(object):
                 list_output_sample.append(data_out.value)
                 list_n.append(grp.attrs['n'])
 
-        # The sample are reordered
+
+        # Each sample is made from the same dependence parameters
+        # They need to be reordered
         n = sum(list_n)
         n_sample = n*n_params
         input_sample = np.zeros((n_sample, input_dim))
         output_sample = np.zeros((n_sample, output_dim))
-        
         a = 0
         for i, ni in enumerate(list_n):
             for k in range(n_params):
@@ -220,13 +221,13 @@ class ImpactOfDependence(object):
                 output_sample[start:end, :] = list_output_sample[i][k*ni:(k+1)*ni, :]
             a += ni
                     
-        obj = cls(tmp, margins, families, fixed_params=fixed_params, 
+        obj = cls(tmp, margins, families, fixed_params=fixed_params,
                   bounds_tau=bounds_tau, vine_structure=structure)
                 
         obj._params = params
         obj._n_param = n_params
         obj._n_sample = n_sample
-        obj._n_input_sample = n        
+        obj._n_input_sample = n
         if with_input_sample:
             obj._input_sample = input_sample
         obj._all_output_sample = output_sample
@@ -244,7 +245,7 @@ class ImpactOfDependence(object):
             obj._grid = grid_type
             obj._grid_filename = grid_filename
             obj._lhs_grid_criterion = lhs_grid_criterion
-        
+
         return obj
 
     def run(self, n_dep_param, n_input_sample, grid='lhs',
@@ -455,7 +456,7 @@ class ImpactOfDependence(object):
                 print grad
             return self.func_quant(param, alpha, n_input_sample)
             
-        algorithm = nlopt.GN_DIRECT        
+        algorithm = nlopt.GN_DIRECT
         opt = nlopt.opt(algorithm, self._n_pairs)
         opt.set_lower_bounds([-0.9])
         opt.set_upper_bounds([0.9])
@@ -545,6 +546,7 @@ class ImpactOfDependence(object):
                             tau_min, tau_max = self._bounds_tau_list[k]
                             meas_param[:, i] = np.random.uniform(tau_min, tau_max, n_param)
                     elif self._copula_type == "normal":
+                        # TODO: correct this
                         meas_param = create_random_kendall_tau(self._families, n_param)
                     else:
                         raise AttributeError('Unknow copula type:', self._copula_type)
@@ -688,7 +690,7 @@ class ImpactOfDependence(object):
         print 'loading file %s' % name        
         sample = np.loadtxt(filename).reshape(n_param, -1)
         assert n_param == sample.shape[0], 'Wrong grid size'
-        assert p == sample.shape[1], 'Wrong dimension'            
+        assert p == sample.shape[1], 'Wrong dimension'
         return sample, filename
 
     def build_forest(self, quant_forest=QuantileForest()):
@@ -761,7 +763,7 @@ class ImpactOfDependence(object):
                             confidence_level=0.95, operator='>', bootstrap=False,
                             output_ID=0):
         """Computes conditional probabilities for each parameters.
-        
+
         Compute the probability of the current sample for each dependence
         parameter.
 
@@ -907,7 +909,7 @@ class ImpactOfDependence(object):
         else:
             for i in range(self._input_dim):
                 input_names.append("x_%d" % (i + 1))
-                
+
         # List of output variable names
         if output_names:
             assert len(output_names) == self._output_dim, \
@@ -915,7 +917,7 @@ class ImpactOfDependence(object):
         else:
             for i in range(self._output_dim):
                 output_names.append("y_%d" % (i + 1))
-                
+
         margin_dict = {}
         # List of marginal names
         for i, marginal in enumerate(self._margins):
@@ -923,7 +925,7 @@ class ImpactOfDependence(object):
                 params = list(marginal.getParameter())
                 margin_dict['Marginal_%d Family' % (i)] = name
                 margin_dict['Marginal_%d Parameters' % (i)] = params
-               
+
         filename_exists = True
         init_file_name = file_name
         k = 0
@@ -992,7 +994,7 @@ class ImpactOfDependence(object):
                     list_groups.sort()
                     if list_groups:
                         grp_number = list_groups[-1] + 1
-        
+
                     grp = hdf_store.create_group(str(grp_number))
                     grp.attrs['n'] = self._n_input_sample
                     grp.create_dataset('input_sample', data=self._input_sample)
@@ -1004,7 +1006,7 @@ class ImpactOfDependence(object):
                 k += 1
 
         print 'Data saved in %s' % (file_name)
-        
+
         return file_name
 
     def draw_matrix_plot(self, corr_id=None, copula_space=False, figsize=(10, 10),
@@ -1017,7 +1019,7 @@ class ImpactOfDependence(object):
             id_corr = np.where((self.all_params_ == self._params[corr_id]).all(axis=1))[0]
 
         data = self._input_sample[id_corr]
-        
+
         if copula_space:
             x = np.zeros(data.shape)
             for i, marginal in enumerate(self._margins):
@@ -1341,7 +1343,9 @@ class ImpactOfDependence(object):
     @property
     def params_(self):
         return self._params
-
+    @property
+    def n_dep_params_(self):
+        return self._n_param
     @property
     def fixed_params(self):
         return self._fixed_params

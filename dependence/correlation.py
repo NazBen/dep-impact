@@ -129,7 +129,6 @@ def create_random_kendall_tau(corr_variables, n=1, sampling="monte-carlo"):
 
     corr_variables: the matrix to defined the variables that are correlated
     """
-
     dim = corr_variables.shape[0]
     corr_dim = dim * (dim - 1) / 2
     corr_vars = []  # Correlated variables
@@ -142,10 +141,10 @@ def create_random_kendall_tau(corr_variables, n=1, sampling="monte-carlo"):
                 corr_vars.append(k)
             k += 1
     n_corr_vars = len(corr_vars)
-    
+
     # Array of correlation parameters
-    list_tau = np.zeros((n, corr_dim), dtype=np.float)
-    
+    list_tau = np.zeros((n, corr_dim))
+
     for i in range(n): # For each parameter
         condition = True
         # Stop when the matrix is definite semi positive
@@ -158,7 +157,7 @@ def create_random_kendall_tau(corr_variables, n=1, sampling="monte-carlo"):
                 raise ValueError("Unknow sampling strategy")
 
             u = Conversion.NormalCopula.fromKendallToParam(u)
-                
+
             if n_corr_vars == corr_dim:
                 rho = u
             else:
@@ -167,18 +166,13 @@ def create_random_kendall_tau(corr_variables, n=1, sampling="monte-carlo"):
 
             if check_params(rho, dim):
                 condition = False
-            
+
         list_tau[i, :] = Conversion.NormalCopula.fromParamToKendall(rho)
-        
+
     if n == 1:
         return list_tau.ravel()
     else:
         return list_tau
-#
-#dim = 3
-#corr_vars = np.ones((dim, dim))
-#print create_random_kendall_tau(corr_vars, is_normal=True)
-
 
 def create_random_correlation_param(corr_variables, n=1, sampling="monte-carlo"):
     """
