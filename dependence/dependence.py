@@ -1485,7 +1485,7 @@ class DependenceResult(object):
         if dep_meas == "KendallTau":
             params = np.zeros((n_param, n_pairs))
             for i, k in enumerate(obj._pairs):
-                params[:, i] = obj._copula[k].to_Kendall(copula_params[:, i])
+                params[:, i] = obj._copula_converters[k].to_Kendall(copula_params[:, i])
             param_name = "\\tau"
         elif dep_meas == "CopulaParam":
             params = copula_params

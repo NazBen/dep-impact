@@ -11,6 +11,16 @@ def add_function(x):
     """
     return x.sum(axis=1)
 
+def dep_params_list_to_matrix(params, dim):
+    sigma = np.ones((dim, dim))
+    k = 0
+    for i in range(1, dim):
+        for j in range(i):
+            sigma[i, j] = params[k]
+            sigma[j, i] = params[k]
+            k += 1
+    return sigma
+
 def true_additive_gaussian_quantile(alpha, dim, sigma, nu=None, const=None):
     """The output quantile of an additive problem with
     gaussian distritution and linearly correlated.
@@ -76,17 +86,7 @@ DIMENSIONS = range(2, 4)
 LIST_COPULA = ["NormalCopula", "ClaytonCopula"]
 LIST_MEASURES = ["PearsonRho", "KendallTau"]
 
-def dep_params_list_to_matrix(params, dim):
-    sigma = np.ones((dim, dim))
-    k = 0
-    for i in range(1, dim):
-        for j in range(i):
-            sigma[i, j] = params[k]
-            sigma[j, i] = params[k]
-            k += 1
-    return sigma
-
-def test_aaa():
+def test_additive_gaussian_emprical_estimation():
     for alpha, threshold in zip(ALPHAS, THRESHOLDS):
         for dim in DIMENSIONS:
             impact = ImpactOfDependence(add_function, [ot.Normal()]*dim, np.ones((dim, dim)), copula_type='normal')
@@ -105,30 +105,6 @@ def test_aaa():
                             err_msg="Failed with alpha = {0}, dim = {1}"\
                             .format(alpha, dim))
             assert_allclose(empirical_probabilities, true_probability, rtol=1e-01,
-                            err_msg="Failed with threshold = {0}, dim = {1}"\
-                            .format(threshold, dim))
-
-def test_additive_gaussian_emprical_estimation():
-    """
-    Check if the estimated output quantiles and probabilities of an additive 
-    gaussian model are correct.
-    """
-    for alpha, threshold in zip(ALPHAS, THRESHOLDS):
-        for dim in DIMENSIONS:
-            impact = ImpactOfDependence(add_function, [ot.Normal()] * dim, 
-                                        copula_name='NormalCopula')
-            impact.run(n_dep_param=100, n_input_sample=100000, 
-                       fixed_grid=False, dep_measure='PearsonRho', seed=0)
-        
-            true_quant = true_quantile(alpha, dim, impact._params)
-            quant_res = impact.compute_quantiles(alpha)
-            assert_allclose(quant_res.quantity, true_quant, rtol=1e-01,
-                            err_msg="Failed with alpha = {0}, dim = {1}"\
-                            .format(alpha, dim))
-                            
-            true_proba = true_probability(threshold, dim, impact._params)
-            proba_res = impact.compute_probability(threshold, operator='lower')
-            assert_allclose(proba_res.quantity, true_proba, rtol=1e-01,
                             err_msg="Failed with threshold = {0}, dim = {1}"\
                             .format(threshold, dim))
 
@@ -350,5 +326,5 @@ def test_constraints():
     print quantile.quantity
 
 if __name__ == '__main__':
-    test_aaa()
+    test_additive_gaussian_emprical_estimation()
 
