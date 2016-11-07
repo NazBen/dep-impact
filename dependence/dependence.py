@@ -25,6 +25,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.cm as cmx
 from mpl_toolkits.mplot3d import Axes3D
+from sklearn.ensemble import GradientBoostingRegressor
 
 from pyquantregForest import QuantileForest
 
@@ -454,17 +455,24 @@ class ImpactOfDependence(object):
             dict_out[str(param)] = out_sample[k].tolist()
 
         size_leaf = K*n/ratio
+        use_gradient_boosting = False
 
         for k in range(n_iters):
             # Create and fit the forest
-            forest = QuantileForest(n_estimators=1, min_samples_leaf=size_leaf, n_jobs=-1)
+            if not use_gradient_boosting:
+                forest = QuantileForest(n_estimators=1, min_samples_leaf=size_leaf, n_jobs=-1)
+            else:
+                forest = GradientBoostingRegressor(loss='quantile', alpha=alpha, n_estimators=100, min_samples_leaf=size_leaf, max_leaf_nodes=K)
             forest.fit(all_params, all_out_sample)
 
             # The unique params
             params_k = unique_rows(all_params)
 
             # Estimate quantiles
-            quantiles_k = forest.compute_quantile(params_k, alpha)
+            if not use_gradient_boosting:
+                quantiles_k = forest.compute_quantile(params_k, alpha)
+            else:
+                quantiles_k = forest.predict(params_k)
 
             # Get zones by looking to the unique quantiles
             unique_quantiles = np.unique(quantiles_k)
@@ -540,7 +548,7 @@ class ImpactOfDependence(object):
                 print 'Selected leaf in [%.2f, %.2f]' % (new_params.min(), new_params.max())
                 print
 
-            if with_plot:
+            if with_plot and self._n_pairs in [1, 2]:
                 ax_quant.lines = []
                 ax_quant.set_ylim(quantiles_k.min(), quantiles_k.max())
                 ax_quant.plot(params_k, quantiles_k, 'r.')
@@ -548,7 +556,7 @@ class ImpactOfDependence(object):
                     ax_quant.plot(with_true_quant[0], with_true_quant[1], 'g-')
 
                 ax_utility.lines = []
-                ax_utility.set_ylim(0, 1.05)
+                #ax_utility.set_ylim(0, 1.05)
                 for i, utility in enumerate(density):
                     x_utility = [zone_shapes[i][:, 0], zone_shapes[i][:, 1]]
                     y_utility = [utility]*2
