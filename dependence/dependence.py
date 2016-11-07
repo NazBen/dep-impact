@@ -412,21 +412,20 @@ class ImpactOfDependence(object):
         self._params = param
         self._build_and_run(n_input_sample)
         self._run_type = 'Custom'
-        
-        
-    def run_tree_minimisation(self, alpha, n=10, K=20, n_iters=30, 
+
+    def run_tree_minimisation(self, alpha, n=1, K=20, n_iters=30, 
                               coeff=0.6, ratio=10, 
                               leaf_selection='probabilistic', seed=None, 
-                              verbose=True, with_plot=False):
+                              verbose=True, with_plot=False, with_true_quant=None):
         """Gets the minimum quantile of the domain with an iterative sampling using quantile regression trees.
         """
         # Initialising the seed
         if seed is not None:
             np.random.seed(seed)
             ot.RandomGenerator.SetSeed(seed)
-            
-        if with_plot:
-            fig, axes = plt.subplots(3, 1, figsize=(10, 7), sharex=True)       
+
+        if with_plot and self._n_pairs in [1, 2]:
+            fig, axes = plt.subplots(3, 1, figsize=(10, 7), sharex=True)
             ax_quant = axes[0]
             ax_quant.set_ylabel('$Q (\\alpha)$', color='r')
             for tl in ax_quant.get_yticklabels():
@@ -437,45 +436,45 @@ class ImpactOfDependence(object):
                 tl.set_color('b')
             ax_density = axes[1]
             ax_density.set_ylabel('Density of new points')
-            
+
             ax_hist = axes[2]
             ax_hist.set_xlabel('$\\theta$')
             ax_hist.set_ylabel('Density of all points')
-            
-        self.run(K, n, grid='rand')
+
+        self.run(K, n, grid='lhs')
         params = self.params_
         out_sample = self.reshaped_output_sample_
-        
+
         all_params = np.concatenate([params]*n)
         all_out_sample = out_sample.ravel()
-        
+
         # TODO: a problem can occurs if some params are in double
         dict_out = {}
         for k, param in enumerate(params):
             dict_out[str(param)] = out_sample[k].tolist()
-            
+
         size_leaf = K*n/ratio
-        
+
         for k in range(n_iters):
             # Create and fit the forest
-            forest = QuantileForest(n_estimators=1, min_samples_leaf=size_leaf, n_jobs=-1, criterion='mse')
+            forest = QuantileForest(n_estimators=1, min_samples_leaf=size_leaf, n_jobs=-1)
             forest.fit(all_params, all_out_sample)
-            
+
             # The unique params
             params_k = unique_rows(all_params)
-            
+
             # Estimate quantiles
             quantiles_k = forest.compute_quantile(params_k, alpha)
-            
+
             # Get zones by looking to the unique quantiles
             unique_quantiles = np.unique(quantiles_k)
-            
+
             # Find the min quantile
             id_min = np.where(quantiles_k == quantiles_k.min())[0]
 
             # Shape of the zones
-            ids_in_zones = [np.where(quant == quantiles_k)[0] for quant in unique_quantiles]
-                            
+            ids_in_zones = [np.where(quant == quantiles_k)[0].tolist() for quant in unique_quantiles]
+
             # Compute the utility
             n_zones = unique_quantiles.shape[0]
 
@@ -483,55 +482,53 @@ class ImpactOfDependence(object):
             for ids_zone in ids_in_zones:
                 min_zone = params_k[ids_zone].min(axis=0)
                 max_zone = params_k[ids_zone].max(axis=0)
-                zone_shapes.append(np.r_[min_zone, max_zone])
+                zone_shapes.append(np.c_[min_zone, max_zone])
 
-            if n_zones > 1:            
+            if n_zones > 1:
                 utilities = compute_utility(coeff, quantiles_k, params_k, dict_out, unique_quantiles, ids_in_zones)
             else:
                 utilities = np.ones((1,))
-            
+
             # Posterior distribution
             density = utilities/utilities.sum()
-            
+
             # Random variable of the density
             # TODO: make it works for p > 1
             if leaf_selection == 'deterministic':
                 used_utility = utilities.argmax()
                 zone_shape = zone_shapes[used_utility]
-                new_params = np.random.uniform(zone_shape[0], zone_shape[1], (K, 1))
-            elif leaf_selection == 'probabilistic':                
+                new_params = np.zeros((K, self._corr_dim))
+                for i in self._pairs:
+                    shape = zone_shape[i, :]
+                    new_params[:, i] = np.random.uniform(shape[0], shape[1], K)
+            elif leaf_selection == 'probabilistic':
                 rv = rv_discrete(values=(range(n_zones), density))
                 used_utility = int(rv.rvs(size=1))
                 zone_shape = zone_shapes[used_utility]
-                new_params = np.random.uniform(zone_shape[0], zone_shape[1], (K, 1))
-            elif leaf_selection == 'full-probabilistic':   
-                ranges = []
-                max_up = -np.inf
-                for zone_shape in zone_shapes:
-                    ranges.append(zone_shape[0])
-                    max_up = zone_shape[1] if zone_shape[1] > max_up else max_up
-                ranges.sort()
-                ranges.append(max_up)
-                ranges = np.asarray(ranges)
-                class deterministic_gen(rv_continuous):
-                    def _cdf(self, x):    
-                        i = np.where(x >= ranges)[0][-1]
-                        return density[i] * (x - ranges[i]) / (ranges[i+1] - ranges[i]) + sum(density[:i])
-                rv = deterministic_gen(a=ranges[0], b=ranges[-1])
-                new_params = rv.rvs(size=K).reshape(K, self._n_pairs)
+                new_params = np.zeros((K, self._corr_dim))
+                for i in self._pairs:
+                    shape = zone_shape[i, :]
+                    new_params[:, i] = np.random.uniform(shape[0], shape[1], K)
+            elif leaf_selection == 'full-probabilistic':
+                rv = rv_discrete(values=(range(n_zones), density))
+                new_params = np.zeros((K, self._corr_dim))
+                for j, used_utility in enumerate(rv.rvs(size=K)):
+                    zone_shape = zone_shapes[used_utility]
+                    for i in self._pairs:
+                        shape = zone_shape[i, :]
+                        new_params[j, i] = np.random.uniform(shape[0], shape[1])
             else:
                 raise NotImplementedError('Unknow method')
-                
-            
+
             self.run_custom_param(new_params, n)
             best_out_sample = self.output_sample_
-            
+
             for i, param in enumerate(new_params):
                 if str(param.tolist()) in dict_out:
                     dict_out[str(param)].append(best_out_sample[i])
                 else:
                     dict_out[str(param)] = best_out_sample[i].reshape(-1, 1).tolist()
-                
+
             p_all_params = all_params
             all_params = np.r_[all_params, np.repeat(new_params, n, axis=0)]
             all_out_sample = np.r_[all_out_sample, best_out_sample]
@@ -542,20 +539,21 @@ class ImpactOfDependence(object):
                 print 'Min quantile: %.3f in leaf [%.2f, %.2f]' % (quantiles_k.min(), min_params.min(), min_params.max())
                 print 'Selected leaf in [%.2f, %.2f]' % (new_params.min(), new_params.max())
                 print
-                
-            if with_plot:             
+
+            if with_plot:
                 ax_quant.lines = []
                 ax_quant.set_ylim(quantiles_k.min(), quantiles_k.max())
                 ax_quant.plot(params_k, quantiles_k, 'r.')
-                 
+                if with_true_quant is not None:
+                    ax_quant.plot(with_true_quant[0], with_true_quant[1], 'g-')
+
                 ax_utility.lines = []
-#                ax_utility.set_ylim(0, 1.05)
-                ax_utility.plot(new_params, [rv.pdf(x) for x in new_params], 'b.')
-#                for i, utility in enumerate(density):
-#                    x_utility = [zone_shapes[i][0], zone_shapes[i][1]]
-#                    y_utility = [utility]*2
-#                    ax_utility.plot(x_utility, y_utility, 'b-', linewidth=2)
-            
+                ax_utility.set_ylim(0, 1.05)
+                for i, utility in enumerate(density):
+                    x_utility = [zone_shapes[i][:, 0], zone_shapes[i][:, 1]]
+                    y_utility = [utility]*2
+                    ax_utility.plot(x_utility, y_utility, 'b-', linewidth=2)
+
                 ax_density.cla()
                 ax_density.set_ylabel('Density of new points')
                 ax_density.hist(new_params, bins=ratio*3, color='blue')
@@ -565,14 +563,15 @@ class ImpactOfDependence(object):
                 ax_hist.set_ylabel('Density of all points')
                 ax_hist.hist(p_all_params, bins=100, color='blue')
                 fig.canvas.draw()
-                
+
 #            ratio += 1
 #            coeff -= 0.01
             coeff = max(0., coeff)
             print('N evals : %d' % (all_out_sample.shape[0]))
+            print 'Min quantile : %.3f at ' % (unique_quantiles.min()), zone_shapes[unique_quantiles.argmin()][self._pairs, :]
             self._all_output_sample = all_out_sample
             self._all_params= all_params
-        
+
     def _build_and_run(self, n_input_sample):
         """Creates the input sample of each dependence parameters
         and evaluates the observations.
