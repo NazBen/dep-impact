@@ -414,6 +414,42 @@ class ImpactOfDependence(object):
         self._build_and_run(n_input_sample)
         self._run_type = 'Custom'
 
+    def run_iterative(self, alpha, n, K=None, max_n_pairs=5, seed=None):
+        """Iteratively construct the worst case dependence structure.
+        """
+        if seed is not None:  # Initialises the seed
+            np.random.seed(seed)
+            ot.RandomGenerator.SetSeed(seed)
+
+        dim = self._input_dim
+        init_family = self.families
+        # First run for independence
+        self.run_independence(n, seed)
+        families = np.zeros((dim, dim))
+        indep_quantile = self.compute_quantiles(alpha).quantity.ravel()
+        selected_pairs = []
+        worst_quantiles = []
+        for k in range(max_n_pairs):
+            quantiles = {}
+            for i in range(1, dim):
+                for j in range(i):
+                    if [i, j] not in selected_pairs:
+                        tmp_families = np.copy(families)
+                        tmp_families[i, j] = init_family[i, j]
+                        self.families = tmp_families
+                        if K is None:
+                            self.minmax_run(n)
+                        else:
+                            self.run(K, n)
+                        quantiles[i, j] = self.compute_quantiles(alpha).quantity.max()
+            selected_pair = max(quantiles, key=quantiles.get)
+            i, j = selected_pair[0], selected_pair[1]
+            families[i, j] = init_family[i, j]
+            selected_pairs.append(selected_pair)
+            worst_quantiles.append(quantiles[selected_pair])
+
+        return selected_pairs, worst_quantiles
+
     def run_tree_minimisation(self, alpha, n=1, K=20, n_iters=30, 
                               coeff=0.6, ratio=10, 
                               leaf_selection='probabilistic', seed=None, 
