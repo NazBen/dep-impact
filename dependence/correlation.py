@@ -133,7 +133,7 @@ def create_random_kendall_tau(corr_variables, n=1, sampling="monte-carlo"):
     corr_dim = dim * (dim - 1) / 2
     corr_vars = []  # Correlated variables
     k = 0
-    for i in range(dim):
+    for i in range(1, dim):
         for j in range(i):
             # If the variables are correlated,
             # we add the correlation ID in the list

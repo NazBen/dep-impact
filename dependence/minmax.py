@@ -98,6 +98,7 @@ class DependenceBounding(object):
             joint_sample[:, i] = np.asarray(inv_CDF(cop_sample[:, i])).ravel()
 
         return joint_sample
+        
     @property
     def model_func(self):
         """The model function. Must be a callable.

@@ -31,7 +31,7 @@ from pyquantregForest import QuantileForest
 
 from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
-from .correlation import create_random_kendall_tau
+from .correlation import create_random_kendall_tau, check_params
 
 OPERATORS = {">": operator.gt, ">=": operator.ge,
              "<": operator.lt, "<=": operator.le}
@@ -429,6 +429,7 @@ class ImpactOfDependence(object):
         indep_quantile = self.compute_quantiles(alpha).quantity.ravel()
         selected_pairs = []
         worst_quantiles = []
+        indiv_pair_quantiles = {}
         for k in range(max_n_pairs):
             quantiles = {}
             for i in range(1, dim):
@@ -437,18 +438,21 @@ class ImpactOfDependence(object):
                         tmp_families = np.copy(families)
                         tmp_families[i, j] = init_family[i, j]
                         self.families = tmp_families
+                        #print k, i, j, families
                         if K is None:
                             self.minmax_run(n)
                         else:
                             self.run(K, n)
                         quantiles[i, j] = self.compute_quantiles(alpha).quantity.max()
+                        if k == 0:
+                            indiv_pair_quantiles[i, j] = quantiles[i, j]
             selected_pair = max(quantiles, key=quantiles.get)
             i, j = selected_pair[0], selected_pair[1]
             families[i, j] = init_family[i, j]
             selected_pairs.append(selected_pair)
             worst_quantiles.append(quantiles[selected_pair])
 
-        return selected_pairs, worst_quantiles
+        return selected_pairs, worst_quantiles, indiv_pair_quantiles, indep_quantile
 
     def run_tree_minimisation(self, alpha, n=1, K=20, n_iters=30, 
                               coeff=0.6, ratio=10, 
@@ -810,9 +814,12 @@ class ImpactOfDependence(object):
         self._n_param = n_param
         self._params = np.zeros((n_param, self._corr_dim))
 
+        from conversion import Conversion
         # Convert the dependence measure to copula parameters
         for i in self._pairs:
             self._params[:, i] = self._copula_converters[i].to_copula_parameter(meas_param[:, i], dep_measure)
+            u =  Conversion.NormalCopula.fromKendallToParam(self._params[:, i])
+            print check_params(u)
 
     def _build_input_sample(self, n):
         """Creates the observations of each dependence measure of :math:`\Theta_K`.
@@ -1816,18 +1823,18 @@ class DependenceResult(object):
                 ax.set_zlabel(quantity_name)
 
         elif n_pairs == 3:  # For 2 correlation parameters
-            color_scale = quantity
+            color_scale = quantity.ravel()
             cm = plt.get_cmap(color_map)
             c_min, c_max = min(color_scale), max(color_scale)
             cNorm = matplotlib.colors.Normalize(vmin=c_min, vmax=c_max)
-            scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=cm)
+            scalar_map = cmx.ScalarMappable(norm=cNorm, cmap=cm)
 
             x, y, z = params[:, 0], params[:, 1], params[:, 2]
 
             ax = fig.add_subplot(111, projection='3d')
-            ax.scatter(x, y, z, c=scalarMap.to_rgba(color_scale), s=40)
-            scalarMap.set_array(color_scale)
-            cbar = fig.colorbar(scalarMap)
+            ax.scatter(x, y, z, c=scalar_map.to_rgba(color_scale), s=40)
+            scalar_map.set_array(color_scale)
+            cbar = fig.colorbar(scalar_map)
             if print_indep:
                 pos = cbar.ax.get_position()
                 cbar.ax.set_aspect('auto')
