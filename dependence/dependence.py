@@ -18,14 +18,15 @@ import numpy as np
 import pandas as pd
 import openturns as ot
 import pyDOE
-from scipy.stats import norm, rv_discrete, rv_continuous
+from scipy.stats import norm, rv_discrete
 import nlopt
 import h5py
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.cm as cmx
 from mpl_toolkits.mplot3d import Axes3D
-from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
+from sklearn.tree import DecisionTreeRegressor
 
 from pyquantregForest import QuantileForest
 
@@ -408,8 +409,18 @@ class ImpactOfDependence(object):
         if seed is not None:  # Initialises the seed
             np.random.seed(seed)
             ot.RandomGenerator.SetSeed(seed)
+            
+        if isinstance(param, list):
+            param = np.asarray(param).reshape(1, -1)
 
-        self._n_param = param.shape[1]
+        if isinstance(param, float):
+            param = np.asarray([param]).reshape(1, -1)
+            
+        if param.ndim == 1:
+            param = param.reshape(1, -1)
+            
+        self._n_param = param.shape[0]
+
         self._params = param
         self._build_and_run(n_input_sample)
         self._run_type = 'Custom'
@@ -455,7 +466,7 @@ class ImpactOfDependence(object):
         return selected_pairs, worst_quantiles, indiv_pair_quantiles, indep_quantile
 
     def run_tree_minimisation(self, alpha, n=1, K=20, n_iters=30, 
-                              coeff=0.6, ratio=10, 
+                              coeff=0.5, ratio=10, 
                               leaf_selection='probabilistic', seed=None, 
                               verbose=True, with_plot=False, with_true_quant=None):
         """Gets the minimum quantile of the domain with an iterative sampling using quantile regression trees.
@@ -500,7 +511,7 @@ class ImpactOfDependence(object):
         for k in range(n_iters):
             # Create and fit the forest
             if not use_gradient_boosting:
-                forest = QuantileForest(n_estimators=1, min_samples_leaf=size_leaf, n_jobs=-1)
+                forest = DecisionTreeRegressor(min_samples_leaf=size_leaf)
             else:
                 forest = GradientBoostingRegressor(loss='quantile', alpha=alpha, n_estimators=100, min_samples_leaf=size_leaf, max_leaf_nodes=K)
             forest.fit(all_params, all_out_sample)
@@ -510,7 +521,7 @@ class ImpactOfDependence(object):
 
             # Estimate quantiles
             if not use_gradient_boosting:
-                quantiles_k = forest.compute_quantile(params_k, alpha)
+                quantiles_k = forest.predict_quantile(params_k, alpha)
             else:
                 quantiles_k = forest.predict(params_k)
 
@@ -819,7 +830,6 @@ class ImpactOfDependence(object):
         for i in self._pairs:
             self._params[:, i] = self._copula_converters[i].to_copula_parameter(meas_param[:, i], dep_measure)
             u =  Conversion.NormalCopula.fromKendallToParam(self._params[:, i])
-            print check_params(u)
 
     def _build_input_sample(self, n):
         """Creates the observations of each dependence measure of :math:`\Theta_K`.
@@ -1427,6 +1437,18 @@ class ImpactOfDependence(object):
                 k += 1
 
         self._copula_converters = [Conversion(family) for family in self._family_list]
+
+    @property
+    def pairs(self):
+        return self._pairs
+
+    @property
+    def n_pairs(self):
+        return self._n_pairs
+
+    @property
+    def corr_dim(self):
+        return self._corr_dim
 
     @property
     def copula_type(self):
