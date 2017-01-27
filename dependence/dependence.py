@@ -425,6 +425,39 @@ class ImpactOfDependence(object):
         self._build_and_run(n_input_sample)
         self._run_type = 'Custom'
 
+    def run_gradient_descent(self, alpha, n, init_param=None, max_iter=100, step_g=0.1, gamma_order=0.5):
+        """Gradient descent method using KW algorithm.
+        """
+        # Independence is taking if no starting point given
+        if init_param is None:
+            init_param = np.zeros((self._n_pairs, ))
+
+        n_pairs = self._n_pairs
+        boundaries = self._bounds_tau
+        #TODO : make it work with multi dimensionnal boundaries
+
+        # if 'normal', the boundaries are for the moment, the set of correlation matrix
+        boundaries_grad = 'normal' if self._copula_type == 'normal' else boundaries
+        boundaries_grad = boundaries if n_pairs == 1 else boundaries_grad
+
+        np.random.seed(0)
+
+        all_theta = np.zeros((max_iter, n_pairs))
+        quant_theta = np.zeros((max_iter, ))
+        all_theta[0] = theta[impact.pairs]
+        quant_theta[0] = compute_quantile(impact, theta, n, alpha)
+
+        for i in range(max_iter):
+            gamma = (i+1)**gamma_factor
+            grad = compute_gradient(impact, theta, n, eps, alpha, boundaries_grad, families)
+            theta = theta - gamma * grad # New theta
+            theta = get_in_bound(theta, boundaries_grad, families, axis='all') # Get in bound
+    
+            all_theta[i] = theta[impact.pairs]
+            quant_theta[i] = compute_quantile(impact, theta, n, alpha)
+            if not (max_iter % (i+1)):
+                print 'Iteration: %d' % (i+1)
+
     def run_iterative(self, alpha, n, K=None, max_n_pairs=5, seed=None):
         """Iteratively construct the worst case dependence structure.
         """
