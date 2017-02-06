@@ -40,7 +40,7 @@ OPERATORS = {">": operator.gt, ">=": operator.ge,
 
 class ImpactOfDependence(object):
     """
-    Quantify the impact of dependencies.
+    
 
     This class studies the influence of dependencies on the quantity of interest
     of a function output. The dependence structure is described using the 
