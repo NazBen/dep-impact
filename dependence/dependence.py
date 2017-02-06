@@ -38,13 +38,14 @@ OPERATORS = {">": operator.gt, ">=": operator.ge,
              "<": operator.lt, "<=": operator.le}
 
 
-class ImpactOfDependence(object):
+class ConservativeEstimate(object):
     """
-    
+    Conservative estimation, toward dependencies, of a quantity of interest at the output of a computational model.
 
-    This class studies the influence of dependencies on the quantity of interest
-    of a function output. The dependence structure is described using the 
-    copula theory. Vines Copula are used to build multidimensional copulas.
+    In a problem with incomplete dependence information, one can try to determine
+    the worst case scenario of dependencies according to a certain risk. 
+    The dependence structure is described using the copula theory. 
+    Vines Copulas can be used to build multidimensional copulas.
 
     Parameters
     ----------
