@@ -1,5 +1,5 @@
 ﻿"""
 """
-from .dependence import ImpactOfDependence
+from .dependence import ConservativeEstimate
 
-__all__ = ["ImpactOfDependence"]
+__all__ = ["ConservativeEstimate"]
