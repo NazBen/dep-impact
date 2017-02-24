@@ -2,8 +2,63 @@
 
 from skopt.utils import create_result
 from sklearn.utils import check_random_state
-from skopt.space import Space
+from skopt.space import Space as sk_Space
 from scipy.optimize import OptimizeResult
+from sklearn.utils.fixes import sp_version
+import pyDOE
+
+class Space(sk_Space):
+    
+    def rvs(self, n_samples=1, random_state=None, sampling='rand', 
+            sampling_criterion='centermaximin'):
+        """Draw random samples.
+    
+        The samples are in the original space. They need to be transformed
+        before being passed to a model or minimizer by `space.transform()`.
+    
+        Parameters
+        ----------
+        * `n_samples` [int, default=1]:
+            Number of samples to be drawn from the space.
+    
+        * `random_state` [int, RandomState instance, or None (default)]:
+            Set random state to something other than None for reproducible
+            results.
+    
+        Returns
+        -------
+        * `points`: [list of lists, shape=(n_points, n_dims)]
+           Points sampled from the space.
+        """
+        rng = check_random_state(random_state)
+    
+        if sampling == 'rand':
+            # Draw
+            columns = []
+        
+            for dim in self.dimensions:
+                if sp_version < (0, 16):
+                    columns.append(dim.rvs(n_samples=n_samples))
+                else:
+                    columns.append(dim.rvs(n_samples=n_samples, random_state=rng))
+        
+            # Transpose
+            rows = []
+        
+            for i in range(n_samples):
+                r = []
+                for j in range(self.n_dims):
+                    r.append(columns[j][i])
+        
+                rows.append(r)
+        elif sampling == 'lhs':
+            # Draw
+            sample = pyDOE.lhs(self.n_dims, samples=n_samples, criterion=sampling_criterion)
+            tmp = np.zeros((n_samples, self.n_dims))
+            for k, dim in enumerate(self.dimensions):
+                tmp[:, k] = sample[:, k]*(dim.high - dim.low) + dim.low
+            rows = tmp.tolist()
+        return rows
 
 def quantile_func(alpha):
     """
@@ -19,26 +74,23 @@ def proba_func(threshold):
         return (x >= threshold).sum(axis=axis)
     return func
 
-def gridsearch_minimize(func, dimensions, grid_size, n_calls, q_func='mean', grid_type='lhs', random_state=None, quantile=0.05):
+def gridsearch_minimize(func, dimensions, grid_size, n_calls, q_func=np.mean, 
+                        grid_type='rand', random_state=None):
     """
     """
     rng = check_random_state(random_state)
 
     # Create the grid
     space = Space(dimensions)
-    Xi = space.rvs(grid_size)
+    Xi = space.rvs(grid_size, sampling=grid_type)
 
     # Evaluate the sample
     out_samples = np.asarray(map(func, Xi*n_calls)).reshape(n_calls, grid_size).T
 
     if callable(q_func):
         yi = q_func(out_samples, axis=1)
-    elif q_func == 'mean':
-        yi = out_samples.mean(axis=1)
-    elif q_func == 'quantile':
-        yi = np.percentile(out_samples, alpha*100.)
 
-
+    # Set the outputs
     res = OptimizeResult()
     best = np.argmin(yi)
     res.x = Xi[best]
