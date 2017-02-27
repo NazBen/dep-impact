@@ -28,8 +28,6 @@ from mpl_toolkits.mplot3d import Axes3D
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.tree import DecisionTreeRegressor
 
-from pyquantregForest import QuantileForest
-
 from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
 from .correlation import create_random_kendall_tau, check_params

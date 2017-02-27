@@ -8,7 +8,8 @@ from sklearn.utils.fixes import sp_version
 import pyDOE
 
 class Space(sk_Space):
-    
+    """
+    """
     def rvs(self, n_samples=1, random_state=None, sampling='rand', 
             sampling_criterion='centermaximin'):
         """Draw random samples.
