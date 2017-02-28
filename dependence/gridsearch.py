@@ -64,14 +64,14 @@ class Space(sk_Space):
 def quantile_func(alpha):
     """
     """
-    def func(x, axis):
+    def func(x, axis=1):
         return np.percentile(x, alpha*100., axis=axis)
     return func
 
 def proba_func(threshold):
     """
     """
-    def func(x, axis):
+    def func(x, axis=1):
         return (x >= threshold).sum(axis=axis)
     return func
 

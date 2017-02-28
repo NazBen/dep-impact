@@ -28,6 +28,9 @@ from mpl_toolkits.mplot3d import Axes3D
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.tree import DecisionTreeRegressor
 
+
+from sklearn.utils import check_random_state
+
 from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
 from .correlation import create_random_kendall_tau, check_params
@@ -366,7 +369,7 @@ class ConservativeEstimate(object):
         self._build_and_run(n_input_sample)
         self._run_type = 'Perfect Dependence'
 
-    def run_independence(self, n_input_sample, seed=None):
+    def independence(self, n_input_sample, q_func=np.var, random_state=None):
         """Generates and evaluates observations at the independence
         configuration.
 
@@ -379,14 +382,16 @@ class ConservativeEstimate(object):
             If int, ``seed`` is the seed used by the random number generator;
             If None, ``seed`` is the seed is random.
         """
-        if seed is not None:  # Initialises the seed
-            np.random.seed(seed)
-            ot.RandomGenerator.SetSeed(seed)
-            
-        self._n_param = 1
-        self._params = np.zeros((1, self._corr_dim))
-        self._build_and_run(n_input_sample)
-        self._run_type = 'Independence'
+        rng = check_random_state(random_state)
+        run_type = 'Independence'
+        
+        assert callable(q_func), "Quantity function is not callable"
+
+        # Creates the sample of input parameters
+        input_sample = np.asarray(ot.ComposedDistribution(self._margins).getSample(n_input_sample))
+        output_sample = self.model_func(input_sample)
+
+        return DependenceResult(input_sample=input_sample, output_sample=output_sample, q_func=q_func, random_state=rng)
 
     def run_custom_param(self, param, n_input_sample, seed=None):
         """Generates and evaluates observations for custom dependence
@@ -877,14 +882,14 @@ class ConservativeEstimate(object):
         res_list = map(lambda param: self._get_sample(param, n), self._params)
         self._input_sample = np.concatenate(res_list)
 
-    def _get_sample(self, param, n_obs, param2=None):
+    def _get_sample(self, param, n_sample, param2=None):
         """Creates the observations of the joint input distribution.
 
         Parameters
         ----------
         param : :class:`~numpy.ndarray`
             A list of :math:`p` copula dependence parameters.
-        n_obs : int
+        n_sample : int
             The number of observations.
         param2 : :class:`~numpy.ndarray`, optional (default=None)
             The 2nd copula parameters. For some copula families
@@ -899,17 +904,17 @@ class ConservativeEstimate(object):
                                      matrix_param)
             # Sample from the copula
             # The reshape is in case there is only one sample (for RF tests)
-            cop_sample = vine_copula.get_sample(n_obs).reshape(n_obs, dim)
+            cop_sample = vine_copula.get_sample(n_sample).reshape(n_sample, dim)
         elif self._copula_type == 'normal':
             # Create the correlation matrix
             cor_matrix = matrix_param + matrix_param.T + np.identity(dim)
             cop = ot.NormalCopula(ot.CorrelationMatrix(cor_matrix))
-            cop_sample = np.asarray(cop.getSample(n_obs), dtype=float)
+            cop_sample = np.asarray(cop.getSample(n_sample), dtype=float)
         else:
             raise AttributeError('Unknown type of copula.')
 
         # Applied the inverse transformation to get the sample of the joint distribution
-        joint_sample = np.zeros((n_obs, dim))
+        joint_sample = np.zeros((n_sample, dim))
         for i, inv_CDF in enumerate(self._margins_inv_CDF):
             joint_sample[:, i] = np.asarray(inv_CDF(cop_sample[:, i])).ravel()
 
@@ -945,7 +950,7 @@ class ConservativeEstimate(object):
         assert p == sample.shape[1], 'Wrong dimension'
         return sample, filename
 
-    def build_forest(self, quant_forest=QuantileForest()):
+    def build_forest(self, quant_forest=None):
         """Build a Quantile Random Forest to estimate conditional quantiles.
 
         Parameters
@@ -1654,18 +1659,25 @@ class ConservativeEstimate(object):
 
 
 class DependenceResult(object):
+    """Result from conservative estimate.
+    """
+    def __init__(self, dep_params=None, input_sample=None, output_sample=None, q_func=None, random_state=None):
+        self.dep_params = dep_params
+        self.input_sample = input_sample
+        self.output_sample = output_sample
+        self.q_func = q_func
+        self.rng = check_random_state(random_state)
 
-    def __init__(self, configs, dependence_object, quantity,
-                 confidence_interval=None, cond_params=None):
+        self.bootstrap_sample = None
+
+    def compute_bootstrap(self, n_bootstrap=1000):
         """
         """
-        #TODO: think of a way to delete the dependence object.
-        #TODO: Use a ** object to pass the arguments
-        self.configs = configs
-        self.quantity = quantity
-        self.confidence_interval = confidence_interval
-        self.dependence = dependence_object
-        self.cond_params = cond_params
+        self.bootstrap_sample = bootstrap(self.output_sample, n_bootstrap, self.q_func)
+
+    @property
+    def quantity(self):
+        return self.q_func(self.output_sample, axis=0)
 
     @property
     def cond_params(self):
@@ -1999,3 +2011,13 @@ def compute_utility(coeff, quantiles_k, params_k, dict_out, unique_quantiles, id
     info_sample = (info_sample.max() - info_sample) / (info_sample.max() - info_sample.min())
     utilities = coeff*info_sample + (1 - coeff)*info_quant
     return utilities
+
+def bootstrap(data, num_samples, statistic):
+    """Returns bootstrap estimate of 100.0*(1-alpha) CI for statistic.
+    
+    Inspired from: http://people.duke.edu/~ccc14/pcfb/analysis.html"""
+    n = len(data)
+    idx = np.random.randint(0, n, (num_samples, n))
+    samples = data[idx]
+    stat = np.sort(statistic(samples, axis=1))
+    return stat
