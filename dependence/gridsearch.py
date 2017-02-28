@@ -86,7 +86,7 @@ def gridsearch_minimize(func, dimensions, grid_size, n_calls, q_func=np.mean,
     Xi = space.rvs(grid_size, sampling=grid_type)
 
     # Evaluate the sample
-    out_samples = np.asarray(map(func, Xi*n_calls)).reshape(n_calls, grid_size).T
+    out_samples = np.asarray(map(func, Xi*n_calls)).reshape(-1, grid_size).T
 
     if callable(q_func):
         yi = q_func(out_samples, axis=1)

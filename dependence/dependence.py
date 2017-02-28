@@ -28,6 +28,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.tree import DecisionTreeRegressor
 
+from .gridsearch import gridsearch_minimize, Space
 
 from sklearn.utils import check_random_state
 
@@ -252,6 +253,47 @@ class ConservativeEstimate(object):
 
         return obj
 
+    def gridsearch_minimize(self, n_dep_param, n_input_sample, grid_type='lhs',
+                            dep_measure='KendallTau', q_func=np.var,
+                            random_state=None, use_grid=None, save_grid=None):
+        """
+        """
+        rng = check_random_state(random_state)
+        run_type = 'Classic'
+        assert callable(q_func), "Quantity function is not callable"
+        dimensions = self._bounds_tau_list
+
+        # Create the grid
+        space = Space(dimensions)
+        params = space.rvs(n_dep_param, sampling=grid_type)
+        
+        param_func = lambda param: self.stochastic_function(param, n_input_sample)
+
+        # Evaluate the sample
+        a = np.asarray(map(param_func, params))
+        output_samples = np.asarray(map(param_func, params)).reshape(n_dep_param, n_input_sample)
+
+        return ListDependenceResult(dep_params=params, output_samples=output_samples, q_func=q_func, random_state=rng)
+
+    def stochastic_function(self, param, n_input_sample, random_state=None):
+        """This function considers the model output as a stochastic code by taking the
+        dependence parameter as input.
+        """
+        rng = check_random_state(random_state)
+        run_type = 'Custom'
+
+        if isinstance(param, list):
+            param = np.asarray(param)
+        elif isinstance(param, float):
+            param = np.asarray([param])
+
+        assert param.ndim == 1, 'Only one parameter at a time for the moment'
+
+        input_sample = self._get_sample(param, n_input_sample)
+        output_sample = self.model_func(input_sample)
+
+        return output_sample
+
     def run(self, n_dep_param, n_input_sample, grid='lhs',
             dep_measure="KendallTau", seed=None, use_grid=None, save_grid=None):
         """Generates and evaluates observations of the multiple dependence parameters
@@ -384,7 +426,6 @@ class ConservativeEstimate(object):
         """
         rng = check_random_state(random_state)
         run_type = 'Independence'
-        
         assert callable(q_func), "Quantity function is not callable"
 
         # Creates the sample of input parameters
@@ -914,11 +955,11 @@ class ConservativeEstimate(object):
             raise AttributeError('Unknown type of copula.')
 
         # Applied the inverse transformation to get the sample of the joint distribution
-        joint_sample = np.zeros((n_sample, dim))
+        input_sample = np.zeros((n_sample, dim))
         for i, inv_CDF in enumerate(self._margins_inv_CDF):
-            joint_sample[:, i] = np.asarray(inv_CDF(cop_sample[:, i])).ravel()
+            input_sample[:, i] = np.asarray(inv_CDF(cop_sample[:, i])).ravel()
 
-        return joint_sample
+        return input_sample
 
     def _output_info(self):
         """Information about the output dimension.
@@ -1657,17 +1698,53 @@ class ConservativeEstimate(object):
                         self._n_pairs -= 1
                 k += 1
 
+class ListDependenceResult(list):
+    """
+    """
+    def __init__(self, dep_params=None, input_samples=None, output_samples=None, q_func=None, random_state=None):
+        self.dep_params = dep_params
+        self.input_samples = input_samples
+        self.output_samples = output_samples
+        self.q_func = q_func
+        self.rng = check_random_state(random_state)
+        self.bootstrap_samples = None
+
+        for k, dep_param in enumerate(dep_params):
+            input_sample = None if input_samples is None else input_samples[k]
+
+            result = DependenceResult(dep_param=dep_param, input_sample=input_sample, 
+                                      output_sample=output_samples[k], q_func=q_func, random_state=self.rng)
+            self.append(result)
+
+    @property
+    def quantities(self):
+        return np.asarray([result.quantity for result in self])
+
+    @property
+    def min_result(self):
+        return self[self.quantities.argmin()]
+
+    @property
+    def min_quantity(self):
+        return self.quantities.min()
+
+    @property
+    def argmin_quantity(self):
+        return self[self.quantities.argmin()].dep_param
+
+    def compute_bootstraps(self, n_bootstrap=1000):
+        self.bootstrap_samples = np.asarray([bootstrap(result.output_sample, n_bootstrap, self.q_func) for result in self])
+
 
 class DependenceResult(object):
     """Result from conservative estimate.
     """
-    def __init__(self, dep_params=None, input_sample=None, output_sample=None, q_func=None, random_state=None):
-        self.dep_params = dep_params
+    def __init__(self, dep_param=None, input_sample=None, output_sample=None, q_func=None, random_state=None):
+        self.dep_param = dep_param
         self.input_sample = input_sample
         self.output_sample = output_sample
         self.q_func = q_func
         self.rng = check_random_state(random_state)
-
         self.bootstrap_sample = None
 
     def compute_bootstrap(self, n_bootstrap=1000):
