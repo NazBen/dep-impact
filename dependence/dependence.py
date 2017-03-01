@@ -110,6 +110,7 @@ class ConservativeEstimate(object):
         self._grid_folder = './experiment_designs'
         self._dep_measure = None
         self._load_data = False
+        self.eps = 1.E-4
         
     @classmethod
     def from_hdf(cls, filepath_or_buffer, id_of_experiment='all', out_ID=0, with_input_sample=True):
@@ -261,11 +262,24 @@ class ConservativeEstimate(object):
         rng = check_random_state(random_state)
         run_type = 'Classic'
         assert callable(q_func), "Quantity function is not callable"
-        dimensions = self._bounds_tau_list
-
-        # Create the grid
-        space = Space(dimensions)
-        params = space.rvs(n_dep_param, sampling=grid_type)
+        dimensions = [self._bounds_tau_list[pair] for pair in self.pairs]
+        
+        # We take the bounds
+        if n_dep_param is None:
+            n_pair = self._n_pairs
+            params = list(itertools.product([-1., 1., 0.], repeat=n_pair))
+            params.remove((0.,)*n_pair) # remove indepencence
+            params = np.asarray(params)
+            for p in range(n_pair):
+                params_p = params[:, p]
+                params_p[params_p == -1.] = dimensions[p][0]
+                params_p[params_p == 1.] = dimensions[p][1]
+                
+            n_dep_param = len(params)
+        else:
+            # Create the grid
+            space = Space(dimensions)
+            params = space.rvs(n_dep_param, sampling=grid_type)
         
         def param_func(param):
             return self.stochastic_function(param, n_input_sample)
@@ -294,7 +308,10 @@ class ConservativeEstimate(object):
 
         assert param.ndim == 1, 'Only one parameter at a time for the moment'
 
-        input_sample = self._get_sample(param, n_input_sample)
+        full_param = np.zeros((self._corr_dim, ))
+        full_param[self.pairs] = param
+        
+        input_sample = self._get_sample(full_param, n_input_sample)
         output_sample = self.model_func(input_sample)
 
         return output_sample
