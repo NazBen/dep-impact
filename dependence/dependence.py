@@ -28,7 +28,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.tree import DecisionTreeRegressor
 
-from .gridsearch import gridsearch_minimize, Space
+from .gridsearch import Space
 
 from sklearn.utils import check_random_state
 
@@ -267,20 +267,25 @@ class ConservativeEstimate(object):
         space = Space(dimensions)
         params = space.rvs(n_dep_param, sampling=grid_type)
         
-        param_func = lambda param: self.stochastic_function(param, n_input_sample)
+        def param_func(param):
+            return self.stochastic_function(param, n_input_sample)
 
         # Evaluate the sample
-        a = np.asarray(map(param_func, params))
-        output_samples = np.asarray(map(param_func, params)).reshape(n_dep_param, n_input_sample)
+        tmp = map(param_func, params)
+        output_samples = np.asarray(tmp).reshape(n_dep_param, n_input_sample)
+        
+        result = ListDependenceResult(dep_params=params, 
+                                      output_samples=output_samples, 
+                                      q_func=q_func, run_type=run_type,
+                                      random_state=rng)
 
-        return ListDependenceResult(dep_params=params, output_samples=output_samples, q_func=q_func, random_state=rng)
+        return result
 
     def stochastic_function(self, param, n_input_sample, random_state=None):
-        """This function considers the model output as a stochastic code by taking the
-        dependence parameter as input.
+        """This function considers the model output as a stochastic code by 
+        taking the dependence parameter as input.
         """
         rng = check_random_state(random_state)
-        run_type = 'Custom'
 
         if isinstance(param, list):
             param = np.asarray(param)
@@ -1565,6 +1570,10 @@ class ConservativeEstimate(object):
         self._vine_structure = structure
 
     @property
+    def input_dim(self):
+        return self._input_dim
+    
+    @property
     def bounds_tau(self):
         return self._bounds_tau
 
@@ -1701,11 +1710,14 @@ class ConservativeEstimate(object):
 class ListDependenceResult(list):
     """
     """
-    def __init__(self, dep_params=None, input_samples=None, output_samples=None, q_func=None, random_state=None):
+    def __init__(self, dep_params=None, input_samples=None, 
+                 output_samples=None, q_func=None, run_type=None, 
+                 random_state=None):
         self.dep_params = dep_params
         self.input_samples = input_samples
         self.output_samples = output_samples
         self.q_func = q_func
+        self.run_type = run_type
         self.rng = check_random_state(random_state)
         self.bootstrap_samples = None
 
@@ -1739,11 +1751,13 @@ class ListDependenceResult(list):
 class DependenceResult(object):
     """Result from conservative estimate.
     """
-    def __init__(self, dep_param=None, input_sample=None, output_sample=None, q_func=None, random_state=None):
+    def __init__(self, dep_param=None, input_sample=None, output_sample=None, 
+                 q_func=None, run_type=None, random_state=None):
         self.dep_param = dep_param
         self.input_sample = input_sample
         self.output_sample = output_sample
         self.q_func = q_func
+        self.run_type = run_type
         self.rng = check_random_state(random_state)
         self.bootstrap_sample = None
 
