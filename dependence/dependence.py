@@ -256,7 +256,8 @@ class ConservativeEstimate(object):
 
     def gridsearch_minimize(self, n_dep_param, n_input_sample, grid_type='lhs',
                             dep_measure='KendallTau', q_func=np.var,
-                            random_state=None, use_grid=None, save_grid=None):
+                            random_state=None, use_grid=None, save_grid=None, 
+                            done_dep_params=None):
         """
         """
         rng = check_random_state(random_state)
@@ -284,13 +285,30 @@ class ConservativeEstimate(object):
         def param_func(param):
             return self.stochastic_function(param, n_input_sample)
 
+        # Some parameters are cancelled if the user asks
+        if done_dep_params is not None:
+            full_params = np.zeros((n_dep_param, self.corr_dim))
+            full_params[:, self.pairs] = params
+            param_to_del = []
+            for param in done_dep_params:
+                k = np.where((param == full_params).all(axis=1))[0].tolist()
+                if k:
+                    param_to_del.extend(k)
+            
+            if len(param_to_del) > 0:
+                n_dep_param -= len(param_to_del)
+                params = np.delete(params, param_to_del, axis=0)
+                print params.shape
+            
         # Evaluate the sample
         tmp = map(param_func, params)
         output_samples = np.asarray(tmp).reshape(n_dep_param, n_input_sample)
         
+        
         result = ListDependenceResult(dep_params=params, 
                                       output_samples=output_samples, 
                                       q_func=q_func, run_type=run_type,
+                                      families=self.families,
                                       random_state=rng)
 
         return result
@@ -1728,22 +1746,37 @@ class ListDependenceResult(list):
     """
     """
     def __init__(self, dep_params=None, input_samples=None, 
-                 output_samples=None, q_func=None, run_type=None, 
-                 random_state=None):
-        self.dep_params = dep_params
-        self.input_samples = input_samples
-        self.output_samples = output_samples
-        self.q_func = q_func
-        self.run_type = run_type
-        self.rng = check_random_state(random_state)
-        self.bootstrap_samples = None
-
+                 output_samples=None, q_func=None, run_type=None, n_evals=None,
+                 families=None, random_state=None):
         for k, dep_param in enumerate(dep_params):
             input_sample = None if input_samples is None else input_samples[k]
 
             result = DependenceResult(dep_param=dep_param, input_sample=input_sample, 
                                       output_sample=output_samples[k], q_func=q_func, random_state=self.rng)
             self.append(result)
+        
+        self.dep_params = dep_params
+        if self.dep_params is not None:
+            self.n_params = len(self.dep_params)
+        self.input_samples = input_samples
+        self.output_samples = output_samples
+        self.q_func = q_func
+        self.run_type = run_type
+        self.families = families
+        self.rng = check_random_state(random_state)
+        if output_samples is not None:
+            self.n_evals = output_samples.shape[0] * output_samples.shape[1]
+        else:
+            self.n_evals = None
+        self.bootstrap_samples = None
+
+
+
+    def append(self, result):
+        """
+        """
+        super(ListDependenceResult, self).append(result)
+        print result.dep_param
 
     @property
     def quantities(self):
@@ -1760,6 +1793,15 @@ class ListDependenceResult(list):
     @property
     def argmin_quantity(self):
         return self[self.quantities.argmin()].dep_param
+    
+    @property
+    def full_dep_params(self):
+        dim = self.families.shape[0]
+        corr_dim = dim * (dim - 1) / 2
+        full_params = np.zeros((self.n_params, corr_dim))
+        pairs = to_list(self.families)
+        full_params[:, pairs] = self.dep_params
+        return full_params
 
     def compute_bootstraps(self, n_bootstrap=1000):
         self.bootstrap_samples = np.asarray([bootstrap(result.output_sample, n_bootstrap, self.q_func) for result in self])
@@ -2073,6 +2115,20 @@ def to_matrix(param, dim):
 
     return matrix
     
+def to_list(matrix):
+    """
+    """
+    params = []
+    k = 0
+    dim = matrix.shape[0]
+    for i in range(dim):
+        for j in range(i):
+            if matrix[i, j] > 0:
+                params.append(k)
+            k += 1
+
+    return params
+
 def unique_rows(a):
     a = np.ascontiguousarray(a)
     unique_a = np.unique(a.view([('', a.dtype)]*a.shape[1]))
