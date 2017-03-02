@@ -1,7 +1,7 @@
 import numpy as np
 import copy
 
-from .dependence import ConservativeEstimate
+from .dependence import ConservativeEstimate, ListDependenceResult
 
 GRIDS = ['lhs', 'rand']
 
@@ -37,7 +37,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
     p = 0
     n_dep_param = n_dep_param_init
     while p < p_max:
-        all_results = {}
+        all_results = ListDependenceResult()
         min_quantity = {}
         for i in range(1, dim):
             for j in range(i):
@@ -61,7 +61,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
                     cost += results.n_evals
                     
                     # Save the results                
-                    all_results[i, j] = results
+                    all_results.extend(results)
                     
                     # Save the minimum
                     if not with_bootstrap:

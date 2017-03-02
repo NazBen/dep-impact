@@ -257,7 +257,7 @@ class ConservativeEstimate(object):
     def gridsearch_minimize(self, n_dep_param, n_input_sample, grid_type='lhs',
                             dep_measure='KendallTau', q_func=np.var,
                             random_state=None, use_grid=None, save_grid=None, 
-                            done_dep_params=None):
+                            done_results=None):
         """
         """
         rng = check_random_state(random_state)
@@ -286,24 +286,31 @@ class ConservativeEstimate(object):
             return self.stochastic_function(param, n_input_sample)
 
         # Some parameters are cancelled if the user asks
-        if done_dep_params is not None:
+        if done_results is not None:
             full_params = np.zeros((n_dep_param, self.corr_dim))
-            full_params[:, self.pairs] = params
-            param_to_del = []
+            full_params[:, self.pairs] = params            
+            done_dep_params = done_results.dep_full_params
+            
+            params_not_to_compute = []
+            params_id_not_to_compute = []
             for param in done_dep_params:
                 k = np.where((param == full_params).all(axis=1))[0].tolist()
                 if k:
-                    param_to_del.extend(k)
-            
-            if len(param_to_del) > 0:
-                n_dep_param -= len(param_to_del)
-                params = np.delete(params, param_to_del, axis=0)
-                print params.shape
+                    params_not_to_compute.append(param)
+                    params_id_not_to_compute.extend(k)
+                    
+            params_not_to_compute = np.asarray(params_not_to_compute)
+            n_dep_param -= len(params_id_not_to_compute)
+            params = np.delete(params, params_id_not_to_compute, axis=0)
+            print params.shape
             
         # Evaluate the sample
-        tmp = map(param_func, params)
+        tmp = map(param_func, params)                
         output_samples = np.asarray(tmp).reshape(n_dep_param, n_input_sample)
         
+        if done_results is not None:
+            params = np.r_[params, params_not_to_compute]
+            output_samples = np.c_[output_samples, done_results.output_samples]
         
         result = ListDependenceResult(dep_params=params, 
                                       output_samples=output_samples, 
@@ -1745,79 +1752,144 @@ class ConservativeEstimate(object):
 class ListDependenceResult(list):
     """
     """
-    def __init__(self, dep_params=None, input_samples=None, 
-                 output_samples=None, q_func=None, run_type=None, n_evals=None,
+    def __init__(self, dep_params=None, output_samples=None, input_samples=None, 
+                 q_func=None, run_type=None, n_evals=None,
                  families=None, random_state=None):
-        for k, dep_param in enumerate(dep_params):
-            input_sample = None if input_samples is None else input_samples[k]
-
-            result = DependenceResult(dep_param=dep_param, input_sample=input_sample, 
-                                      output_sample=output_samples[k], q_func=q_func, random_state=self.rng)
-            self.append(result)
         
         self.dep_params = dep_params
-        if self.dep_params is not None:
-            self.n_params = len(self.dep_params)
-        self.input_samples = input_samples
         self.output_samples = output_samples
-        self.q_func = q_func
-        self.run_type = run_type
-        self.families = families
         self.rng = check_random_state(random_state)
-        if output_samples is not None:
-            self.n_evals = output_samples.shape[0] * output_samples.shape[1]
-        else:
-            self.n_evals = None
+        self.q_func = q_func
+            
+        if dep_params is not None:
+            for k, dep_param in enumerate(dep_params):
+                input_sample = None if input_samples is None else input_samples[k]
+    
+                result = DependenceResult(dep_param=dep_param, input_sample=input_sample, 
+                                          output_sample=output_samples[k], q_func=q_func, families=families, random_state=self.rng)
+                self.append(result)
+        
+        self.families = families
         self.bootstrap_samples = None
-
-
-
-    def append(self, result):
-        """
-        """
-        super(ListDependenceResult, self).append(result)
-        print result.dep_param
-
+        
+        if self.families is not None:
+            dim = self.families.shape[0]
+            self.corr_dim = dim * (dim - 1) /2
+            self.pairs = to_list(self.families)
+            
+    def extend(self, results):
+        super(ListDependenceResult, self).extend(results)
+        if self.n_pairs != results.n_pairs:
+            print('The number of pairs are differents! Warning')
+        self.n_pairs = results.n_pairs
+        self.n_input_sample = results.n_input_sample
+        self.families = results.families
+             
+    @property
+    def corr_dim(self):
+        dim = self.families.shape[0]
+        return dim * (dim - 1) /2
+    
+    @property
+    def dep_params(self):
+        if self.n_params == 0:
+            print("There is no data...")
+        else:
+            params = np.zeros((self.n_params, self.n_pairs))
+            for k, result in enumerate(self):
+                params[k, :] = result.dep_param
+            
+            return params
+    
+    @dep_params.setter
+    def dep_params(self, dep_params):
+        if dep_params is None:
+            self.n_pairs = 0
+        else:
+            self.n_pairs = dep_params.shape[1]
+        
+    @property
+    def output_samples(self):
+        if self.n_params == 0:
+            print("There is no data...")
+        else:
+            out_sample = np.zeros((self.n_input_sample, self.n_params))
+            for k, result in enumerate(self):
+                out_sample[:, k] = result.output_sample
+            return out_sample
+    
+    @output_samples.setter
+    def output_samples(self, samples):
+        if samples is None:
+            self.n_input_sample = 0
+        else:  
+            self.n_input_sample = samples.shape[1]
+        
+    @property
+    def n_evals(self):
+        return self.n_params*self.n_input_sample
+    
+    @property
+    def n_params(self):
+        return len(self)
+    
     @property
     def quantities(self):
-        return np.asarray([result.quantity for result in self])
+        if self.n_params == 0:
+            print("There is no data...")
+        else:
+            return np.asarray([result.quantity for result in self])
 
     @property
     def min_result(self):
-        return self[self.quantities.argmin()]
+        if self.n_params == 0:
+            print("There is no data...")
+        else:
+            return self[self.quantities.argmin()]
 
     @property
     def min_quantity(self):
-        return self.quantities.min()
+        if self.n_params == 0:
+            print("There is no data...")
+        else:
+            return self.quantities.min()
 
     @property
     def argmin_quantity(self):
-        return self[self.quantities.argmin()].dep_param
+        if self.n_params == 0:
+            print("There is no data...")
+        else:
+            return self[self.quantities.argmin()].dep_param
     
     @property
     def full_dep_params(self):
-        dim = self.families.shape[0]
-        corr_dim = dim * (dim - 1) / 2
-        full_params = np.zeros((self.n_params, corr_dim))
-        pairs = to_list(self.families)
-        full_params[:, pairs] = self.dep_params
-        return full_params
+        if self.n_params == 0:
+            print("There is no data...")
+        else:
+            full_params = np.zeros((self.n_params, self.corr_dim))
+            for k, result in enumerate(self):
+                full_params[k, :] = result.full_dep_params
+            return full_params
 
     def compute_bootstraps(self, n_bootstrap=1000):
-        self.bootstrap_samples = np.asarray([bootstrap(result.output_sample, n_bootstrap, self.q_func) for result in self])
+        if self.n_params == 0:
+            print("There is no data...")
+        else:
+            self.bootstrap_samples = np.asarray([bootstrap(result.output_sample, n_bootstrap, self.q_func) for result in self])
 
 
 class DependenceResult(object):
     """Result from conservative estimate.
     """
     def __init__(self, dep_param=None, input_sample=None, output_sample=None, 
-                 q_func=None, run_type=None, random_state=None):
+                 q_func=None, run_type=None, families=None, random_state=None):
         self.dep_param = dep_param
         self.input_sample = input_sample
         self.output_sample = output_sample
         self.q_func = q_func
         self.run_type = run_type
         self.rng = check_random_state(random_state)
+        self.families = families
         self.bootstrap_sample = None
 
     def compute_bootstrap(self, n_bootstrap=1000):
@@ -1836,6 +1908,15 @@ class DependenceResult(object):
     @cond_params.setter
     def cond_params(self, value):
         self._cond_params = value
+        
+    @property
+    def full_dep_params(self):
+        dim = self.families.shape[0]
+        corr_dim = dim * (dim - 1) / 2
+        full_params = np.zeros((corr_dim, ))
+        pairs = to_list(self.families)
+        full_params[pairs] = self.dep_param
+        return full_params
 
     @property
     def dependence(self):
