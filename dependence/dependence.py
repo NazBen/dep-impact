@@ -263,54 +263,50 @@ class ConservativeEstimate(object):
         rng = check_random_state(random_state)
         run_type = 'Classic'
         assert callable(q_func), "Quantity function is not callable"
-        dimensions = [self._bounds_tau_list[pair] for pair in self.pairs]
         
-        # We take the bounds
+        dimensions = [self._bounds_tau_list[pair] for pair in self.pairs]
+
         if n_dep_param is None:
-            n_pair = self._n_pairs
-            params = list(itertools.product([-1., 1., 0.], repeat=n_pair))
-            params.remove((0.,)*n_pair) # remove indepencence
-            params = np.asarray(params)
-            for p in range(n_pair):
-                params_p = params[:, p]
-                params_p[params_p == -1.] = dimensions[p][0]
-                params_p[params_p == 1.] = dimensions[p][1]
-                
+            # We take the bounds
+            params = create_bounds_grid(dimensions)                
             n_dep_param = len(params)
         else:
-            # Create the grid
+            # We create the grid
             space = Space(dimensions)
             params = space.rvs(n_dep_param, sampling=grid_type)
         
         def param_func(param):
             return self.stochastic_function(param, n_input_sample)
 
-        # Some parameters are cancelled if the user asks
-        if done_results is not None:
+        params_not_to_compute = []
+        # Some parameters are cancelled has already done the computation
+        if (done_results is not None) and (done_results.n_params > 0):
             full_params = np.zeros((n_dep_param, self.corr_dim))
-            full_params[:, self.pairs] = params            
-            done_dep_params = done_results.dep_full_params
+            full_params[:, self.pairs] = params
+            done_dep_params = done_results.full_dep_params
             
             params_not_to_compute = []
             params_id_not_to_compute = []
-            for param in done_dep_params:
-                k = np.where((param == full_params).all(axis=1))[0].tolist()
+            for param in full_params:
+                k = np.where((param == done_dep_params).all(axis=1))[0].tolist()
                 if k:
                     params_not_to_compute.append(param)
-                    params_id_not_to_compute.extend(k)
+                    params_id_not_to_compute.append(k[0])
                     
             params_not_to_compute = np.asarray(params_not_to_compute)
             n_dep_param -= len(params_id_not_to_compute)
+            
+            print("You saved %d params to compute" % len(params_id_not_to_compute))
             params = np.delete(params, params_id_not_to_compute, axis=0)
-            print params.shape
             
         # Evaluate the sample
         tmp = map(param_func, params)                
         output_samples = np.asarray(tmp).reshape(n_dep_param, n_input_sample)
         
-        if done_results is not None:
-            params = np.r_[params, params_not_to_compute]
-            output_samples = np.c_[output_samples, done_results.output_samples]
+        # Add back the results
+        if len(params_not_to_compute) > 0:
+            params = np.r_[params, params_not_to_compute[:, self.pairs]]
+            output_samples = np.r_[output_samples, done_results.output_samples]
         
         result = ListDependenceResult(dep_params=params, 
                                       output_samples=output_samples, 
@@ -1749,6 +1745,7 @@ class ConservativeEstimate(object):
                         self._n_pairs -= 1
                 k += 1
 
+
 class ListDependenceResult(list):
     """
     """
@@ -1756,9 +1753,8 @@ class ListDependenceResult(list):
                  q_func=None, run_type=None, n_evals=None,
                  families=None, random_state=None):
         
-        self.dep_params = dep_params
-        self.output_samples = output_samples
         self.rng = check_random_state(random_state)
+        # TODO: add a setter in the class
         self.q_func = q_func
             
         if dep_params is not None:
@@ -1770,21 +1766,19 @@ class ListDependenceResult(list):
                 self.append(result)
         
         self.families = families
-        self.bootstrap_samples = None
-        
-        if self.families is not None:
-            dim = self.families.shape[0]
-            self.corr_dim = dim * (dim - 1) /2
-            self.pairs = to_list(self.families)
+        self._bootstrap_samples = None
             
-    def extend(self, results):
-        super(ListDependenceResult, self).extend(results)
-        if self.n_pairs != results.n_pairs:
-            print('The number of pairs are differents! Warning')
-        self.n_pairs = results.n_pairs
-        self.n_input_sample = results.n_input_sample
-        self.families = results.families
+    def extend(self, value):
+        super(ListDependenceResult, self).extend(value)
+        self.families = value.families
              
+    @property
+    def pairs(self):
+        if self.families is None:
+            print('Family matrix was not defined')
+        else:
+            return to_list(self.families)
+        
     @property
     def corr_dim(self):
         dim = self.families.shape[0]
@@ -1795,36 +1789,30 @@ class ListDependenceResult(list):
         if self.n_params == 0:
             print("There is no data...")
         else:
-            params = np.zeros((self.n_params, self.n_pairs))
-            for k, result in enumerate(self):
-                params[k, :] = result.dep_param
-            
-            return params
+            return [result.dep_param for result in self]
     
-    @dep_params.setter
-    def dep_params(self, dep_params):
-        if dep_params is None:
-            self.n_pairs = 0
+    @property
+    def n_pairs(self):
+        if self.n_params == 0:
+            return 0
         else:
-            self.n_pairs = dep_params.shape[1]
-        
+            return (self.families > 0).sum()
+    
     @property
     def output_samples(self):
         if self.n_params == 0:
             print("There is no data...")
         else:
-            out_sample = np.zeros((self.n_input_sample, self.n_params))
-            for k, result in enumerate(self):
-                out_sample[:, k] = result.output_sample
-            return out_sample
+            # TODO: Must be changed is the number of sample is different for each param
+            return np.asarray([result.output_sample for result in self])
     
-    @output_samples.setter
-    def output_samples(self, samples):
-        if samples is None:
-            self.n_input_sample = 0
+    @property
+    def n_input_sample(self):
+        if self.n_params == 0:
+            return 0
         else:  
-            self.n_input_sample = samples.shape[1]
-        
+            return self.output_samples.shape[1]
+
     @property
     def n_evals(self):
         return self.n_params*self.n_input_sample
@@ -1866,17 +1854,22 @@ class ListDependenceResult(list):
         if self.n_params == 0:
             print("There is no data...")
         else:
-            full_params = np.zeros((self.n_params, self.corr_dim))
-            for k, result in enumerate(self):
-                full_params[k, :] = result.full_dep_params
-            return full_params
+            return np.asarray([result.full_dep_params for result in self])
+
+    @property
+    def bootstrap_samples(self):
+        if self._bootstrap_samples is None:
+            print('Bootstrap not computed')
+        else:
+            return self._bootstrap_samples
 
     def compute_bootstraps(self, n_bootstrap=1000):
         if self.n_params == 0:
             print("There is no data...")
         else:
-            self.bootstrap_samples = np.asarray([bootstrap(result.output_sample, n_bootstrap, self.q_func) for result in self])
+            self._bootstrap_samples = np.asarray([bootstrap(result.output_sample, n_bootstrap, self.q_func) for result in self])
 
+    
 
 class DependenceResult(object):
     """Result from conservative estimate.
@@ -2266,3 +2259,17 @@ def bootstrap(data, num_samples, statistic):
     samples = data[idx]
     stat = np.sort(statistic(samples, axis=1))
     return stat
+
+def create_bounds_grid(dimensions):
+    """
+    """
+    n_pair = len(dimensions)
+    params = list(itertools.product([-1., 1., 0.], repeat=n_pair))
+    params.remove((0.,)*n_pair) # remove indepencence
+    params = np.asarray(params)
+    for p in range(n_pair):
+        params_p = params[:, p]
+        params_p[params_p == -1.] = dimensions[p][0]
+        params_p[params_p == 1.] = dimensions[p][1]
+        
+    return params
