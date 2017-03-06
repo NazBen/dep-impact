@@ -266,6 +266,7 @@ class ConservativeEstimate(object):
          
         dimensions = [self._bounds_tau_list[pair] for pair in self.pairs]
         params = get_dependence_parameters(dimensions, n_dep_param, grid_type)
+        n_dep_param = len(params)
 
         params_not_to_compute = []
         # Params not to compute
@@ -285,7 +286,7 @@ class ConservativeEstimate(object):
             params_not_to_compute = np.asarray(params_not_to_compute)
             n_dep_param -= len(params_id_not_to_compute)
 
-            print("You saved %d params to compute" % len(params_id_not_to_compute))
+            #print("You saved %d params to compute" % len(params_id_not_to_compute))
             params = np.delete(params, params_id_not_to_compute, axis=0)
 
         # Evaluate the sample
@@ -297,12 +298,16 @@ class ConservativeEstimate(object):
         if len(params_not_to_compute) > 0:
             params = np.r_[params, params_not_to_compute[:, self.pairs]]
             output_samples = np.r_[output_samples, done_results.output_samples]
+            saved_nevals = len(params_not_to_compute)*n_input_sample
+        else:
+            saved_nevals = 0
 
         return ListDependenceResult(dep_params=params,
                                     output_samples=output_samples,
                                     q_func=q_func, run_type=run_type,
                                     families=self.families,
-                                    random_state=rng)
+                                    random_state=rng,
+                                    saved_nevals=saved_nevals)
 
     def stochastic_function(self, param, n_input_sample=1, random_state=None):
         """This function considers the model output as a stochastic code by 
@@ -786,12 +791,12 @@ class ListDependenceResult(list):
     """
     def __init__(self, dep_params=None, output_samples=None, input_samples=None, 
                  q_func=None, run_type=None, n_evals=None,
-                 families=None, random_state=None):
+                 families=None, random_state=None, saved_nevals=0):
         
         self.rng = check_random_state(random_state)
         # TODO: add a setter in the class
         self.q_func = q_func
-            
+
         if dep_params is not None:
             for k, dep_param in enumerate(dep_params):
                 input_sample = None if input_samples is None else input_samples[k]
@@ -799,14 +804,15 @@ class ListDependenceResult(list):
                 result = DependenceResult(dep_param=dep_param, input_sample=input_sample, 
                                           output_sample=output_samples[k], q_func=q_func, families=families, random_state=self.rng)
                 self.append(result)
-        
+
         self.families = families
         self._bootstrap_samples = None
-            
+        self.saved_nevals = saved_nevals
+
     def extend(self, value):
         super(ListDependenceResult, self).extend(value)
         self.families = value.families
-             
+
     @property
     def pairs(self):
         if self.families is None:
@@ -850,8 +856,8 @@ class ListDependenceResult(list):
 
     @property
     def n_evals(self):
-        return self.n_params*self.n_input_sample
-    
+        return self.n_params*self.n_input_sample - self.saved_nevals
+
     @property
     def n_params(self):
         return len(self)
@@ -915,8 +921,8 @@ class DependenceResult(object):
         self.output_sample = output_sample
         self.q_func = q_func
         self.run_type = run_type
-        self.rng = check_random_state(random_state)
         self.families = families
+        self.rng = check_random_state(random_state)
         self.bootstrap_sample = None
 
     def compute_bootstrap(self, n_bootstrap=1000):
@@ -929,14 +935,6 @@ class DependenceResult(object):
         return self.q_func(self.output_sample, axis=0)
 
     @property
-    def cond_params(self):
-        return self._cond_params
-
-    @cond_params.setter
-    def cond_params(self, value):
-        self._cond_params = value
-        
-    @property
     def full_dep_params(self):
         dim = self.families.shape[0]
         corr_dim = dim * (dim - 1) / 2
@@ -944,18 +942,6 @@ class DependenceResult(object):
         pairs = to_list(self.families)
         full_params[pairs] = self.dep_param
         return full_params
-
-    @property
-    def dependence(self):
-        return self._dependence
-
-    @dependence.setter
-    def dependence(self, obj):
-        # TODO: there is a bug sometimes. I don't know why it makes a difference 
-        # between ImpactOfDependence and dependence.dependence.ImpactOfDependence
-        #assert isinstance(obj, ImpactOfDependence), \
-        #    TypeError('Variable must be an ImpactOfDependence object. Got instead:', type(obj))
-        self._dependence = obj
 
     @property
     def configs(self):

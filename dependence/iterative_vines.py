@@ -1,4 +1,4 @@
-import numpy as np
+﻿import numpy as np
 import copy
 
 from .dependence import ConservativeEstimate, ListDependenceResult
@@ -10,15 +10,12 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
                             with_bootstrap=False, re_use_params=False, verbose=False):
     """
     """
-    
+
     quant_estimate = copy.copy(estimate_object)
     max_n_pairs = quant_estimate.corr_dim
-    
 #    assert isinstance(quant_estimate, ConservativeEstimate), \
 #        "Object must be from the ConservativeEstimate class"
-        
     assert grid_type in GRIDS, "Unknow Grid type {0}".format(grid_type)
-    
     assert 0 < p_max < max_n_pairs, "Maximum number of pairs must be positive"
     assert 1 < n_add_pairs < max_n_pairs, "Must add at least one pair at each iteration"
     assert 0 <= n_remove_pairs < max_n_pairs, "This cannot be negative"
@@ -55,24 +52,24 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
                                                                  grid_type=grid_type, 
                                                                  q_func=q_func,
                                                                  done_results=all_results)
-                    
+
                     all_params = np.r_[all_params, results.full_dep_params]
                     # How much does it costs
                     cost += results.n_evals
-                    
-                    # Save the results                
+
+                    # Save the results
                     all_results.extend(results)
-                    
+
                     # Save the minimum
                     if not with_bootstrap:
                         min_quantity[i, j] = results.min_quantity
                     else:
                         assert isinstance(with_bootstrap, int), "Must be a number"
-                        n_bootstrap = with_bootstrap                        
+                        n_bootstrap = with_bootstrap
                         results.compute_bootstraps(n_bootstrap)
                         print results.bootstrap_samples.mean(axis=1)
                         min_quantity[i, j] = results[results.bootstrap_samples.mean(axis=1).argmin()]
-                        
+
                     if verbose:
                         print('Worst quantile of {0} at {1}'.format(selected_pairs + [(i, j)], min_quantity[i, j]))
 
@@ -80,7 +77,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
         sorted_quantities = sorted(min_quantity.items(), key=lambda x: x[1])
         if (n_remove_pairs > 0) and (n_remove_pairs < len(sorted_quantities)-1):
             removed_pairs.extend([pair[0] for pair in sorted_quantities[-n_remove_pairs:]])
-        
+
         selected_pair = sorted_quantities[0][0]
         for pair in sorted_quantities[:n_add_pairs]:
             i, j = pair[0][0], pair[0][1]
@@ -89,9 +86,9 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
         worst_quantities.append(min_quantity[selected_pair])
         if verbose:
             print('p=%d, worst quantile at %.2f, cost = %d' % (p+1, min_quantity[selected_pair], cost))
-            
+
         p += n_add_pairs
         if n_dep_param is not None:
             n_dep_param = n_dep_param_init*int(np.sqrt(p+1))
-        
+
     return worst_quantities, selected_pairs, removed_pairs

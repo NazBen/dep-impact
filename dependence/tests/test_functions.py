@@ -1,4 +1,4 @@
-import numpy as np
+﻿import numpy as np
 import openturns as ot
 
 def func_overflow(X, model=1):
@@ -44,6 +44,20 @@ dist_Cb = ot.Triangular(55., 55.5, 56.)
 dist_L = ot.Triangular(4990., 5000., 5010.)
 dist_B = ot.Triangular(295., 300., 305.)
 
-
 margins_overflow = [dist_Q, dist_Ks, dist_Zv, dist_Zm, dist_Hd, dist_Cb, dist_L, dist_B]
 var_names_overflow  = ["Q", "K_s", "Z_v", "Z_m", "H_d", "C_b", "L", "B"]
+
+def func_sum(x, a=None):
+    """Additive example
+    """        
+    n, dim = x.shape
+    if a is None:
+        a = np.ones((dim, 1))
+
+    if a.ndim == 1:
+        a = a.reshape(-1, 1)
+        assert a.shape[0] == dim, "Shape not good"
+    elif a.ndim > 2:
+        raise AttributeError('Dimension problem for constant a')
+        
+    return np.dot(x, a)
