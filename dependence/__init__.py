@@ -1,10 +1,9 @@
 ﻿"""
 """
-try:
-    from .dependence import ConservativeEstimate
-    from .iterative_vines import iterative_vine_minimize
-except ImportError:
-    print "No module OpenTURNS... Maybe you don't need it!"
+from .dependence import ConservativeEstimate
+from .iterative_vines import iterative_vine_minimize
+#except ImportError:
+#    print("No module OpenTURNS... Maybe you don't need it!")
 from .gridsearch import proba_func, quantile_func
 from .vinecopula import VineCopula
 

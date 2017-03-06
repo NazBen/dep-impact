@@ -513,11 +513,11 @@ class ConservativeEstimate(object):
                     grp.create_dataset('output_sample', data=self._all_output_sample.reshape((self._n_sample, self._output_dim)))
                     filename_exists = False
             except AssertionError:
-                print 'File %s already has different configurations' % (file_name)
+                print('File %s already has different configurations' % (file_name))
                 file_name = '%s_%d.hdf5' % (init_file_name[:-5], k)
                 k += 1
 
-        print 'Data saved in %s' % (file_name)
+        print('Data saved in %s' % (file_name))
 
         return file_name
 
