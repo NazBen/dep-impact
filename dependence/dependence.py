@@ -17,9 +17,7 @@ import os
 import numpy as np
 import pandas as pd
 import openturns as ot
-import pyDOE
 from scipy.stats import norm, rv_discrete
-import nlopt
 import h5py
 import matplotlib
 import matplotlib.pyplot as plt
@@ -406,7 +404,7 @@ class ConservativeEstimate(object):
         else:
             raise AttributeError('Unknow use_grid')
         assert os.path.exists(filename), 'Grid file %s does not exists' % name
-        print 'loading file %s' % name        
+        print('loading file %s' % name)
         sample = np.loadtxt(filename).reshape(n_param, -1)
         assert n_param == sample.shape[0], 'Wrong grid size'
         assert p == sample.shape[1], 'Wrong dimension'

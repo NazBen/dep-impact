@@ -25,6 +25,8 @@ def check_family(matrix):
                 raise ValueError("Uncorrect Family matrix")
 
     return matrix
+
+
 class VineCopula(object):
     """Vine Copula Class."""
 
