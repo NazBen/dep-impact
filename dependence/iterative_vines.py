@@ -46,6 +46,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
                     # Family matrix is changed
                     quant_estimate.families = tmp_families
                     
+                    
                     # Lets get the results for this family structure
                     results = quant_estimate.gridsearch_minimize(n_dep_param=n_dep_param,
                                                                  n_input_sample=n_input_sample, 
@@ -57,8 +58,9 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
                     # How much does it costs
                     cost += results.n_evals
 
-                    # Save the results
-                    all_results.extend(results)
+                    if re_use_params:
+                        # Save the results
+                        all_results.extend(results)
 
                     # Save the minimum
                     if not with_bootstrap:
