@@ -95,6 +95,12 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
     return worst_quantities, selected_pairs, removed_pairs
 
 
+def check_structure_shape(structure):
+    """Check if the structure shape is correct.
+    """
+    assert structure.shape[0] == structure.shape[1], "Structure matrix should be squared"
+    assert np.triu(structure, k=1).sum() == 0, "Matrix should be lower triangular"
+
 def get_pair(dim, index):
     """ Get the pair of variables from a given index.
     """
@@ -104,28 +110,28 @@ def get_pair(dim, index):
             if k == index:
                 return [i+1, j+1]
             k+=1
-            
-            
+
+
 def is_vine_structure(matrix):
     """Check if the given matrix is a Vine Structure matrix
     """
     dim = matrix.shape[0]
-    u_matrix = np.triu(matrix, k=1)
     diag = np.diag(matrix)
+    check_structure_shape(matrix)
     assert matrix.max() == dim, "Maximum should be the dimension: %d != %d" % (matrix.max(), dim)
     assert matrix.min() == 0, "Minimum should be 0: %d != %d" % (matrix.min(), dim)
-    assert matrix.shape[0] == matrix.shape[1], "Matrix should be squared"
-    assert u_matrix.sum() == 0, "Matrix should be lower triangular"
     assert len(np.unique(diag)) == dim, "Element should be uniques on the diagonal: %d != %d" % (len(np.unique(diag)), dim)
     for i in range(dim):
         column_i = matrix[i:, i]
         assert len(np.unique(column_i)) == dim - i, "Element should be unique for each column: %d != %d" % ( len(np.unique(column_i)), dim - i)
         for node in diag[:i]:
             assert node not in column_i, "Previous main node should not exist after"
-    return matrix
-           
- 
+    return True
+
+
 def check_redundancy(structure):
+    """Check if there is no redundancy of the diagonal variables.
+    """
     dim = structure.shape[0]
     diag = np.diag(structure)
     for i in range(dim-1):
@@ -137,9 +143,16 @@ def check_redundancy(structure):
 
 
 def rotate_pairs(init_pairs, rotations):
+    """Rotate the pairs according to some rotations.
+    """
+    n_pairs = len(init_pairs)
+    assert len(rotations) == n_pairs, \
+        "The number of rotations is different to the number of pairs %d != %d" % (len(rotations), n_pairs)
+    assert not np.setdiff1d(np.unique(rotations), [1, -1]), \
+        "The rotations list should only be composed of -1 and 1."
     pairs = []
-    for i, ci in enumerate(rotations):
-        if ci == -1:
+    for i in range(n_pairs):
+        if rotations[i] == -1:
             pairs.append(list(reversed(init_pairs[i])))
         else:
             pairs.append(init_pairs[i])
@@ -147,45 +160,58 @@ def rotate_pairs(init_pairs, rotations):
 
 
 def add_pair(structure, pair, index, lvl):
-    assert structure.shape[0] == structure.shape[1], "Matrix should be squared"
+    """Adds a pair in a Vine structure in a certain place and for a specific conditionement.
+    """
     dim = structure.shape[0]
     if lvl == 0: # If it's the unconditiononal variables
-        assert structure[index, index] == 0, "Diagonal should be empty"
-        assert structure[dim-1, index] == 0, "Last row element should be empty"
+        assert structure[index, index] == 0, \
+            "There is already a variable at [%d, %d]" % (index, index)
+        assert structure[dim-1, index] == 0, \
+            "There is already a variable at [%d, %d]" % (dim-1, index)
         structure[index, index] = pair[0]
         structure[dim-1, index] = pair[1]
     else:
-        assert structure[index, index] == pair[0], "First element should be the same as the first variable of the pair"
-        structure[dim - 1 - lvl, index] = pair[1]
+        assert structure[index, index] == pair[0], \
+            "First element should be the same as the first variable of the pair"
+        assert structure[dim-1-lvl, index] == 0, \
+            "There is already a variable at [%d, %d]" % (dim-1, index)
+        structure[dim-1-lvl, index] = pair[1]
     return structure
 
 
-def add_pairs(structure, pairs, lvl):
-    """
+def add_pairs(structure, pairs, lvl, verbose=False):
+    """Add pairs in a structure for a selected level of conditionement.
     """
     dim = structure.shape[0]
     n_pairs = len(pairs)
-    assert dim == structure.shape[1], "Matrix should be squared"
     assert n_pairs < dim - lvl, "Not enough place to fill the pairs"
     n_slots = dim - 1 - lvl
     possibilities = list(itertools.permutations(range(n_slots), r=n_pairs))
+    success = False
+    init_structure = np.copy(structure)
     for possibility in possibilities:
         try:
             # Add the pair in the possible order
-            for i, pair in enumerate(pairs):
-                structure = add_pair(structure, pair, possibility[i], lvl)
-            break
+            structure = np.copy(init_structure)
+            for i in range(n_pairs):
+                structure = add_pair(structure, pairs[i], possibility[i], lvl)
+            if check_redundancy(structure):
+                success = True
+                break
         except AssertionError:
             pass
 
-    dim = structure.shape[0]
+    if not success and verbose:
+        print('Did not succeded to fill the structure with the given pairs')
+
+    # If it's the 1st level, the last row of last column must be filled
     if (lvl == 0) and (n_pairs == dim-1):
         structure[dim-1, dim-1] = np.setdiff1d(range(dim+1), np.diag(structure))[0]
     return structure
 
 
 def fill_structure(structure):
-    """
+    """Fill the structure with the remaining variables
     """
     dim = structure.shape[0]
     prev_ind = []
@@ -211,7 +237,8 @@ def check_node_loop(pairs, n_p=3):
 
 
 def get_pairs_by_levels(dim, forced_pairs_ids, verbose=True):
-    """
+    """Given a list of sorted pairs, this gives the pairs for the different levels o    f
+    conditionement.
     """
     n_pairs = dim*(dim-1)/2
     n_forced_pairs = len(forced_pairs_ids)
@@ -243,23 +270,29 @@ def get_pairs_by_levels(dim, forced_pairs_ids, verbose=True):
     if verbose:
         print("Concerned pairs: {0}".format(forced_pairs.tolist()))
         print("Remaining pairs: {0}".format(remaining_pairs.tolist()))
-    
-    n_levels = len(pairs_by_levels)
-    lvl = 0
-    while lvl < n_levels:
-        pairs_level = pairs_by_levels[lvl]
-        if not check_node_loop(pairs_level):
-            if lvl == n_levels - 1:
-                pairs_by_levels.append([pairs_level.pop()])
-                n_levels += 1
-            else:
-                pairs_by_levels[lvl+1].insert(0, pairs_level.pop())
-                pairs_by_levels[lvl].append(pairs_by_levels[lvl+1].pop(1))
-        lvl += 1
-        
+
+    idx = 1
+    init_pairs_by_levels = copy.deepcopy(pairs_by_levels)  # copy
+    while not np.all([check_node_loop(pairs_level) for pairs_level in pairs_by_levels]):
+        pairs_by_levels = copy.deepcopy(pairs_by_levels)
+        n_levels = len(pairs_by_levels)
+        lvl = 0
+        while lvl < n_levels:
+            pairs_level = pairs_by_levels[lvl]
+            if not check_node_loop(pairs_level):
+                # A new level is created
+                if lvl == n_levels - 1:
+                    pairs_by_levels.append([pairs_level.pop(-idx)])
+                    n_levels += 1
+                else:
+                    # The 1st pair of the next level is replaced by the last of the previous
+                    pairs_by_levels[lvl+1].insert(0, pairs_level.pop(-idx))
+                    pairs_by_levels[lvl].append(pairs_by_levels[lvl+1].pop(1))
+            lvl += 1
+        idx += 1
     return pairs_by_levels
     
-def get_possible_structures(dim, pairs_by_levels):
+def get_possible_structures(dim, pairs_by_levels, verbose=False):
     # For each levels
     good_structures = []
     for lvl, pairs_level in enumerate(pairs_by_levels):
@@ -267,7 +300,6 @@ def get_possible_structures(dim, pairs_by_levels):
         
         # The possible combinations
         combinations = list(itertools.product([1, -1], repeat=n_pairs_level))
-        
         # Now lets get the possible pairs combinations for this level
         for k, comb_k in enumerate(combinations):
             # Rotate the pair to the actual combination
@@ -275,19 +307,24 @@ def get_possible_structures(dim, pairs_by_levels):
             if lvl == 0:
                 # Create the associated vine structure
                 structure = np.zeros((dim, dim), dtype=int)
-                structure = add_pairs(structure, pairs_k, lvl)
+                structure = add_pairs(structure, pairs_k, lvl, verbose=verbose)
                 if check_redundancy(structure):
                     good_structures.append(structure)
             else:
                 for structure in good_structures:
                     try:
-                        new_structure = add_pairs(structure, pairs_k, lvl)
+                        new_structure = add_pairs(structure, pairs_k, lvl, verbose=verbose)
                     except:
                         print("Can't add the pairs {0} in the current structure...".format(pairs_k))
                     if check_redundancy(new_structure):
                         structure = new_structure
             
     for structure in good_structures:
-        print('good:\n{0}'.format(structure))
-        
+        tmp = fill_structure(structure)
+        if is_vine_structure(tmp):
+            structure = tmp
+            print('good:\n{0}'.format(structure))
+        else:
+            good_structures.remove(tmp)
+
     return good_structures
