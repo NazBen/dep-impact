@@ -16,7 +16,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
     max_n_pairs = quant_estimate.corr_dim
     assert grid_type in GRIDS, "Unknow Grid type {0}".format(grid_type)
     assert 0 < p_max < max_n_pairs, "Maximum number of pairs must be positive"
-    assert 1 < n_add_pairs < max_n_pairs, "Must add at least one pair at each iteration"
+    assert 1 <= n_add_pairs < max_n_pairs, "Must add at least one pair at each iteration"
     assert 0 <= n_remove_pairs < max_n_pairs, "This cannot be negative"
     assert callable(q_func), "Quantity function must be callable"
     
@@ -28,13 +28,14 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
     removed_pairs = []
     worst_quantities = []
     all_params = np.zeros((0, max_n_pairs))
-
+    
     cost = 0
     p = 0
     n_dep_param = n_dep_param_init
     while p < p_max:
         all_results = ListDependenceResult()
         min_quantity = {}
+        pair_id = 0
         for i in range(1, dim):
             for j in range(i):
                 if ((i, j) not in selected_pairs) and ((i, j) not in removed_pairs):
@@ -43,9 +44,17 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
                     tmp_families[i, j] = init_family[i, j]
                     
                     # Family matrix is changed
-                    quant_estimate.families = tmp_families
+                    quant_estimate.families = tmp_families                    
+                    pairs_iter = selected_pairs + [(i, j)]
+                    pairs_iter_id = [get_pair_id(dim, pair, with_plus=False) for pair in pairs_iter]
+                    pairs_by_levels = get_pairs_by_levels(dim, pairs_iter_id)
                     
+                    quant_estimate.vine_structure = get_possible_structures(dim, pairs_by_levels)[0]
                     
+                    print pairs_iter
+                    print quant_estimate.vine_structure
+                    print quant_estimate.families
+                                  
                     # Lets get the results for this family structure
                     results = quant_estimate.gridsearch_minimize(n_dep_param=n_dep_param,
                                                                  n_input_sample=n_input_sample, 
@@ -54,6 +63,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
                                                                  done_results=all_results)
 
                     all_params = np.r_[all_params, results.full_dep_params]
+                    
                     # How much does it costs
                     cost += results.n_evals
 
@@ -68,12 +78,12 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
                         assert isinstance(with_bootstrap, int), "Must be a number"
                         n_bootstrap = with_bootstrap
                         results.compute_bootstraps(n_bootstrap)
-                        print results.bootstrap_samples.mean(axis=1)
+                        print(results.bootstrap_samples.mean(axis=1))
                         min_quantity[i, j] = results[results.bootstrap_samples.mean(axis=1).argmin()]
 
                     if verbose:
                         print('Worst quantile of {0} at {1}'.format(selected_pairs + [(i, j)], min_quantity[i, j]))
-
+                pair_id += 1
         # Get the min from the iterations
         sorted_quantities = sorted(min_quantity.items(), key=lambda x: x[1])
         if (n_remove_pairs > 0) and (n_remove_pairs < len(sorted_quantities)-1):
@@ -101,16 +111,32 @@ def check_structure_shape(structure):
     assert structure.shape[0] == structure.shape[1], "Structure matrix should be squared"
     assert np.triu(structure, k=1).sum() == 0, "Matrix should be lower triangular"
 
-def get_pair(dim, index):
+def get_pair(dim, index, with_plus=True):
     """ Get the pair of variables from a given index.
     """
     k = 0
     for i in range(1, dim):
         for j in range(i):
             if k == index:
-                return [i+1, j+1]
+                if with_plus:
+                    return [i+1, j+1]
+                else:
+                    return [i, j]
             k+=1
 
+def get_pair_id(dim, pair, with_plus=True):
+    """ Get the pair of variables from a given index.
+    """
+    k = 0
+    for i in range(1, dim):
+        for j in range(i):
+            if with_plus:
+                if (pair[0] == i+1) & (pair[1] == j+1):
+                    return k
+            else:
+                if (pair[0] == i) & (pair[1] == j):
+                    return k
+            k+=1
 
 def is_vine_structure(matrix):
     """Check if the given matrix is a Vine Structure matrix
@@ -126,8 +152,38 @@ def is_vine_structure(matrix):
         assert len(np.unique(column_i)) == dim - i, "Element should be unique for each column: %d != %d" % ( len(np.unique(column_i)), dim - i)
         for node in diag[:i]:
             assert node not in column_i, "Previous main node should not exist after"
-    return True
+            
+    if check_natural_order(matrix):
+        return True
+    else:
+        return False
 
+
+def check_natural_order(structure):
+    """Check if a parent node is included in a child node.
+    """
+    d = structure.shape[0]
+    for i in range(d-1):
+        i = 1
+        for j in range(i+1):
+            parent = [[structure[j, j], structure[i+1, j]], [structure[i+2:d, j].tolist()]]
+            col = structure[:, j]
+            parent_elements = col[np.setdiff1d(np.arange(j, d), range(j+1, i+1))]
+
+            i_c = i + 1
+            if len(parent_elements) > 2:
+                n_child = 0
+                for j_c in range(i_c+1):
+                    possible_child = [[structure[j_c, j_c], structure[i_c+1, j_c]], [structure[i_c+2:d, j_c].tolist()]]
+                    col = structure[:, j_c]
+                    possible_child_elements = col[np.setdiff1d(np.arange(j_c, d), range(j_c+1, i_c+1))]
+                    if len(np.intersect1d(possible_child_elements, parent_elements)) == d-i-1:
+                        n_child += 1
+                if n_child < 2:
+                    return False
+
+    return True
+    
 
 def check_redundancy(structure):
     """Check if there is no redundancy of the diagonal variables.
@@ -213,7 +269,9 @@ def add_pairs(structure, pairs, lvl, verbose=False):
 def fill_structure(structure):
     """Fill the structure with the remaining variables
     """
+    print structure
     dim = structure.shape[0]
+#    structure[dim-2, dim-3] = np.setdiff1d(range(1, dim+1), np.diag(structure)[:dim-2].tolist() + [structure[dim-1, dim-3]])[0]
     prev_ind = []
     for i in range(dim):
         values_i = structure[i:, i]
@@ -236,7 +294,7 @@ def check_node_loop(pairs, n_p=3):
     return True
 
 
-def get_pairs_by_levels(dim, forced_pairs_ids, verbose=True):
+def get_pairs_by_levels(dim, forced_pairs_ids, verbose=False):
     """Given a list of sorted pairs, this gives the pairs for the different levels o    f
     conditionement.
     """
@@ -293,6 +351,8 @@ def get_pairs_by_levels(dim, forced_pairs_ids, verbose=True):
     return pairs_by_levels
     
 def get_possible_structures(dim, pairs_by_levels, verbose=False):
+    """
+    """
     # For each levels
     good_structures = []
     for lvl, pairs_level in enumerate(pairs_by_levels):
@@ -300,7 +360,8 @@ def get_possible_structures(dim, pairs_by_levels, verbose=False):
         
         # The possible combinations
         combinations = list(itertools.product([1, -1], repeat=n_pairs_level))
-        # Now lets get the possible pairs combinations for this level
+        
+        # Now lets get the possible pair combinations for this level
         for k, comb_k in enumerate(combinations):
             # Rotate the pair to the actual combination
             pairs_k = rotate_pairs(pairs_level, comb_k)
@@ -309,6 +370,7 @@ def get_possible_structures(dim, pairs_by_levels, verbose=False):
                 structure = np.zeros((dim, dim), dtype=int)
                 structure = add_pairs(structure, pairs_k, lvl, verbose=verbose)
                 if check_redundancy(structure):
+#                    structure[dim-2, dim-3] = np.setdiff1d(range(1, dim+1), np.diag(structure)[:dim-2].tolist() + [structure[dim-1, dim-3]])[0]
                     good_structures.append(structure)
             else:
                 for structure in good_structures:
@@ -319,12 +381,14 @@ def get_possible_structures(dim, pairs_by_levels, verbose=False):
                     if check_redundancy(new_structure):
                         structure = new_structure
             
+    
+    remain_structures = []
     for structure in good_structures:
         tmp = fill_structure(structure)
         if is_vine_structure(tmp):
             structure = tmp
-            print('good:\n{0}'.format(structure))
-        else:
-            good_structures.remove(tmp)
+            remain_structures.append(tmp)
+            if verbose:
+                print('good:\n{0}'.format(structure))
 
-    return good_structures
+    return remain_structures
