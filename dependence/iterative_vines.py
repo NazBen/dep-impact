@@ -272,6 +272,43 @@ def fill_structure(structure):
     print structure
     dim = structure.shape[0]
 #    structure[dim-2, dim-3] = np.setdiff1d(range(1, dim+1), np.diag(structure)[:dim-2].tolist() + [structure[dim-1, dim-3]])[0]
+    
+    diag = np.unique(np.diag(structure)).tolist()
+    diag.remove(0)
+    remaining_vals = np.setdiff1d(range(1, dim+1), diag)
+    
+    n_remaining_vals = len(remaining_vals)
+    
+    diag_possibility = list(itertools.permutations(remaining_vals, n_remaining_vals))[0]
+
+    
+    for k, i in enumerate(range(dim - n_remaining_vals, dim)):
+        structure[i, i] = diag_possibility[k]
+    
+    structure[dim-1, dim-2] = structure[dim-1, dim-1]
+    
+    for i in range(dim - n_remaining_vals, dim-2):
+        structure[dim-1, i] = structure[i+1, i+1]
+        
+    lvl = 1
+    for j in range(dim-2, 0, -1):
+        for i in range(j):
+            col_i = structure[:, i]
+            tmp = col_i[np.setdiff1d(np.arange(i, dim), range(j+1, i+1))]
+            var_col_i = tmp[tmp != 0]
+            for i_c in range(i+1, j+1):
+                col_ic = structure[:, i_c]
+                tmp = col_ic[np.setdiff1d(np.arange(i_c, dim), range(j+1, i_c+1))]
+                var_col_i_c = tmp[tmp != 0]
+                intersection = np.intersect1d(var_col_i, var_col_i_c)
+                if len(intersection) == lvl:
+                    tt = var_col_i_c.tolist()
+                    for inter in intersection:
+                        tt.remove(inter)
+                    structure[j, i] = tt[0]
+                    break
+        lvl += 1
+
     prev_ind = []
     for i in range(dim):
         values_i = structure[i:, i]
