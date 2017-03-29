@@ -51,9 +51,9 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
                     
                     quant_estimate.vine_structure = get_possible_structures(dim, pairs_by_levels)[0]
                     
-                    print pairs_iter
-                    print quant_estimate.vine_structure
-                    print quant_estimate.families
+#                    print pairs_iter
+#                    print quant_estimate.vine_structure
+#                    print quant_estimate.families
                                   
                     # Lets get the results for this family structure
                     results = quant_estimate.gridsearch_minimize(n_dep_param=n_dep_param,
@@ -269,12 +269,13 @@ def add_pairs(structure, pairs, lvl, verbose=False):
 def fill_structure(structure):
     """Fill the structure with the remaining variables
     """
-    print structure
+#    print structure
     dim = structure.shape[0]
 #    structure[dim-2, dim-3] = np.setdiff1d(range(1, dim+1), np.diag(structure)[:dim-2].tolist() + [structure[dim-1, dim-3]])[0]
     
     diag = np.unique(np.diag(structure)).tolist()
-    diag.remove(0)
+    if 0 in diag:
+        diag.remove(0)
     remaining_vals = np.setdiff1d(range(1, dim+1), diag)
     
     n_remaining_vals = len(remaining_vals)
