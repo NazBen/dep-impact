@@ -44,16 +44,16 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
                     tmp_families[i, j] = init_family[i, j]
                     
                     # Family matrix is changed
-                    quant_estimate.families = tmp_families                    
+                    quant_estimate.families = tmp_families
                     pairs_iter = selected_pairs + [(i, j)]
                     pairs_iter_id = [get_pair_id(dim, pair, with_plus=False) for pair in pairs_iter]
                     pairs_by_levels = get_pairs_by_levels(dim, pairs_iter_id)
                     
-                    quant_estimate.vine_structure = get_possible_structures(dim, pairs_by_levels)[0]
-                    
+                    quant_estimate.vine_structure = get_possible_structures(dim, pairs_by_levels)[1]
+
 #                    print pairs_iter
-#                    print quant_estimate.vine_structure
-#                    print quant_estimate.families
+                    print quant_estimate.vine_structure
+                    print quant_estimate.families
                                   
                     # Lets get the results for this family structure
                     results = quant_estimate.gridsearch_minimize(n_dep_param=n_dep_param,
