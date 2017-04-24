@@ -17,22 +17,16 @@ import os
 import numpy as np
 import pandas as pd
 import openturns as ot
-from scipy.stats import norm, rv_discrete
 import h5py
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.cm as cmx
 from mpl_toolkits.mplot3d import Axes3D
-from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
-from sklearn.tree import DecisionTreeRegressor
-
-from .gridsearch import Space
-
 from sklearn.utils import check_random_state
 
+from .gridsearch import Space
 from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
-from .correlation import create_random_kendall_tau, check_params
 
 OPERATORS = {">": operator.gt, ">=": operator.ge,
              "<": operator.lt, "<=": operator.le}
@@ -40,12 +34,14 @@ OPERATORS = {">": operator.gt, ">=": operator.ge,
 
 class ConservativeEstimate(object):
     """
-    Conservative estimation, toward dependencies, of a quantity of interest at the output of a computational model.
+    Conservative estimation, toward dependencies, of a quantity of interest at 
+    the output of a computational model.
 
-    In a problem with incomplete dependence information, one can try to determine
-    the worst case scenario of dependencies according to a certain risk. 
-    The dependence structure is described using the copula theory. 
-    Vines Copulas can be used to build multidimensional copulas.
+    In a problem with incomplete dependence information, one can try to 
+    determine the worst case scenario of dependencies according to a certain 
+    risk. The dependence structure is modeled using parametric copulas. For
+    multidimensional problems, in addition of Elliptic copulas, one can use
+    R-vines to construct multidimensional copulas.
 
     Parameters
     ----------
@@ -60,7 +56,12 @@ class ConservativeEstimate(object):
         The copula family matrix. It describes the family type of each pair
         of variables. See the Vine Copula package for a description of the
         available copulas and their respective indexes.
-        
+
+    vine_structure : :class:`~numpy.ndarray` or None, optional (default=None)
+        The Vine copula structure matrix. It describes the construction of the
+        vine tree.
+        If None, a default matrix is created.
+
     fixed_params : :class:`~numpy.ndarray`, str or None, optional(default=None)
         The matrix of copula parameters for the fixed copula. Warning: the 
         matrix should contains NaN for all parameters which are not fixed.
@@ -72,11 +73,6 @@ class ConservativeEstimate(object):
         have to be on the Kendall's Tau.
         If str, it should be the path to a csv file describing the matrix.
         If None, no bounds are setted and a default matrix is created.
-
-    vine_structure : :class:`~numpy.ndarray` or None, optional (default=None)
-        The Vine copula structure matrix. It describes the construction of the
-        vine tree.
-        If None, a default matrix is created.
 
     copula_type : string, optionnal (default='vine')
         The type of copula. Available types:
@@ -98,9 +94,9 @@ class ConservativeEstimate(object):
         self.model_func = model_func
         self.margins = margins
         self.families = families
+        self.vine_structure = vine_structure
         self.fixed_params = fixed_params
         self.bounds_tau = bounds_tau
-        self.vine_structure = vine_structure
         self.copula_type = copula_type
 
         self._forest_built = False
@@ -109,10 +105,11 @@ class ConservativeEstimate(object):
         self._dep_measure = None
         self._load_data = False
         self.eps = 1.E-4
-        
+
     @classmethod
-    def from_hdf(cls, filepath_or_buffer, id_of_experiment='all', out_ID=0, with_input_sample=True):
-        """Load result from HDF5 file.
+    def from_hdf(cls, filepath_or_buffer, id_of_experiment='all', out_ID=0, 
+        with_input_sample=True):
+        """Loads result from HDF5 file.
 
         This class method creates an instance of :class:`~ImpactOfDependence` 
         by loading a HDF5 with the saved result of a previous run.
@@ -161,6 +158,7 @@ class ConservativeEstimate(object):
             copula_type = hdf_store.attrs['Copula Type']
             input_dim = hdf_store.attrs['Input Dimension']
             input_names = hdf_store.attrs['Input Names']
+            
             # Many previous experiments did not have this attribute. 
             # The checking is temporary and should be deleted in future
             # versions.
@@ -254,9 +252,38 @@ class ConservativeEstimate(object):
 
     def gridsearch_minimize(self, n_dep_param, n_input_sample, grid_type='lhs',
                             dep_measure='KendallTau', q_func=np.var,
-                            random_state=None, use_grid=None, save_grid=None,
-                            done_results=None):
-        """Quantile minimization through a grid in the dependence parameter space.
+                            use_grid=None, save_grid=None,
+                            done_results=None, random_state=None,):
+        """Quantile minimization through a grid in the dependence parameter
+        space.
+        
+        Parameters
+        ----------
+        n_dep_param : int
+            The number of dependence parameters in the grid search.
+        n_input_sample : int
+            The sample size for each dependence parameter.
+        grid_type : 'lhs', 'rand' or 'fixed, optional (default='lhs')
+            The type of grid.
+                - 'lhs' : a Latin Hypercube Sampling (from pyDOE package) with
+                criterion defined by the attribute lhs_grid_criterion :
+                        - 'centermaximin' (default),
+                        - 'center',
+                        - 'maximin',
+                        - 'correlation'.
+                - 'rand' : a random sampling,
+                - 'fixed' : an uniform grid.
+        dep_measure : 'KendallTau' or 'copula-parameter', 
+        optional (default='KendallTau')
+            The measure of dependence in which the dependence parameters are
+            created.
+        q_func : callable, optional (default=np.var)
+            The function output quantity of interest.
+        
+        Returns
+        -------
+        A list of DependenceResult instances.                
+        
         """
         rng = check_random_state(random_state)
         run_type = 'Classic'
@@ -308,8 +335,16 @@ class ConservativeEstimate(object):
                                     saved_nevals=saved_nevals)
 
     def stochastic_function(self, param, n_input_sample=1, random_state=None):
-        """This function considers the model output as a stochastic code by 
-        taking the dependence parameter as input.
+        """This function considers the model output as a stochastic function by 
+        taking the dependence parameters as inputs.
+        
+        Parameters
+        ----------
+        param : float, list, or `np.ndarray`
+            The parameters associated to the predefined copula.
+        n_input_sample : int, optional (default=1)
+            The number of evaluations.
+        random_state : 
         """
         rng = check_random_state(random_state)
 
@@ -522,11 +557,11 @@ class ConservativeEstimate(object):
         return file_name
 
 # =============================================================================
-# Setters
+# Properties
 # =============================================================================
     @property
     def model_func(self):
-        """The model function. Must be a callable.
+        """The callable model function.
         """
         return self._model_func
 
@@ -534,31 +569,30 @@ class ConservativeEstimate(object):
     def model_func(self, func):
         """
         """
-        if callable(func):
-            self._model_func = func
-        else:
-            raise TypeError("The model function must be callable.")
+        assert callable(func), TypeError("The model function must be callable.")
+        self._model_func = func
 
     @property
     def margins(self):
-        """The PDF margins. List of :class:`~openturns.Distribution` objects.
+        """The marginal distributions. 
+
+        List of :class:`~openturns.Distribution` objects.
         """
         return self._margins
 
     @margins.setter
-    def margins(self, list_margins):
-        assert isinstance(list_margins, list), \
-            TypeError("It should be a list of margins distribution objects.")
+    def margins(self, margins):
+        assert isinstance(margins, (list, tuple)), \
+            TypeError("It should be a sequence of OT distribution objects.")
 
         self._margins_inv_CDF = []
-        for marginal in list_margins:
-            if isinstance(marginal, ot.DistributionImplementation):
-                self._margins_inv_CDF.append(marginal.computeQuantile)
-            else:
+        for marginal in margins:
+            assert isinstance(marginal, ot.DistributionImplementation), \
                 TypeError("Must be an OpenTURNS distribution objects.")
-
-        self._margins = list_margins
-        self._input_dim = len(list_margins)
+            self._margins_inv_CDF.append(marginal.computeQuantile)
+                
+        self._margins = margins
+        self._input_dim = len(margins)
         self._corr_dim = self._input_dim * (self._input_dim - 1) / 2
 
     @property
@@ -568,16 +602,19 @@ class ConservativeEstimate(object):
         return self._families
 
     @families.setter
-    def families(self, value):
+    def families(self, families):
         """
         """
-        if isinstance(value, str):
+        if isinstance(families, str):
             # It should be a path to a csv file
-            matrix = pd.read_csv(value, index_col=0).values
+            # TODO: replace pandas with numpy
+            matrix = pd.read_csv(families, index_col=0).values
         else:
-            matrix = value
-        matrix = matrix.astype(int)
-        check_matrix(matrix)
+            matrix = families
+
+        matrix = matrix.astype(int) # Convert elements to integers
+        check_matrix(matrix) # Check if the matrix is ok
+
         self._families = matrix
         self._family_list = []
         self._n_pairs = 0
@@ -596,19 +633,27 @@ class ConservativeEstimate(object):
         self._copula_converters = [Conversion(family) for family in self._family_list]
 
     @property
-    def pairs(self):
-        return self._pairs
-
-    @property
-    def n_pairs(self):
-        return self._n_pairs
-
-    @property
-    def corr_dim(self):
+    def corr_dim_(self):
+        """The number of pairs.
+        """
         return self._corr_dim
 
     @property
+    def pairs_(self):
+        """The possibly dependent pairs.
+        """
+        return self._pairs
+
+    @property
+    def n_pairs_(self):
+        """The number of possibly dependent pairs.
+        """
+        return self._n_pairs
+
+    @property
     def copula_type(self):
+        """The type of copula.
+        """
         return self._copula_type
 
     @copula_type.setter
