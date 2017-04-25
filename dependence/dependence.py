@@ -779,14 +779,6 @@ class ConservativeEstimate(object):
         return kendalls
 
     @property
-    def params_(self):
-        return self._params
-
-    @property
-    def n_dep_params_(self):
-        return self._n_param
-
-    @property
     def fixed_params(self):
         return self._fixed_params
 
@@ -830,7 +822,10 @@ class ConservativeEstimate(object):
 
 
 class ListDependenceResult(list):
-    """
+    """The result from the Conservative Estimation.
+    
+    Parameters
+    ----------
     """
     def __init__(self, dep_params=None, output_samples=None, input_samples=None, 
                  q_func=None, run_type=None, n_evals=None,
@@ -849,6 +844,8 @@ class ListDependenceResult(list):
                 self.append(result)
 
         self.families = families
+        self.input_dim = self.families.shape[0]
+        self.corr_dim = self.input_dim * (self.input_dim - 1) / 2
         self._bootstrap_samples = None
         self.saved_nevals = saved_nevals
 
@@ -858,15 +855,12 @@ class ListDependenceResult(list):
 
     @property
     def pairs(self):
+        """
+        """
         if self.families is None:
             print('Family matrix was not defined')
         else:
             return to_list(self.families)
-        
-    @property
-    def corr_dim(self):
-        dim = self.families.shape[0]
-        return dim * (dim - 1) /2
     
     @property
     def dep_params(self):
@@ -874,9 +868,18 @@ class ListDependenceResult(list):
             print("There is no data...")
         else:
             return [result.dep_param for result in self]
-    
+        
+    @property
+    def kendalls(self):
+        if self.n_params == 0:
+            print("There is no data...")
+        else:
+            return [result.dep_param for result in self]
+        
     @property
     def n_pairs(self):
+        """The number of dependente pairs.
+        """
         if self.n_params == 0:
             return 0
         else:
@@ -887,7 +890,7 @@ class ListDependenceResult(list):
         if self.n_params == 0:
             print("There is no data...")
         else:
-            # TODO: Must be changed is the number of sample is different for each param
+            # TODO: Must be changed if the number of sample is different for each param
             return np.asarray([result.output_sample for result in self])
     
     @property
