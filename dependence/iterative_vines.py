@@ -13,7 +13,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
     """
 
     quant_estimate = copy.copy(estimate_object)
-    max_n_pairs = quant_estimate.corr_dim
+    max_n_pairs = quant_estimate.corr_dim_
     assert grid_type in GRIDS, "Unknow Grid type {0}".format(grid_type)
     assert 0 < p_max < max_n_pairs, "Maximum number of pairs must be positive"
     assert 1 <= n_add_pairs < max_n_pairs, "Must add at least one pair at each iteration"

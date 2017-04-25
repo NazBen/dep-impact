@@ -207,7 +207,6 @@ class ConservativeEstimate(object):
                 list_output_sample.append(data_out.value)
                 list_n.append(grp.attrs['n'])
 
-
         # Each sample is made from the same dependence parameters
         # They need to be reordered
         n = sum(list_n)
@@ -264,15 +263,16 @@ class ConservativeEstimate(object):
         n_input_sample : int
             The sample size for each dependence parameter.
         grid_type : 'lhs', 'rand' or 'fixed, optional (default='lhs')
-            The type of grid.
-                - 'lhs' : a Latin Hypercube Sampling (from pyDOE package) with
-                criterion defined by the attribute lhs_grid_criterion :
-                        - 'centermaximin' (default),
-                        - 'center',
-                        - 'maximin',
-                        - 'correlation'.
-                - 'rand' : a random sampling,
-                - 'fixed' : an uniform grid.
+            The type of grid :
+                
+            - 'lhs' : a Latin Hypercube Sampling (from pyDOE package) with
+            criterion defined by the attribute lhs_grid_criterion :
+                    - 'centermaximin' (default),
+                    - 'center',
+                    - 'maximin',
+                    - 'correlation'.
+            - 'rand' : a random sampling,
+            - 'fixed' : an uniform grid.
         dep_measure : 'KendallTau' or 'copula-parameter', 
         optional (default='KendallTau')
             The measure of dependence in which the dependence parameters are
@@ -289,7 +289,7 @@ class ConservativeEstimate(object):
         run_type = 'Classic'
         assert callable(q_func), "Quantity function is not callable"
          
-        dimensions = [self._bounds_tau_list[pair] for pair in self.pairs]
+        dimensions = [self._bounds_tau_list[pair] for pair in self.pairs_]
         params = get_dependence_parameters(dimensions, n_dep_param, grid_type)
         n_dep_param = len(params)
 
@@ -356,7 +356,7 @@ class ConservativeEstimate(object):
         assert param.ndim == 1, 'Only one parameter at a time for the moment'
 
         full_param = np.zeros((self._corr_dim, ))
-        full_param[self.pairs] = param
+        full_param[self.pairs_] = param
         
         input_sample = self._get_sample(full_param, n_input_sample)
         output_sample = self.model_func(input_sample)
