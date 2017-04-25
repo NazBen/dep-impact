@@ -2,8 +2,18 @@
 import openturns as ot
 
 def func_overflow(X, model=1):
-    """
-    X : input variables, shape : N x 8
+    """Overflow model function.
+    
+    Parameters
+    ----------
+    X : np.ndarray, shape : N x 8
+        Input variables
+        - x1 : Flow,
+        - x2 : Krisler Coefficient,
+        - x3 : Zv, etc...
+    model : bool, optional(default=1)
+        If 1, the classical model. If 2, the economic model.
+    
     """
     X = np.asarray(X)
     if X.shape[0] == X.size: # It's a vector
@@ -32,6 +42,8 @@ def func_overflow(X, model=1):
     elif model == 2:
         Cp = (S > 0.) + (0.2 + 0.8 * (1. - np.exp(-1000. / (S**4)))) * (S <= 0.) + 1./20. * (Hd * (Hd > 8.) + 8*(Hd <= 8.))
         return Cp
+    else:
+        raise AttributeError('Unknow model.')
     
     
 tmp = ot.Gumbel(1013., 558., ot.Gumbel.MUSIGMA)
@@ -48,7 +60,18 @@ margins_overflow = [dist_Q, dist_Ks, dist_Zv, dist_Zm, dist_Hd, dist_Cb, dist_L,
 var_names_overflow  = ["Q", "K_s", "Z_v", "Z_m", "H_d", "C_b", "L", "B"]
 
 def func_sum(x, a=None):
-    """Additive example
+    """Additive weighted model function.
+    
+    Parameters
+    ----------
+    x : np.ndarray
+        The input values.
+    a : np.ndarray
+        The input coefficients.
+        
+    Returns
+    -------
+    y = sum(x.a)
     """        
     n, dim = x.shape
     if a is None:
