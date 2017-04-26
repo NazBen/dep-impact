@@ -291,7 +291,7 @@ class ConservativeEstimate(object):
         run_type = 'Classic'
         assert callable(q_func), "Quantity function is not callable"
          
-        dimensions = [self._bounds_tau_list[pair] for pair in self.pairs_]
+        dimensions = [self._bounds_par_list[pair] for pair in self.pairs_]
         params = get_grid_sample(dimensions, n_dep_param, grid_type)
         n_dep_param = len(params)
 
@@ -596,6 +596,13 @@ class ConservativeEstimate(object):
         self._margins = margins
         self._input_dim = len(margins)
         self._corr_dim = self._input_dim * (self._input_dim - 1) / 2
+        
+        if hasattr(self, 'families'):
+            if self.families.shape[0] != self._input_dim:
+                print("Don't forget to change the family matrix")
+        if hasattr(self, 'vine_structure'): 
+            if self.vine_structure.shape[0] != self._input_dim:
+                print("Don't forget to change the structure matrix")
 
     @property
     def families(self):
@@ -697,6 +704,10 @@ class ConservativeEstimate(object):
     @property
     def bounds_tau(self):
         return self._bounds_tau
+    
+    @property
+    def bounds_par(self):
+        return self._bounds_par
 
     @bounds_tau.setter
     def bounds_tau(self, value):
@@ -711,31 +722,44 @@ class ConservativeEstimate(object):
         dim = self._input_dim
         # If no bounds given, we take the min and max, depending on the copula family
         if value is None:
-            bounds = np.zeros((dim, dim))
+            bounds_tau = np.zeros((dim, dim))
             for i, j in self._pairs_ij:
-                bounds[i, j], bounds[j, i] = get_tau_interval(self._families[i, j])
+                bounds_tau[i, j], bounds_tau[j, i] = get_tau_interval(self._families[i, j])
         elif isinstance(value, str):
             # It should be a path to a csv file
-            bounds = pd.read_csv(value, index_col=0).values
+            bounds_tau = pd.read_csv(value, index_col=0).values
         else:
-            bounds = value
-
-        bounds_list = []
-        for i, j in self._pairs_ij:
+            bounds_tau = value
+        
+        bounds_par = np.zeros(bounds_tau.shape)
+        bounds_tau_list = []
+        bounds_par_list = []
+        for k, (i, j) in enumerate(self._pairs_ij):
             tau_min, tau_max = get_tau_interval(self._families[i, j])
-            if np.isnan(bounds[i, j]):
+            if np.isnan(bounds_tau[i, j]):
                 tau_min = tau_min
             else:
-                tau_min = max(bounds[i, j], tau_min)
-            if np.isnan(bounds[j, i]):
+                tau_min = max(bounds_tau[i, j], tau_min)
+            if np.isnan(bounds_tau[j, i]):
                 tau_max = tau_max
             else:
-                tau_max = min(bounds[j, i], tau_max)
-            bounds_list.append([tau_min, tau_max])
+                tau_max = min(bounds_tau[j, i], tau_max)
+                
+            bounds_tau_list.append([tau_min, tau_max])
+            
+            param_min = self._copula_converters[k].to_copula_parameter(tau_min, 'KendallTau')
+            param_max = self._copula_converters[k].to_copula_parameter(tau_max, 'KendallTau')
+            
+            bounds_par[i, j] = tau_min
+            bounds_par[j, i] = tau_max
+            bounds_par_list.append([param_min, param_max])
 
-        check_matrix(bounds)
-        self._bounds_tau = bounds
-        self._bounds_tau_list = bounds_list
+        check_matrix(bounds_tau)
+        check_matrix(bounds_par)
+        self._bounds_tau = bounds_tau
+        self._bounds_par = bounds_par
+        self._bounds_tau_list = bounds_tau_list
+        self._bounds_par_list = bounds_par_list
 
     @property
     def fixed_params(self):
@@ -823,7 +847,7 @@ class ListDependenceResult(list):
         if self.families is None:
             print('Family matrix was not defined')
         else:
-            return to_list(self.families)
+            return to_list(self.families)[1]
     
     @property
     def dep_params(self):
@@ -837,7 +861,7 @@ class ListDependenceResult(list):
         if self.n_params == 0:
             print("There is no data...")
         else:
-            return [result.dep_param for result in self]
+            return [result.kendall_tau for result in self]
         
     @property
     def n_pairs(self):
@@ -954,13 +978,29 @@ class DependenceResult(object):
         self.rng = check_random_state(random_state)
         self._bootstrap_sample = None
 
-    def compute_bootstrap(self, n_bootstrap=1000):
-        """
+    def compute_bootstrap(self, n_bootstrap=1000, inplace=True):
+        """Bootstrap of the output quantity of interest.
+        
+        Parameters
+        ----------
+        n_bootstrap : int, optional
+            The number of bootstrap samples.
+        inplace : bool, optional
+           If true, the bootstrap sample is returned
+            
+        Returns
+        -------
+            The bootstrap sample if inplace is true.
         """
         self._bootstrap_sample = bootstrap(self.output_sample, n_bootstrap, self.q_func)
+        
+        if not inplace:
+            return self._bootstrap_sample
 
     @property
     def bootstrap_sample(self):
+        """The computed bootstrap sample.
+        """
         if self._bootstrap_sample is not None:
             return self._bootstrap_sample
         else:
@@ -968,6 +1008,8 @@ class DependenceResult(object):
 
     @property
     def quantity_(self):
+        """The computed output quantity.
+        """
         quantity = self.q_func(self.output_sample, axis=0)
         return quantity.item() if quantity.size == 1 else quantity
 
@@ -978,10 +1020,22 @@ class DependenceResult(object):
         dim = self.families.shape[0]
         corr_dim = dim * (dim - 1) / 2
         full_params = np.zeros((corr_dim, ))
-        pairs = to_list(self.families)
-        full_params[pairs] = self.dep_param
+        pair_ids = to_list(self.families)[1]
+        full_params[pair_ids] = self.dep_param
         return full_params
-
+    
+    @property
+    def kendall_tau(self):
+        """The Kendall's tau of the dependence parameters.
+        """
+        kendalls = []
+        for family, id_param in zip(*to_list(self.families)):
+            kendall = Conversion(family).to_kendall(self.dep_param[id_param])
+            if kendall.size == 1:
+                kendall = kendall.item()
+            kendalls.append(kendall)
+        return kendalls
+        
     @property
     def configs(self):
         return self._configs
@@ -1235,18 +1289,20 @@ def to_matrix(param, dim):
     return matrix
 
 def to_list(matrix):
+    """Add in a list, the positive elements of a matrix.
     """
-    """
-    params = []
-    k = 0
+    values = []
+    ids = []
     dim = matrix.shape[0]
+    k = 0
     for i in range(dim):
         for j in range(i):
             if matrix[i, j] > 0:
-                params.append(k)
+                values.append(matrix[i, j])
+                ids.append(k)
             k += 1
 
-    return params
+    return values, ids
 
 def unique_rows(a):
     a = np.ascontiguousarray(a)

@@ -73,6 +73,7 @@ class Conversion(object):
                 AttributeError("It must be a vector")
         elif isinstance(measure_param, float):
             n_sample = 1
+            measure_param = np.asarray([measure_param])
         else:
             raise TypeError("Wrong type for measure_param")
         
@@ -84,9 +85,12 @@ class Conversion(object):
         else:
             raise ValueError("Unknow Dependence Measure")
 
-        return copula_param
+        if copula_param.size == 1:
+            return copula_param.item()
+        else:
+            return copula_param
     
-    def to_Kendall(self, params):
+    def to_kendall(self, params):
         """Convert the dependence_measure to the copula parameter.
         """
         if isinstance(params, np.ndarray):
