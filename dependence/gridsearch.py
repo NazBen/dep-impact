@@ -30,7 +30,9 @@ class Space(sk_Space):
            Points sampled from the space.
         """
         rng = check_random_state(random_state)
-    
+        assert isinstance(sampling, str), \
+            TypeError("sampling must be a string")
+            
         if sampling == 'rand':
             # Draw
             columns = []
@@ -57,6 +59,10 @@ class Space(sk_Space):
             for k, dim in enumerate(self.dimensions):
                 tmp[:, k] = sample[:, k]*(dim.high - dim.low) + dim.low
             rows = tmp.tolist()
+        elif sampling == 'fixed':
+            raise NotImplementedError("Maybe I'll do it...")
+        else:
+            raise NameError("Sampling type does not exist.")
         return rows
 
 def quantile_func(alpha):

@@ -99,7 +99,6 @@ class ConservativeEstimate(object):
         self.bounds_tau = bounds_tau
         self.copula_type = copula_type
 
-        self._forest_built = False
         self._lhs_grid_criterion = 'centermaximin'
         self._grid_folder = './experiment_designs'
         self._dep_measure = None
@@ -250,9 +249,10 @@ class ConservativeEstimate(object):
         return obj
 
     def gridsearch_minimize(self, n_dep_param, n_input_sample, grid_type='lhs',
-                            dep_measure='KendallTau', q_func=np.var,
+                            dep_measure='KendallTau', q_func=np.var, 
+                            lhs_grid_criterion='centermaximin',
                             use_grid=None, save_grid=None,
-                            done_results=None, random_state=None,):
+                            done_results=None, random_state=None):
         """Quantile minimization through a grid in the dependence parameter
         space.
         
@@ -265,20 +265,22 @@ class ConservativeEstimate(object):
         grid_type : 'lhs', 'rand' or 'fixed, optional (default='lhs')
             The type of grid :
                 
-            - 'lhs' : a Latin Hypercube Sampling (from pyDOE package) with
-            criterion defined by the attribute lhs_grid_criterion :
-                    - 'centermaximin' (default),
-                    - 'center',
-                    - 'maximin',
-                    - 'correlation'.
+            - 'lhs' : a Latin Hypercube Sampling (from pyDOE package) with criterion defined by the parameter lhs_grid_criterion,
             - 'rand' : a random sampling,
             - 'fixed' : an uniform grid.
-        dep_measure : 'KendallTau' or 'copula-parameter', 
-        optional (default='KendallTau')
+            
+        dep_measure : 'KendallTau' or 'copula-parameter', optional (default='KendallTau')
             The measure of dependence in which the dependence parameters are
             created.
         q_func : callable, optional (default=np.var)
             The function output quantity of interest.
+        lhs_grid_criterion : string, optional (default = 'centermaximin')
+            Configuration of the LHS grid sampling.
+            
+            * 'centermaximin' (default),
+            * 'center',
+            * 'maximin',
+            * 'correlation'.
         
         Returns
         -------
@@ -290,7 +292,7 @@ class ConservativeEstimate(object):
         assert callable(q_func), "Quantity function is not callable"
          
         dimensions = [self._bounds_tau_list[pair] for pair in self.pairs_]
-        params = get_dependence_parameters(dimensions, n_dep_param, grid_type)
+        params = get_grid_sample(dimensions, n_dep_param, grid_type)
         n_dep_param = len(params)
 
         params_not_to_compute = []
@@ -736,49 +738,6 @@ class ConservativeEstimate(object):
         self._bounds_tau_list = bounds_list
 
     @property
-    def output_sample_(self):
-        if self._output_dim == 1:
-            return self._all_output_sample
-        else:
-            return self._all_output_sample[:, self._output_ID]
-
-    @output_sample_.setter
-    def output_sample_(self, value):
-        raise EnvironmentError("You cannot set this variable")
-
-    @property
-    def input_sample_(self):
-        return self._input_sample
-
-    @input_sample_.setter
-    def input_sample_(self, value):
-        raise EnvironmentError("You cannot set this variable")
-
-    @property
-    def all_params_(self):
-        # There is a compromise between speed and memory efficiency.
-        params = np.zeros((self._n_sample, self._corr_dim))
-        n = self._n_input_sample
-        for i, param in enumerate(self._params):
-            params[n*i:n*(i+1), :] = param
-        return params
-
-    @property
-    def reshaped_output_sample_(self):
-        return self.output_sample_.reshape((self._n_param, self._n_input_sample))
-
-    @reshaped_output_sample_.setter
-    def reshaped_output_sample_(self, value):
-        raise EnvironmentError("You cannot set this variable")
-
-    @property
-    def kendalls_(self):
-        kendalls = np.zeros((self._n_param, self._corr_dim))
-        for k in self._pairs:
-            kendalls[:, k] = self._copula_converters[k].to_Kendall(self._params[:, k])
-        return kendalls
-
-    @property
     def fixed_params(self):
         return self._fixed_params
 
@@ -839,8 +798,12 @@ class ListDependenceResult(list):
             for k, dep_param in enumerate(dep_params):
                 input_sample = None if input_samples is None else input_samples[k]
     
-                result = DependenceResult(dep_param=dep_param, input_sample=input_sample, 
-                                          output_sample=output_samples[k], q_func=q_func, families=families, random_state=self.rng)
+                result = DependenceResult(dep_param=dep_param, 
+                                          input_sample=input_sample, 
+                                          output_sample=output_samples[k], 
+                                          q_func=q_func, 
+                                          families=families, 
+                                          random_state=self.rng)
                 self.append(result)
 
         self.families = families
@@ -913,7 +876,7 @@ class ListDependenceResult(list):
         if self.n_params == 0:
             print("There is no data...")
         else:
-            return np.asarray([result.quantity for result in self])
+            return np.asarray([result.quantity_ for result in self])
 
     @property
     def min_result(self):
@@ -945,20 +908,40 @@ class ListDependenceResult(list):
 
     @property
     def bootstrap_samples(self):
-        if self._bootstrap_samples is None:
-            print('Bootstrap not computed')
+        sample = [result._bootstrap_sample for result in self]
+        if not any((boot is None for boot in sample)):
+            return np.asarray(sample)
         else:
-            return self._bootstrap_samples
+            raise AttributeError('The boostrap must be computed first')
 
     def compute_bootstraps(self, n_bootstrap=1000):
         if self.n_params == 0:
             print("There is no data...")
         else:
-            self._bootstrap_samples = np.asarray([bootstrap(result.output_sample, n_bootstrap, self.q_func) for result in self])
+            for result in self:
+                result.compute_bootstrap(n_bootstrap)
 
 
 class DependenceResult(object):
     """Result from conservative estimate.
+    
+    Parameters
+    ----------
+    dep_param : array
+        The dependence parameters.
+    input_sample : array
+        The input sample.
+    output_sample : array
+        The output sample.
+    q_func : callable or None
+        The output quantity of intereset function.
+    run_type : str
+        The type of estimation: independence, grid-search, iterative, ...
+    families : array
+        The matrix array of the families.
+    random_state : int, RandomState or None,
+        The random state of the computation.        
+    
     """
     def __init__(self, dep_param=None, input_sample=None, output_sample=None, 
                  q_func=None, run_type=None, families=None, random_state=None):
@@ -969,19 +952,29 @@ class DependenceResult(object):
         self.run_type = run_type
         self.families = families
         self.rng = check_random_state(random_state)
-        self.bootstrap_sample = None
+        self._bootstrap_sample = None
 
     def compute_bootstrap(self, n_bootstrap=1000):
         """
         """
-        self.bootstrap_sample = bootstrap(self.output_sample, n_bootstrap, self.q_func)
+        self._bootstrap_sample = bootstrap(self.output_sample, n_bootstrap, self.q_func)
 
     @property
-    def quantity(self):
-        return self.q_func(self.output_sample, axis=0)
+    def bootstrap_sample(self):
+        if self._bootstrap_sample is not None:
+            return self._bootstrap_sample
+        else:
+            raise AttributeError('The boostrap must be computed first')
+
+    @property
+    def quantity_(self):
+        quantity = self.q_func(self.output_sample, axis=0)
+        return quantity.item() if quantity.size == 1 else quantity
 
     @property
     def full_dep_params(self):
+        """The matrix of parameters for all the pairs.
+        """
         dim = self.families.shape[0]
         corr_dim = dim * (dim - 1) / 2
         full_params = np.zeros((corr_dim, ))
@@ -1009,14 +1002,11 @@ class DependenceResult(object):
             self._alpha = value['Quantile Probability']
 
         self._configs = value
-
-    def __str__(self):
-        to_print = '%s: %s\n' % (self._quantity_name, self.quantity)
-        if self.confidence_interval is not None:
-            to_print += '%s confidence interval at %d %%: %s' % \
-                (self._quantity_name, self._confidence_level *
-                 100, self.confidence_interval)
-        return to_print
+        
+    def draw_input_sample():
+        """
+        """
+        raise NotImplementedError("Available soon, when I'll have the time")
 
     def draw_bounds(self, indep_quant=None, figsize=(10, 6)):
         """
@@ -1287,16 +1277,15 @@ def create_bounds_grid(dimensions):
         
     return params
 
-def get_dependence_parameters(dimensions, n_dep_param, grid_type):
+def get_grid_sample(dimensions, n_sample, grid_type):
+    """Get a sample of observation from a design space.
+    
+    Parameters
+    ----------
+    dimensions : 
     """
-    """
-    if n_dep_param is None:
-        # We take the bounds
-        params = create_bounds_grid(dimensions)
-        n_dep_param = len(params)
-    else:
-        # We create the grid
-        space = Space(dimensions)
-        params = space.rvs(n_dep_param, sampling=grid_type)
+    # We create the grid
+    space = Space(dimensions)
+    params = space.rvs(n_sample, sampling=grid_type)
 
     return params
