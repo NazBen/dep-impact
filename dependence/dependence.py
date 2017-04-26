@@ -447,116 +447,6 @@ class ConservativeEstimate(object):
         assert p == sample.shape[1], 'Wrong dimension'
         return sample, filename
 
-    def save_data_hdf(self, input_names=[], output_names=[],
-                  path=".", file_name="output_result.hdf5"):
-        """
-        """
-        # List of input variable names
-        if input_names:
-            assert len(input_names) == self._input_dim, \
-                AttributeError("Dimension problem for input_names")
-        else:
-            for i in range(self._input_dim):
-                input_names.append("x_%d" % (i + 1))
-
-        # List of output variable names
-        if output_names:
-            assert len(output_names) == self._output_dim, \
-                AttributeError("Dimension problem for output_names")
-        else:
-            for i in range(self._output_dim):
-                output_names.append("y_%d" % (i + 1))
-
-        margin_dict = {}
-        # List of marginal names
-        for i, marginal in enumerate(self._margins):
-                name = marginal.getName()
-                params = list(marginal.getParameter())
-                margin_dict['Marginal_%d Family' % (i)] = name
-                margin_dict['Marginal_%d Parameters' % (i)] = params
-
-        filename_exists = True
-        init_file_name = file_name
-        k = 0
-        while filename_exists:
-            try:
-                with h5py.File(os.path.join(path, file_name), 'a') as hdf_store:
-                    # General attributes
-                    # Check the attributes of the file, if it already exists
-                    if hdf_store.attrs.keys():                        
-                        np.testing.assert_allclose(hdf_store['dependence_params'].value, self._params)
-                        assert hdf_store.attrs['Input Dimension'] == self._input_dim
-                        assert hdf_store.attrs['Output Dimension'] == self._output_dim
-                        assert hdf_store.attrs['Run Type'] == self._run_type
-                        np.testing.assert_array_equal(hdf_store.attrs['Copula Families'], self._families)                        
-                        if 'Fixed Parameters' in hdf_store.attrs.keys():
-                            np.testing.assert_array_equal(hdf_store.attrs['Fixed Parameters'], self._fixed_params)  
-                        elif self._fixed_pairs:
-                            # Save only if there is no fixed params
-                            raise ValueError('It should not have constraints to be in the same output file.')
-                        if 'Bounds Tau' in hdf_store.attrs.keys():
-                            np.testing.assert_array_equal(hdf_store.attrs['Bounds Tau'], self._bounds_tau)           
-                        elif self._fixed_pairs:
-                            raise ValueError('It should not have constraints to be in the same output file.')
-                        np.testing.assert_array_equal(hdf_store.attrs['Copula Structure'], self._vine_structure)
-                        assert hdf_store.attrs['Copula Type'] == self._copula_type
-                        np.testing.assert_array_equal(hdf_store.attrs['Input Names'], input_names)
-                        np.testing.assert_array_equal(hdf_store.attrs['Output Names'], output_names)
-                        for i in range(self._input_dim):
-                            assert hdf_store.attrs['Marginal_%d Family' % (i)] == margin_dict['Marginal_%d Family' % (i)]
-                            np.testing.assert_array_equal(hdf_store.attrs['Marginal_%d Parameters' % (i)], margin_dict['Marginal_%d Parameters' % (i)])
-                            
-                        if self._run_type == 'Classic':
-                            assert hdf_store.attrs['Dependence Measure'] == self._dep_measure
-                            assert hdf_store.attrs['Grid Type'] == self._grid
-                    else:
-                        # We save the attributes in the empty new file
-                        hdf_store.create_dataset('dependence_params', data=self._params)
-                        hdf_store.attrs['K'] = self._n_param
-                        hdf_store.attrs['Input Dimension'] = self._input_dim
-                        hdf_store.attrs['Output Dimension'] = self._output_dim
-                        hdf_store.attrs['Run Type'] = self._run_type
-                        hdf_store.attrs['Copula Families'] = self._families
-                        hdf_store.attrs['Fixed Parameters'] = self._fixed_params
-                        hdf_store.attrs['Bounds Tau'] = self._bounds_tau
-                        hdf_store.attrs['Copula Structure'] = self._vine_structure
-                        hdf_store.attrs['Copula Type'] = self._copula_type
-                        hdf_store.attrs['Input Names'] = input_names
-                        hdf_store.attrs['Output Names'] = output_names
-                        for i in range(self._input_dim):
-                            hdf_store.attrs['Marginal_%d Family' % (i)] = margin_dict['Marginal_%d Family' % (i)]
-                            hdf_store.attrs['Marginal_%d Parameters' % (i)] = margin_dict['Marginal_%d Parameters' % (i)]
-                        
-                        if self._run_type == 'Classic':
-                            hdf_store.attrs['Dependence Measure'] = self._dep_measure
-                            hdf_store.attrs['Grid Type'] = self._grid
-                            if self._grid_filename:
-                                hdf_store.attrs['Grid Filename'] = os.path.basename(self._grid_filename)
-                            if self._grid == 'lhs':
-                                hdf_store.attrs['LHS Criterion'] = self._lhs_grid_criterion      
-                    
-                    # Check the number of experiments
-                    grp_number = 0
-                    list_groups = hdf_store.keys()
-                    list_groups.remove('dependence_params')
-                    list_groups = [int(g) for g in list_groups]
-                    list_groups.sort()
-                    if list_groups:
-                        grp_number = list_groups[-1] + 1
-
-                    grp = hdf_store.create_group(str(grp_number))
-                    grp.attrs['n'] = self._n_input_sample
-                    grp.create_dataset('input_sample', data=self._input_sample)
-                    grp.create_dataset('output_sample', data=self._all_output_sample.reshape((self._n_sample, self._output_dim)))
-                    filename_exists = False
-            except AssertionError:
-                print('File %s already has different configurations' % (file_name))
-                file_name = '%s_%d.hdf5' % (init_file_name[:-5], k)
-                k += 1
-
-        print('Data saved in %s' % (file_name))
-
-        return file_name
 
 # =============================================================================
 # Properties
@@ -945,6 +835,119 @@ class ListDependenceResult(list):
             for result in self:
                 result.compute_bootstrap(n_bootstrap)
 
+    def to_hdf(self, path_or_buf, input_names=[], output_names=[]):
+        """Write the contained data to an HDF5 file using HDFStore.
+        
+        Parameters
+        ----------
+        path_or_buf : the path (string) or HDFStore object
+        """
+        # List of input variable names
+        if input_names:
+            assert len(input_names) == self.input_dim, \
+                AttributeError("Dimension problem for input_names")
+        else:
+            for i in range(self.input_dim):
+                input_names.append("x_%d" % (i + 1))
+
+        # List of output variable names
+        if output_names:
+            assert len(output_names) == self.output_dim, \
+                AttributeError("Dimension problem for output_names")
+        else:
+            for i in range(self.output_dim):
+                output_names.append("y_%d" % (i + 1))
+
+        margin_dict = {}
+        # List of marginal names
+        for i, marginal in enumerate(self._margins):
+                name = marginal.getName()
+                params = list(marginal.getParameter())
+                margin_dict['Marginal_%d Family' % (i)] = name
+                margin_dict['Marginal_%d Parameters' % (i)] = params
+
+        filename_exists = True
+        init_file_name = path_or_buf
+        k = 0
+        while filename_exists:
+            try:
+                with h5py.File(path_or_buf, 'a') as hdf_store:
+                    # General attributes
+                    # Check the attributes of the file, if it already exists
+                    if hdf_store.attrs.keys():                        
+                        np.testing.assert_allclose(hdf_store['dependence_params'].value, self._params)
+                        assert hdf_store.attrs['Input Dimension'] == self.input_dim
+                        assert hdf_store.attrs['Output Dimension'] == self.output_dim
+                        assert hdf_store.attrs['Run Type'] == self._run_type
+                        np.testing.assert_array_equal(hdf_store.attrs['Copula Families'], self._families)                        
+                        if 'Fixed Parameters' in hdf_store.attrs.keys():
+                            np.testing.assert_array_equal(hdf_store.attrs['Fixed Parameters'], self._fixed_params)  
+                        elif self._fixed_pairs:
+                            # Save only if there is no fixed params
+                            raise ValueError('It should not have constraints to be in the same output file.')
+                        if 'Bounds Tau' in hdf_store.attrs.keys():
+                            np.testing.assert_array_equal(hdf_store.attrs['Bounds Tau'], self._bounds_tau)           
+                        elif self._fixed_pairs:
+                            raise ValueError('It should not have constraints to be in the same output file.')
+                        np.testing.assert_array_equal(hdf_store.attrs['Copula Structure'], self._vine_structure)
+                        assert hdf_store.attrs['Copula Type'] == self._copula_type
+                        np.testing.assert_array_equal(hdf_store.attrs['Input Names'], input_names)
+                        np.testing.assert_array_equal(hdf_store.attrs['Output Names'], output_names)
+                        for i in range(self.input_dim):
+                            assert hdf_store.attrs['Marginal_%d Family' % (i)] == margin_dict['Marginal_%d Family' % (i)]
+                            np.testing.assert_array_equal(hdf_store.attrs['Marginal_%d Parameters' % (i)], margin_dict['Marginal_%d Parameters' % (i)])
+                            
+                        if self._run_type == 'Classic':
+                            assert hdf_store.attrs['Dependence Measure'] == self._dep_measure
+                            assert hdf_store.attrs['Grid Type'] == self._grid
+                    else:
+                        # We save the attributes in the empty new file
+                        hdf_store.create_dataset('dependence_params', data=self._params)
+                        hdf_store.attrs['K'] = self._n_param
+                        hdf_store.attrs['Input Dimension'] = self.input_dim
+                        hdf_store.attrs['Output Dimension'] = self.output_dim
+                        hdf_store.attrs['Run Type'] = self._run_type
+                        hdf_store.attrs['Copula Families'] = self._families
+                        hdf_store.attrs['Fixed Parameters'] = self._fixed_params
+                        hdf_store.attrs['Bounds Tau'] = self._bounds_tau
+                        hdf_store.attrs['Copula Structure'] = self._vine_structure
+                        hdf_store.attrs['Copula Type'] = self._copula_type
+                        hdf_store.attrs['Input Names'] = input_names
+                        hdf_store.attrs['Output Names'] = output_names
+                        for i in range(self.input_dim):
+                            hdf_store.attrs['Marginal_%d Family' % (i)] = margin_dict['Marginal_%d Family' % (i)]
+                            hdf_store.attrs['Marginal_%d Parameters' % (i)] = margin_dict['Marginal_%d Parameters' % (i)]
+                        
+                        if self._run_type == 'Classic':
+                            hdf_store.attrs['Dependence Measure'] = self._dep_measure
+                            hdf_store.attrs['Grid Type'] = self._grid
+                            if self._grid_filename:
+                                hdf_store.attrs['Grid Filename'] = os.path.basename(self._grid_filename)
+                            if self._grid == 'lhs':
+                                hdf_store.attrs['LHS Criterion'] = self._lhs_grid_criterion      
+                    
+                    # Check the number of experiments
+                    grp_number = 0
+                    list_groups = hdf_store.keys()
+                    list_groups.remove('dependence_params')
+                    list_groups = [int(g) for g in list_groups]
+                    list_groups.sort()
+                    if list_groups:
+                        grp_number = list_groups[-1] + 1
+
+                    grp = hdf_store.create_group(str(grp_number))
+                    grp.attrs['n'] = self._n_input_sample
+                    grp.create_dataset('input_sample', data=self._input_sample)
+                    grp.create_dataset('output_sample', data=self._all_output_sample.reshape((self._n_sample, self._output_dim)))
+                    filename_exists = False
+            except AssertionError:
+                print('File %s already has different configurations' % (file_name))
+                file_name = '%s_%d.hdf5' % (init_file_name[:-5], k)
+                k += 1
+
+        print('Data saved in %s' % (file_name))
+
+        return file_name
 
 class DependenceResult(object):
     """Result from conservative estimate.
