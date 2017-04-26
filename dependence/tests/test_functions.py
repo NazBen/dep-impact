@@ -13,7 +13,10 @@ def func_overflow(X, model=1):
         - x3 : Zv, etc...
     model : bool, optional(default=1)
         If 1, the classical model. If 2, the economic model.
-    
+        
+    Returns
+    -------
+        Overflow S (if model=1) or Cost Cp (if model=2).
     """
     X = np.asarray(X)
     if X.shape[0] == X.size: # It's a vector
@@ -71,16 +74,17 @@ def func_sum(x, a=None):
         
     Returns
     -------
-    y = sum(x.a)
+        y : a.x^t
     """        
     n, dim = x.shape
     if a is None:
         a = np.ones((dim, 1))
-
     if a.ndim == 1:
         a = a.reshape(-1, 1)
         assert a.shape[0] == dim, "Shape not good"
     elif a.ndim > 2:
         raise AttributeError('Dimension problem for constant a')
         
-    return np.dot(x, a)
+    y = np.dot(x, a)
+        
+    return y

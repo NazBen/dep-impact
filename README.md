@@ -7,12 +7,15 @@ A python package to study the impact of correlations in a probabilistic studies.
 The package is developped under Python 2.7 and should work on Python 3. 
 
 Several external modules are required:
+
     - Numpy,
     - OpenTURNS,
-    - Pandas.
+    - pyDOE.
 
 And some are optional:
+
     - Matplotlib,
+    - futures.
 
 ## Install
 

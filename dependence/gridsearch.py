@@ -1,9 +1,7 @@
 ﻿import numpy as np
 
-from skopt.utils import create_result
 from sklearn.utils import check_random_state
 from skopt.space import Space as sk_Space
-from scipy.optimize import OptimizeResult
 from sklearn.utils.fixes import sp_version
 import pyDOE
 
@@ -19,16 +17,16 @@ class Space(sk_Space):
     
         Parameters
         ----------
-        * `n_samples` [int, default=1]:
+        n_samples : int, optional (default=1)
             Number of samples to be drawn from the space.
     
-        * `random_state` [int, RandomState instance, or None (default)]:
+        random_state : int, RandomState or None, optional (default=None)
             Set random state to something other than None for reproducible
             results.
     
         Returns
         -------
-        * `points`: [list of lists, shape=(n_points, n_dims)]
+        points : list of lists, shape=(n_points, n_dims)
            Points sampled from the space.
         """
         rng = check_random_state(random_state)
@@ -50,8 +48,8 @@ class Space(sk_Space):
                 r = []
                 for j in range(self.n_dims):
                     r.append(columns[j][i])
-        
                 rows.append(r)
+                
         elif sampling == 'lhs':
             # Draw
             sample = pyDOE.lhs(self.n_dims, samples=n_samples, criterion=sampling_criterion)
@@ -62,49 +60,37 @@ class Space(sk_Space):
         return rows
 
 def quantile_func(alpha):
+    """To associate an alpha to an empirical quantile function.
+    
+    Parameters
+    ----------
+    alpha : float
+        The probability of the target quantile. The value must be between 0 and 1.
+            
+    Returns
+    -------
+    q_func : callable
+        The quantile function.
+            
     """
-    """
-    def func(x, axis=1):
+    def q_func(x, axis=1):
         return np.percentile(x, alpha*100., axis=axis)
-    return func
+    return q_func
 
 def proba_func(threshold):
+    """To associate an alpha to an empirical distribution function.
+    
+    Parameters
+    ----------
+    threshold : float
+        The threshold of the target probability.
+            
+    Returns
+    -------
+    p_func : callable
+        The probability function.
+            
     """
-    """
-    def func(x, axis=1):
+    def p_func(x, axis=1):
         return (x >= threshold).sum(axis=axis)
-    return func
-
-def gridsearch_minimize(func, dimensions, grid_size, n_calls, q_func=np.mean, 
-                        grid_type='rand', random_state=None):
-    """
-    """
-    rng = check_random_state(random_state)
-
-    # Create the grid
-    space = Space(dimensions)
-    Xi = space.rvs(grid_size, sampling=grid_type)
-
-    # Evaluate the sample
-    out_samples = np.asarray(map(func, Xi*n_calls)).reshape(-1, grid_size).T
-
-    if callable(q_func):
-        yi = q_func(out_samples, axis=1)
-
-    # Set the outputs
-    res = OptimizeResult()
-    best = np.argmin(yi)
-    res.x = Xi[best]
-    res.fun = yi[best]
-    res.func_vals = yi
-    res.x_iters = Xi
-    res.space = space
-    res.random_state = rng
-    return res
-
-
-class GridSearch(object):
-    """
-    """
-    def __init__(self):
-        pass
+    return p_func
