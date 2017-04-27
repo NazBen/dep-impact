@@ -150,7 +150,7 @@ class ConservativeEstimate(object):
         elif dep_measure == "kendall-tau":
             bounds = [self._bounds_tau_list[pair] for pair in self._pair_ids]
             kendalls = get_grid_sample(bounds, n_dep_param, grid_type)
-            params = kendalls
+            params = to_copula_params(self._copula_converters, kendalls)
         else:
             raise ValueError("Unknow dependence measure type")
         n_dep_param = len(params)
@@ -474,7 +474,7 @@ class ConservativeEstimate(object):
 
         Parameters
         ----------
-        bounds : :class:`~numpy.ndarray`, str or None
+        value : :class:`~numpy.ndarray`, str or None
             Matrix of bounds.
         """
         
@@ -489,7 +489,7 @@ class ConservativeEstimate(object):
             bounds_tau = pd.read_csv(value, index_col=0).values
         else:
             bounds_tau = value
-        
+
         bounds_par = np.zeros(bounds_tau.shape)
         bounds_tau_list = []
         bounds_par_list = []
@@ -506,9 +506,9 @@ class ConservativeEstimate(object):
                 
             bounds_tau_list.append([tau_min, tau_max])
             
-            # TODO: something is wrong here with k
-            param_min = self._copula_converters[k].to_copula_parameter(tau_min, 'KendallTau')
-            param_max = self._copula_converters[k].to_copula_parameter(tau_max, 'KendallTau')
+            # Conversion to copula parameters
+            param_min = self._copula_converters[k].to_copula_parameter(tau_min, 'kendall-tau')
+            param_max = self._copula_converters[k].to_copula_parameter(tau_max, 'kendall-tau')
             
             bounds_par[i, j] = tau_min
             bounds_par[j, i] = tau_max
@@ -1371,3 +1371,39 @@ def get_grid_sample(dimensions, n_sample, grid_type):
     sample = space.rvs(n_sample, sampling=grid_type)
 
     return sample
+
+def to_kendalls(converters, params):
+    """Convert the copula parameters to kendall's tau.
+    """
+    if isinstance(params, list):
+        params = np.asarray(params)
+    elif isinstance(params, float):
+        params = np.asarray([params])
+
+    n_params, n_pairs = params.shape
+    
+    kendalls = np.zeros(params.shape)
+    for k in range(n_pairs):
+        kendalls[:, k] = converters[k].to_kendall(params[:, k])
+
+    if kendalls.size == 1:
+        kendalls = kendalls.item()
+    return kendalls
+
+def to_copula_params(converters, kendalls):
+    """Convert the kendall'tau to copula parameters.
+    """
+    if isinstance(kendalls, list):
+        kendalls = np.asarray(kendalls)
+    elif isinstance(kendalls, float):
+        kendalls = np.asarray([kendalls])
+
+    n_params, n_pairs = kendalls.shape
+    
+    params = np.zeros(kendalls.shape)
+    for k in range(n_pairs):
+        params[:, k] = converters[k].to_copula_parameter(kendalls[:, k], dep_measure='kendall-tau')
+
+    if params.size == 1:
+        params = params.item()
+    return params
