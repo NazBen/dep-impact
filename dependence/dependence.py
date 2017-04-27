@@ -103,7 +103,7 @@ class ConservativeEstimate(object):
                             dep_measure='kendall-tau', q_func=np.var, 
                             lhs_grid_criterion='centermaximin',
                             use_grid=None, save_grid=None,
-                            done_results=None, random_state=None):
+                            done_results=None, keep_input_sample=True, random_state=None):
         """Quantile minimization through a grid in the dependence parameter
         space.
         
@@ -177,9 +177,17 @@ class ConservativeEstimate(object):
             params = np.delete(params, params_id_not_to_compute, axis=0)
 
         # Evaluate the sample
-        param_func = lambda param: self.stochastic_function(param, n_input_sample)
-        tmp = map(param_func, params)
-        output_samples = np.asarray(tmp).reshape(n_dep_param, n_input_sample)
+        param_func = lambda param: self.stochastic_function(param, 
+                                                            n_input_sample, 
+                                                            return_input_sample=keep_input_sample)
+        if keep_input_sample:
+            tmp = map(param_func, params)
+            inputs = [t[1] for t in tmp]
+            outputs = [t[0] for t in tmp]
+        else:
+            outputs = map(param_func, params)
+            inputs = None
+        output_samples = np.asarray(outputs).reshape(n_dep_param, n_input_sample)
 
         # Add back the results
         if len(params_not_to_compute) > 0:
@@ -191,11 +199,13 @@ class ConservativeEstimate(object):
 
         return ListDependenceResult(dep_params=params,
                                     output_samples=output_samples,
-                                    q_func=q_func, run_type=run_type,
+                                    input_samples=inputs,
+                                    q_func=q_func, 
+                                    run_type=run_type,
                                     families=self.families,
                                     random_state=rng)
 
-    def stochastic_function(self, param, n_input_sample=1, random_state=None):
+    def stochastic_function(self, param, n_input_sample=1, return_input_sample=True, random_state=None):
         """This function considers the model output as a stochastic function by 
         taking the dependence parameters as inputs.
         
@@ -222,9 +232,12 @@ class ConservativeEstimate(object):
         input_sample = self._get_sample(full_param, n_input_sample)
         output_sample = self.model_func(input_sample)
 
-        return output_sample
+        if return_input_sample:
+            return output_sample, input_sample
+        else:
+            return output_sample
 
-    def independence(self, n_input_sample, q_func=np.var, random_state=None):
+    def independence(self, n_input_sample, q_func=np.var, keep_input_sample=True, random_state=None):
         """Generates and evaluates observations at the independence
         configuration.
 
@@ -244,8 +257,10 @@ class ConservativeEstimate(object):
         # Creates the sample of input parameters
         input_sample = np.asarray(ot.ComposedDistribution(self._margins).getSample(n_input_sample))
         output_sample = self.model_func(input_sample)
+        if not keep_input_sample:
+            input_sample = None
 
-        return DependenceResult(input_sample=input_sample, output_sample=output_sample, q_func=q_func, random_state=rng)
+        return DependenceResult(output_sample=output_sample, input_sample=input_sample, q_func=q_func, random_state=rng)
 
     def _get_sample(self, param, n_sample, param2=None):
         """Creates the observations of the joint input distribution.
