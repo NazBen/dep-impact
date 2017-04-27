@@ -99,12 +99,6 @@ class ConservativeEstimate(object):
         self.bounds_tau = bounds_tau
         self.copula_type = copula_type
 
-        self._lhs_grid_criterion = 'centermaximin'
-        self._grid_folder = './experiment_designs'
-        self._dep_measure = None
-        self._load_data = False
-        self.eps = 1.E-4
-
     def gridsearch_minimize(self, n_dep_param, n_input_sample, grid_type='lhs',
                             dep_measure='kendall-tau', q_func=np.var, 
                             lhs_grid_criterion='centermaximin',
@@ -294,7 +288,7 @@ class ConservativeEstimate(object):
     def _load_grid(self, n_param, dep_measure, use_grid, gridname):
         """
         """
-        p = self._n_pairs    
+        p = self._n_pairs
         if isinstance(use_grid, str):
             assert gridname in use_grid, "Not the same configurations"
             filename = use_grid
@@ -338,59 +332,61 @@ class ConservativeEstimate(object):
         assert isinstance(margins, (list, tuple)), \
             TypeError("It should be a sequence of OT distribution objects.")
 
-        self._margins_inv_CDF = []
+        self._margins_quantiles = []
         for marginal in margins:
             assert isinstance(marginal, ot.DistributionImplementation), \
                 TypeError("Must be an OpenTURNS distribution objects.")
-            self._margins_inv_CDF.append(marginal.computeQuantile)
-                
+            self._margins_quantiles.append(marginal.computeQuantile)
+
         self._margins = margins
         self._input_dim = len(margins)
         self._corr_dim = self._input_dim * (self._input_dim - 1) / 2
-        
-        if hasattr(self, 'families'):
-            if self.families.shape[0] != self._input_dim:
-                print("Don't forget to change the family matrix")
-        if hasattr(self, 'vine_structure'): 
-            if self.vine_structure.shape[0] != self._input_dim:
+
+        if hasattr(self, '_families'):
+            if self._families.shape[0] != self._input_dim:
+                print("Don't forget to change the family matrix.")
+        if hasattr(self, '_vine_structure'):
+            if self._vine_structure.shape[0] != self._input_dim:
                 print("Don't forget to change the structure matrix")
 
     @property
     def families(self):
         """The copula families.
+
+        Matrix array of shape (dim, dim).
         """
         return self._families
 
     @families.setter
     def families(self, families):
-        """
-        """
+        # If load from a file
         if isinstance(families, str):
             # It should be a path to a csv file
             # TODO: replace pandas with numpy
-            matrix = pd.read_csv(families, index_col=0).values
+            families = pd.read_csv(families, index_col=0).values
+        elif isinstance(families, np.ndarray):
+            pass
         else:
-            matrix = families
+            raise TypeError("Not a good type for the familie matrix.")
 
-        matrix = matrix.astype(int) # Convert elements to integers
-        check_matrix(matrix) # Check if the matrix is ok
+        families = families.astype(int)
+        check_matrix(families) # Check the matrix
 
-        self._families = matrix
-        self._family_list = []
-        self._n_pairs = 0
-        self._pairs = []
-        self._pairs_ij = []
-        k = 0
-        for i in range(1, self._input_dim):
-            for j in range(i):
-                self._family_list.append(matrix[i, j])
-                if matrix[i, j] > 0:
-                    self._pairs.append(k)
-                    self._n_pairs += 1
-                    self._pairs_ij.append([i, j])
-                k += 1
+        self._families = families
+        self._family_list, self._pair_ids, self._pairs = to_list(families,
+                                                                 return_ids=True,
+                                                                 return_coord=True)
+        self._n_pairs = len(self._pair_ids)
 
         self._copula_converters = [Conversion(family) for family in self._family_list]
+
+        if hasattr(self, '_input_dim'):
+            if self._families.shape[0] != self._input_dim:
+                print("Don't forget to change the margins.")
+
+        if hasattr(self, '_vine_structure'):
+            if self._families.shape[0] != self._vine_structure.shape[0]:
+                print("Don't forget to change the vine_structure.")
 
     @property
     def corr_dim_(self):
@@ -405,6 +401,12 @@ class ConservativeEstimate(object):
         return self._pairs
 
     @property
+    def pairs_ids_(self):
+        """The possibly dependent pairs.
+        """
+        return self._pairs_ids
+
+    @property
     def n_pairs_(self):
         """The number of possibly dependent pairs.
         """
@@ -413,6 +415,8 @@ class ConservativeEstimate(object):
     @property
     def copula_type(self):
         """The type of copula.
+
+        Can be "vine", or gaussian type.
         """
         return self._copula_type
 
@@ -424,16 +428,20 @@ class ConservativeEstimate(object):
         if value == "normal":
             families = self._families
             # Warn if the user added a wrong type of family
-            if (families[self._families != 0] != 1).any():
+            if (families[families > 0] != 1).any():
                 warnings.warn('Some families were not normal and you want an elliptic copula.')
-            
-            # Set all to families to normal
-            families[self._families != 0] = 1
+
+            # Set all families to gaussian
+            families[families > 0] = 1
             self.families = families
         self._copula_type = value
 
     @property
     def vine_structure(self):
+        """The structure of Vine.
+
+        Array of int.
+        """
         return self._vine_structure
 
     @vine_structure.setter
@@ -451,11 +459,11 @@ class ConservativeEstimate(object):
     @property
     def input_dim(self):
         return self._input_dim
-    
+
     @property
     def bounds_tau(self):
         return self._bounds_tau
-    
+
     @property
     def bounds_par(self):
         return self._bounds_par
@@ -485,8 +493,8 @@ class ConservativeEstimate(object):
         bounds_par = np.zeros(bounds_tau.shape)
         bounds_tau_list = []
         bounds_par_list = []
-        for k, (i, j) in enumerate(self._pairs_ij):
-            tau_min, tau_max = get_tau_interval(self._families[i, j])
+        for k, (i, j) in enumerate(self._pairs):
+            tau_min, tau_max = get_tau_interval(self._family_list[k])
             if np.isnan(bounds_tau[i, j]):
                 tau_min = tau_min
             else:
@@ -1029,7 +1037,7 @@ class DependenceResult(object):
         dim = self.families.shape[0]
         corr_dim = dim * (dim - 1) / 2
         full_params = np.zeros((corr_dim, ))
-        pair_ids = to_list(self.families)[1]
+        pair_ids = to_list(self.families, return_ids=True)[1]
         full_params[pair_ids] = self.dep_param
         return full_params
     
@@ -1038,7 +1046,7 @@ class DependenceResult(object):
         """The Kendall's tau of the dependence parameters.
         """
         kendalls = []
-        for family, id_param in zip(*to_list(self.families)):
+        for family, id_param in zip(*to_list(self.families, return_ids=True)):
             kendall = Conversion(family).to_kendall(self.dep_param[id_param])
             if kendall.size == 1:
                 kendall = kendall.item()
@@ -1297,11 +1305,12 @@ def to_matrix(param, dim):
 
     return matrix
 
-def to_list(matrix):
+def to_list(matrix, return_ids=False, return_coord=False):
     """Add in a list, the positive elements of a matrix.
     """
     values = []
     ids = []
+    coord = []
     dim = matrix.shape[0]
     k = 0
     for i in range(dim):
@@ -1309,9 +1318,18 @@ def to_list(matrix):
             if matrix[i, j] > 0:
                 values.append(matrix[i, j])
                 ids.append(k)
+                coord.append([i, j])
             k += 1
 
-    return values, ids
+    if return_ids and return_coord:
+        return values, ids, coord
+    elif return_ids:
+        return values, ids
+    elif return_coord:
+        return values, coord
+    else:
+        return values
+
 
 def unique_rows(a):
     a = np.ascontiguousarray(a)
