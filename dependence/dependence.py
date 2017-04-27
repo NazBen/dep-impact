@@ -145,10 +145,10 @@ class ConservativeEstimate(object):
 
         # TODO: add conversion from kendall to dependence parameters
         if dep_measure == "copula-parameter":
-            bounds = [self._bounds_par_list[pair] for pair in self.pairs_]
+            bounds = [self._bounds_par_list[pair] for pair in self._pair_ids]
             params = get_grid_sample(bounds, n_dep_param, grid_type)
         elif dep_measure == "kendall-tau":
-            bounds = [self._bounds_tau_list[pair] for pair in self.pairs_]
+            bounds = [self._bounds_tau_list[pair] for pair in self._pair_ids]
             kendalls = get_grid_sample(bounds, n_dep_param, grid_type)
             params = kendalls
         else:
@@ -159,7 +159,7 @@ class ConservativeEstimate(object):
         # Params not to compute
         if (done_results is not None) and (done_results.n_params > 0):
             full_params = np.zeros((n_dep_param, self.corr_dim))
-            full_params[:, self.pairs] = params
+            full_params[:, self._pair_ids] = params
             done_dep_params = done_results.full_dep_params
 
             params_not_to_compute = []
@@ -183,7 +183,7 @@ class ConservativeEstimate(object):
 
         # Add back the results
         if len(params_not_to_compute) > 0:
-            params = np.r_[params, params_not_to_compute[:, self.pairs]]
+            params = np.r_[params, params_not_to_compute[:, self._pair_ids]]
             output_samples = np.r_[output_samples, done_results.output_samples]
             saved_nevals = len(params_not_to_compute)*n_input_sample
         else:
@@ -217,7 +217,7 @@ class ConservativeEstimate(object):
         assert param.ndim == 1, 'Only one parameter at a time for the moment'
 
         full_param = np.zeros((self._corr_dim, ))
-        full_param[self.pairs_] = param
+        full_param[self._pair_ids] = param
         
         input_sample = self._get_sample(full_param, n_input_sample)
         output_sample = self.model_func(input_sample)
@@ -280,7 +280,7 @@ class ConservativeEstimate(object):
 
         # Applied the inverse transformation to get the sample of the joint distribution
         input_sample = np.zeros((n_sample, dim))
-        for i, inv_CDF in enumerate(self._margins_inv_CDF):
+        for i, inv_CDF in enumerate(self._margins_quantiles):
             input_sample[:, i] = np.asarray(inv_CDF(cop_sample[:, i])).ravel()
 
         return input_sample
@@ -482,7 +482,7 @@ class ConservativeEstimate(object):
         # If no bounds given, we take the min and max, depending on the copula family
         if value is None:
             bounds_tau = np.zeros((dim, dim))
-            for i, j in self._pairs_ij:
+            for i, j in self._pairs:
                 bounds_tau[i, j], bounds_tau[j, i] = get_tau_interval(self._families[i, j])
         elif isinstance(value, str):
             # It should be a path to a csv file
@@ -558,8 +558,8 @@ class ConservativeEstimate(object):
                         self._fixed_pairs.append(k)
                         self._fixed_params_list.append(matrix[i, j])
                         # And we remove it from the list of dependent pairs
-                        self._pairs.remove(k)
-                        self._pairs_ij.remove([i, j])
+                        self._pairs_ids.remove(k)
+                        self._pairs.remove([i, j])
                         self._n_pairs -= 1
                 k += 1
 
@@ -595,7 +595,6 @@ class ListDependenceResult(list):
         self.input_dim = self.families.shape[0]
         self.corr_dim = self.input_dim * (self.input_dim - 1) / 2
         self._bootstrap_samples = None
-        self.saved_nevals = saved_nevals
 
     def extend(self, value):
         super(ListDependenceResult, self).extend(value)
@@ -650,7 +649,7 @@ class ListDependenceResult(list):
 
     @property
     def n_evals(self):
-        return self.n_params*self.n_input_sample - self.saved_nevals
+        return self.n_params*self.n_input_sample
 
     @property
     def n_params(self):
