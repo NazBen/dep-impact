@@ -105,151 +105,8 @@ class ConservativeEstimate(object):
         self._load_data = False
         self.eps = 1.E-4
 
-    @classmethod
-    def from_hdf(cls, filepath_or_buffer, id_of_experiment='all', out_ID=0, 
-        with_input_sample=True):
-        """Loads result from HDF5 file.
-
-        This class method creates an instance of :class:`~ImpactOfDependence` 
-        by loading a HDF5 with the saved result of a previous run.
-
-        Parameters
-        ----------
-        filepath_or_buffer : str
-            The path of the file to hdf5 file read.
-        id_of_experiment : str or int, optional (default='all')
-            The experiments to load. The hdf5 file can gather multiple 
-            experiments with the same metadatas. The user can chose to load all
-            or one experiments.
-        out_ID : int, optional (default=0)
-            The index of the output if the function output is multidimensional.
-        with_input_sample : bool, optional (default=True)
-            If False the samples of input observations are not loaded. Input 
-            observations are not necessary to compute output quantity of 
-            interests.
-
-        Returns
-        -------
-        obj : :class:`~ImpactOfDependence`
-            The Impact Of Dependence instance with the loaded informations.
-        """
-        # Ghost function
-        def tmp(): return None
-        
-        # Load of the hdf5 file
-        with h5py.File(filepath_or_buffer, 'r') as hdf_store:
-            # The file may contain multiple experiments. The user can load one 
-            # or multiple experiments if they have similiar configurations.
-            if id_of_experiment == 'all':
-                # All groups of experiments are loaded and concatenated
-                list_index = hdf_store.keys()
-                list_index.remove('dependence_params')
-            else:
-                # Only the specified experiment is loaded
-                assert isinstance(id_of_experiment, int), 'It should be an int'
-                list_index = [str(id_of_experiment)]
-            
-            params = hdf_store['dependence_params'].value
-            run_type = hdf_store.attrs['Run Type']
-            n_params = hdf_store.attrs['K']
-            families = hdf_store.attrs['Copula Families']
-            structure = hdf_store.attrs['Copula Structure']
-            copula_type = hdf_store.attrs['Copula Type']
-            input_dim = hdf_store.attrs['Input Dimension']
-            input_names = hdf_store.attrs['Input Names']
-            
-            # Many previous experiments did not have this attribute. 
-            # The checking is temporary and should be deleted in future
-            # versions.
-            if 'Fixed Parameters' in hdf_store.attrs.keys():
-                fixed_params = hdf_store.attrs['Fixed Parameters']
-            else:
-                fixed_params = None
-            if 'Bounds Tau' in hdf_store.attrs.keys():
-                bounds_tau = hdf_store.attrs['Bounds Tau']
-            else:
-                bounds_tau = None
-
-            margins = []
-            for i in range(input_dim):
-                marg_f = 'Marginal_%d Family' % (i)
-                marg_p = 'Marginal_%d Parameters' % (i)
-                marginal = getattr(ot, hdf_store.attrs[marg_f])(*hdf_store.attrs[marg_p])
-                margins.append(marginal)
-                
-            if run_type == 'Classic':
-                dep_measure = hdf_store.attrs['Dependence Measure']
-                grid_type = hdf_store.attrs['Grid Type']
-                if 'Grid Filename' in hdf_store.attrs.keys():
-                    grid_filename = hdf_store.attrs['Grid Filename']
-                else:
-                    grid_filename = None
-                if grid_type == 'lhs':
-                    lhs_grid_criterion = hdf_store.attrs['LHS Criterion']
-                else:
-                    lhs_grid_criterion = None
-                
-            output_dim = hdf_store.attrs['Output Dimension']
-            output_names = hdf_store.attrs['Output Names']
-            
-            list_input_sample = []
-            list_output_sample = []
-            list_n = []
-            n = 0
-            for k, index in enumerate(list_index):
-                grp = hdf_store[index] # Group of the experiment
-                
-                data_in = grp['input_sample']
-                data_out = grp['output_sample']
-
-                list_input_sample.append(data_in.value)
-                list_output_sample.append(data_out.value)
-                list_n.append(grp.attrs['n'])
-
-        # Each sample is made from the same dependence parameters
-        # They need to be reordered
-        n = sum(list_n)
-        n_sample = n*n_params
-        input_sample = np.zeros((n_sample, input_dim))
-        output_sample = np.zeros((n_sample, output_dim))
-        a = 0
-        for i, ni in enumerate(list_n):
-            for k in range(n_params):
-                start = a + k*n
-                end = start + ni
-                input_sample[start:end, :] = list_input_sample[i][k*ni:(k+1)*ni, :]
-                output_sample[start:end, :] = list_output_sample[i][k*ni:(k+1)*ni, :]
-            a += ni
-                    
-        obj = cls(tmp, margins, families, fixed_params=fixed_params,
-                  bounds_tau=bounds_tau, vine_structure=structure)
-                
-        obj._params = params
-        obj._n_param = n_params
-        obj._n_sample = n_sample
-        obj._n_input_sample = n
-        if with_input_sample:
-            obj._input_sample = input_sample
-        obj._all_output_sample = output_sample
-        obj._output_dim = output_dim
-        obj._copula_type = copula_type
-        obj._input_names = input_names
-        obj._output_names = output_names
-        obj._run_type = run_type
-        
-        obj._output_ID = out_ID
-        obj._load_data = True
-        
-        if run_type == 'Classic':
-            obj._dep_measure = dep_measure
-            obj._grid = grid_type
-            obj._grid_filename = grid_filename
-            obj._lhs_grid_criterion = lhs_grid_criterion
-
-        return obj
-
     def gridsearch_minimize(self, n_dep_param, n_input_sample, grid_type='lhs',
-                            dep_measure='KendallTau', q_func=np.var, 
+                            dep_measure='kendall-tau', q_func=np.var, 
                             lhs_grid_criterion='centermaximin',
                             use_grid=None, save_grid=None,
                             done_results=None, random_state=None):
@@ -269,7 +126,7 @@ class ConservativeEstimate(object):
             - 'rand' : a random sampling,
             - 'fixed' : an uniform grid.
             
-        dep_measure : 'KendallTau' or 'copula-parameter', optional (default='KendallTau')
+        dep_measure : 'kendall-tau' or 'copula-parameter', optional (default='KendallTau')
             The measure of dependence in which the dependence parameters are
             created.
         q_func : callable, optional (default=np.var)
@@ -288,11 +145,20 @@ class ConservativeEstimate(object):
         
         """
         rng = check_random_state(random_state)
-        run_type = 'Classic'
+        run_type = 'grid-search'
+
         assert callable(q_func), "Quantity function is not callable"
-         
-        dimensions = [self._bounds_par_list[pair] for pair in self.pairs_]
-        params = get_grid_sample(dimensions, n_dep_param, grid_type)
+
+        # TODO: add conversion from kendall to dependence parameters
+        if dep_measure == "copula-parameter":
+            bounds = [self._bounds_par_list[pair] for pair in self.pairs_]
+            params = get_grid_sample(bounds, n_dep_param, grid_type)
+        elif dep_measure == "kendall-tau":
+            bounds = [self._bounds_tau_list[pair] for pair in self.pairs_]
+            kendalls = get_grid_sample(bounds, n_dep_param, grid_type)
+            params = kendalls
+        else:
+            raise ValueError("Unknow dependence measure type")
         n_dep_param = len(params)
 
         params_not_to_compute = []
@@ -333,8 +199,7 @@ class ConservativeEstimate(object):
                                     output_samples=output_samples,
                                     q_func=q_func, run_type=run_type,
                                     families=self.families,
-                                    random_state=rng,
-                                    saved_nevals=saved_nevals)
+                                    random_state=rng)
 
     def stochastic_function(self, param, n_input_sample=1, random_state=None):
         """This function considers the model output as a stochastic function by 
@@ -447,10 +312,6 @@ class ConservativeEstimate(object):
         assert p == sample.shape[1], 'Wrong dimension'
         return sample, filename
 
-
-# =============================================================================
-# Properties
-# =============================================================================
     @property
     def model_func(self):
         """The callable model function.
@@ -637,6 +498,7 @@ class ConservativeEstimate(object):
                 
             bounds_tau_list.append([tau_min, tau_max])
             
+            # TODO: something is wrong here with k
             param_min = self._copula_converters[k].to_copula_parameter(tau_min, 'KendallTau')
             param_max = self._copula_converters[k].to_copula_parameter(tau_max, 'KendallTau')
             
@@ -696,14 +558,15 @@ class ConservativeEstimate(object):
 
 class ListDependenceResult(list):
     """The result from the Conservative Estimation.
-    
+
+    The results gather in the list must have the same configurations: the same
+    copula families, vine structure, grid
     Parameters
     ----------
     """
-    def __init__(self, dep_params=None, output_samples=None, input_samples=None, 
-                 q_func=None, run_type=None, n_evals=None,
-                 families=None, random_state=None, saved_nevals=0):
-        
+    def __init__(self, dep_params=None, output_samples=None, input_samples=None, q_func=None, families=None, run_type=None, n_evals=None,
+                 random_state=None):
+
         self.rng = check_random_state(random_state)
         # TODO: add a setter in the class
         self.q_func = q_func
@@ -712,11 +575,11 @@ class ListDependenceResult(list):
             for k, dep_param in enumerate(dep_params):
                 input_sample = None if input_samples is None else input_samples[k]
     
-                result = DependenceResult(dep_param=dep_param, 
-                                          input_sample=input_sample, 
-                                          output_sample=output_samples[k], 
-                                          q_func=q_func, 
-                                          families=families, 
+                result = DependenceResult(dep_param=dep_param,
+                                          input_sample=input_sample,
+                                          output_sample=output_samples[k],
+                                          q_func=q_func,
+                                          families=families,
                                           random_state=self.rng)
                 self.append(result)
 
@@ -874,7 +737,7 @@ class ListDependenceResult(list):
                 with h5py.File(path_or_buf, 'a') as hdf_store:
                     # General attributes
                     # Check the attributes of the file, if it already exists
-                    if hdf_store.attrs.keys():                        
+                    if hdf_store.attrs.keys():
                         np.testing.assert_allclose(hdf_store['dependence_params'].value, self._params)
                         assert hdf_store.attrs['Input Dimension'] == self.input_dim
                         assert hdf_store.attrs['Output Dimension'] == self.output_dim
@@ -948,6 +811,149 @@ class ListDependenceResult(list):
         print('Data saved in %s' % (file_name))
 
         return file_name
+
+    @classmethod
+    def from_hdf(cls, filepath_or_buffer, id_of_experiment='all', out_ID=0, 
+        with_input_sample=True):
+        """Loads result from HDF5 file.
+
+        This class method creates an instance of :class:`~ImpactOfDependence` 
+        by loading a HDF5 with the saved result of a previous run.
+
+        Parameters
+        ----------
+        filepath_or_buffer : str
+            The path of the file to hdf5 file read.
+        id_of_experiment : str or int, optional (default='all')
+            The experiments to load. The hdf5 file can gather multiple 
+            experiments with the same metadatas. The user can chose to load all
+            or one experiments.
+        out_ID : int, optional (default=0)
+            The index of the output if the function output is multidimensional.
+        with_input_sample : bool, optional (default=True)
+            If False the samples of input observations are not loaded. Input 
+            observations are not necessary to compute output quantity of 
+            interests.
+
+        Returns
+        -------
+        obj : :class:`~ImpactOfDependence`
+            The Impact Of Dependence instance with the loaded informations.
+        """
+        # Ghost function
+        def tmp(): return None
+        
+        # Load of the hdf5 file
+        with h5py.File(filepath_or_buffer, 'r') as hdf_store:
+            # The file may contain multiple experiments. The user can load one 
+            # or multiple experiments if they have similiar configurations.
+            if id_of_experiment == 'all':
+                # All groups of experiments are loaded and concatenated
+                list_index = hdf_store.keys()
+                list_index.remove('dependence_params')
+            else:
+                # Only the specified experiment is loaded
+                assert isinstance(id_of_experiment, int), 'It should be an int'
+                list_index = [str(id_of_experiment)]
+            
+            params = hdf_store['dependence_params'].value
+            run_type = hdf_store.attrs['Run Type']
+            n_params = hdf_store.attrs['K']
+            families = hdf_store.attrs['Copula Families']
+            structure = hdf_store.attrs['Copula Structure']
+            copula_type = hdf_store.attrs['Copula Type']
+            input_dim = hdf_store.attrs['Input Dimension']
+            input_names = hdf_store.attrs['Input Names']
+            
+            # Many previous experiments did not have this attribute. 
+            # The checking is temporary and should be deleted in future
+            # versions.
+            if 'Fixed Parameters' in hdf_store.attrs.keys():
+                fixed_params = hdf_store.attrs['Fixed Parameters']
+            else:
+                fixed_params = None
+            if 'Bounds Tau' in hdf_store.attrs.keys():
+                bounds_tau = hdf_store.attrs['Bounds Tau']
+            else:
+                bounds_tau = None
+
+            margins = []
+            for i in range(input_dim):
+                marg_f = 'Marginal_%d Family' % (i)
+                marg_p = 'Marginal_%d Parameters' % (i)
+                marginal = getattr(ot, hdf_store.attrs[marg_f])(*hdf_store.attrs[marg_p])
+                margins.append(marginal)
+                
+            if run_type == 'Classic':
+                dep_measure = hdf_store.attrs['Dependence Measure']
+                grid_type = hdf_store.attrs['Grid Type']
+                if 'Grid Filename' in hdf_store.attrs.keys():
+                    grid_filename = hdf_store.attrs['Grid Filename']
+                else:
+                    grid_filename = None
+                if grid_type == 'lhs':
+                    lhs_grid_criterion = hdf_store.attrs['LHS Criterion']
+                else:
+                    lhs_grid_criterion = None
+                
+            output_dim = hdf_store.attrs['Output Dimension']
+            output_names = hdf_store.attrs['Output Names']
+            
+            list_input_sample = []
+            list_output_sample = []
+            list_n = []
+            n = 0
+            for k, index in enumerate(list_index):
+                grp = hdf_store[index] # Group of the experiment
+                
+                data_in = grp['input_sample']
+                data_out = grp['output_sample']
+
+                list_input_sample.append(data_in.value)
+                list_output_sample.append(data_out.value)
+                list_n.append(grp.attrs['n'])
+
+        # Each sample is made from the same dependence parameters
+        # They need to be reordered
+        n = sum(list_n)
+        n_sample = n*n_params
+        input_sample = np.zeros((n_sample, input_dim))
+        output_sample = np.zeros((n_sample, output_dim))
+        a = 0
+        for i, ni in enumerate(list_n):
+            for k in range(n_params):
+                start = a + k*n
+                end = start + ni
+                input_sample[start:end, :] = list_input_sample[i][k*ni:(k+1)*ni, :]
+                output_sample[start:end, :] = list_output_sample[i][k*ni:(k+1)*ni, :]
+            a += ni
+                    
+        obj = cls(tmp, margins, families, fixed_params=fixed_params,
+                  bounds_tau=bounds_tau, vine_structure=structure)
+                
+        obj._params = params
+        obj._n_param = n_params
+        obj._n_sample = n_sample
+        obj._n_input_sample = n
+        if with_input_sample:
+            obj._input_sample = input_sample
+        obj._all_output_sample = output_sample
+        obj._output_dim = output_dim
+        obj._copula_type = copula_type
+        obj._input_names = input_names
+        obj._output_names = output_names
+        obj._run_type = run_type
+        
+        obj._output_ID = out_ID
+        obj._load_data = True
+        
+        if run_type == 'Classic':
+            obj._dep_measure = dep_measure
+            obj._grid = grid_type
+            obj._grid_filename = grid_filename
+            obj._lhs_grid_criterion = lhs_grid_criterion
+
+        return obj
 
 class DependenceResult(object):
     """Result from conservative estimate.
@@ -1345,6 +1351,6 @@ def get_grid_sample(dimensions, n_sample, grid_type):
     """
     # We create the grid
     space = Space(dimensions)
-    params = space.rvs(n_sample, sampling=grid_type)
+    sample = space.rvs(n_sample, sampling=grid_type)
 
-    return params
+    return sample
