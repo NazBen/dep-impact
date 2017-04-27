@@ -203,6 +203,8 @@ class ConservativeEstimate(object):
                                     q_func=q_func,
                                     run_type=run_type,
                                     families=self.families,
+                                    vine_structure = self.vine_structure,
+                                    margins=self.margins,
                                     random_state=rng)
 
     def stochastic_function(self, param, n_input_sample=1, return_input_sample=True, random_state=None):
@@ -259,7 +261,8 @@ class ConservativeEstimate(object):
         output_sample = self.model_func(input_sample)
         if not keep_input_sample:
             input_sample = None
-        return DependenceResult(output_sample=output_sample, input_sample=input_sample, q_func=q_func, random_state=rng)
+        return DependenceResult(output_sample=output_sample, input_sample=input_sample,
+                                q_func=q_func, margins=self.margins,random_state=rng)
 
     def _get_sample(self, param, n_sample, param2=None):
         """Creates the observations of the joint input distribution.
@@ -589,8 +592,7 @@ class ListDependenceResult(list):
     """
     def __init__(self, dep_params=None, output_samples=None, input_samples=None,
                  q_func=None, families=None, run_type=None, n_evals=None, vine_structure=None,
-                 grid_type=None, random_state=None):
-
+                 grid_type=None, margins=None, random_state=None):
         self.rng = check_random_state(random_state)
         self.q_func = q_func
 
@@ -604,12 +606,15 @@ class ListDependenceResult(list):
                                           output_sample=output_sample,
                                           q_func=q_func,
                                           families=families,
+                                          margins=margins,
                                           vine_structure = vine_structure,
                                           random_state=self.rng)
                 self.append(result)
 
         self.families = families
+        self.margins = margins
         self.input_dim = self.families.shape[0]
+        self.output_dim = self.output_samples.shape[0]
         self.corr_dim = self.input_dim * (self.input_dim - 1) / 2
         self._bootstrap_samples = None
 
@@ -627,6 +632,7 @@ class ListDependenceResult(list):
     def q_func(self, q_func):
         assert callable(q_func), "Function must be callable"
         self._q_func = q_func
+
     @property
     def pairs(self):
         """
@@ -757,7 +763,7 @@ class ListDependenceResult(list):
 
         margin_dict = {}
         # List of marginal names
-        for i, marginal in enumerate(self._margins):
+        for i, marginal in enumerate(self.margins):
                 name = marginal.getName()
                 params = list(marginal.getParameter())
                 margin_dict['Marginal_%d Family' % (i)] = name
@@ -799,12 +805,12 @@ class ListDependenceResult(list):
                             assert hdf_store.attrs['Grid Type'] == self._grid
                     else:
                         # We save the attributes in the empty new file
-                        hdf_store.create_dataset('dependence_params', data=self._params)
-                        hdf_store.attrs['K'] = self._n_param
+                        hdf_store.create_dataset('dependence_params', data=self.dep_params)
+                        hdf_store.attrs['K'] = self.n_params
                         hdf_store.attrs['Input Dimension'] = self.input_dim
                         hdf_store.attrs['Output Dimension'] = self.output_dim
                         hdf_store.attrs['Run Type'] = self._run_type
-                        hdf_store.attrs['Copula Families'] = self._families
+                        hdf_store.attrs['Copula Families'] = self.families
                         hdf_store.attrs['Fixed Parameters'] = self._fixed_params
                         hdf_store.attrs['Bounds Tau'] = self._bounds_tau
                         hdf_store.attrs['Copula Structure'] = self._vine_structure
@@ -1011,7 +1017,8 @@ class DependenceResult(object):
     
     """
     def __init__(self, dep_param=None, input_sample=None, output_sample=None, 
-                 q_func=None, run_type=None, families=None, vine_structure=None, random_state=None):
+                 q_func=None, run_type=None, families=None, vine_structure=None, 
+                 margins=None, random_state=None):
         self.dep_param = dep_param
         self.output_sample = output_sample
         self.input_sample = input_sample
@@ -1019,6 +1026,7 @@ class DependenceResult(object):
         self.run_type = run_type
         self.families = families
         self.vine_structure = vine_structure
+        self.margins = margins
         self.rng = check_random_state(random_state)
         self._bootstrap_sample = None
 
