@@ -177,8 +177,8 @@ class ConservativeEstimate(object):
             params = np.delete(params, params_id_not_to_compute, axis=0)
 
         # Evaluate the sample
-        param_func = lambda param: self.stochastic_function(param, 
-                                                            n_input_sample, 
+        param_func = lambda param: self.stochastic_function(param,
+                                                            n_input_sample,
                                                             return_input_sample=keep_input_sample)
         if keep_input_sample:
             tmp = map(param_func, params)
@@ -200,7 +200,7 @@ class ConservativeEstimate(object):
         return ListDependenceResult(dep_params=params,
                                     output_samples=output_samples,
                                     input_samples=inputs,
-                                    q_func=q_func, 
+                                    q_func=q_func,
                                     run_type=run_type,
                                     families=self.families,
                                     random_state=rng)
@@ -259,7 +259,6 @@ class ConservativeEstimate(object):
         output_sample = self.model_func(input_sample)
         if not keep_input_sample:
             input_sample = None
-
         return DependenceResult(output_sample=output_sample, input_sample=input_sample, q_func=q_func, random_state=rng)
 
     def _get_sample(self, param, n_sample, param2=None):
@@ -583,26 +582,29 @@ class ListDependenceResult(list):
     """The result from the Conservative Estimation.
 
     The results gather in the list must have the same configurations: the same
-    copula families, vine structure, grid
+    copula families, vine structure, grid.
+
     Parameters
     ----------
     """
-    def __init__(self, dep_params=None, output_samples=None, input_samples=None, q_func=None, families=None, run_type=None, n_evals=None,
-                 random_state=None):
+    def __init__(self, dep_params=None, output_samples=None, input_samples=None,
+                 q_func=None, families=None, run_type=None, n_evals=None, vine_structure=None,
+                 grid_type=None, random_state=None):
 
         self.rng = check_random_state(random_state)
-        # TODO: add a setter in the class
         self.q_func = q_func
 
         if dep_params is not None:
             for k, dep_param in enumerate(dep_params):
                 input_sample = None if input_samples is None else input_samples[k]
+                output_sample = output_samples[k]
     
                 result = DependenceResult(dep_param=dep_param,
                                           input_sample=input_sample,
-                                          output_sample=output_samples[k],
+                                          output_sample=output_sample,
                                           q_func=q_func,
                                           families=families,
+                                          vine_structure = vine_structure,
                                           random_state=self.rng)
                 self.append(result)
 
@@ -615,6 +617,16 @@ class ListDependenceResult(list):
         super(ListDependenceResult, self).extend(value)
         self.families = value.families
 
+    @property
+    def q_func(self):
+        """The quantity function
+        """
+        return self._q_func
+
+    @q_func.setter
+    def q_func(self, q_func):
+        assert callable(q_func), "Function must be callable"
+        self._q_func = q_func
     @property
     def pairs(self):
         """
@@ -809,7 +821,7 @@ class ListDependenceResult(list):
                             if self._grid_filename:
                                 hdf_store.attrs['Grid Filename'] = os.path.basename(self._grid_filename)
                             if self._grid == 'lhs':
-                                hdf_store.attrs['LHS Criterion'] = self._lhs_grid_criterion      
+                                hdf_store.attrs['LHS Criterion'] = self._lhs_grid_criterion
                     
                     # Check the number of experiments
                     grp_number = 0
@@ -995,17 +1007,18 @@ class DependenceResult(object):
     families : array
         The matrix array of the families.
     random_state : int, RandomState or None,
-        The random state of the computation.        
+        The random state of the computation.
     
     """
     def __init__(self, dep_param=None, input_sample=None, output_sample=None, 
-                 q_func=None, run_type=None, families=None, random_state=None):
+                 q_func=None, run_type=None, families=None, vine_structure=None, random_state=None):
         self.dep_param = dep_param
-        self.input_sample = input_sample
         self.output_sample = output_sample
+        self.input_sample = input_sample
         self.q_func = q_func
         self.run_type = run_type
         self.families = families
+        self.vine_structure = vine_structure
         self.rng = check_random_state(random_state)
         self._bootstrap_sample = None
 
@@ -1054,7 +1067,7 @@ class DependenceResult(object):
         pair_ids = to_list(self.families, return_ids=True)[1]
         full_params[pair_ids] = self.dep_param
         return full_params
-    
+
     @property
     def kendall_tau(self):
         """The Kendall's tau of the dependence parameters.
