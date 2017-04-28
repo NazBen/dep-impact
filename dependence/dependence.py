@@ -187,7 +187,7 @@ class ConservativeEstimate(object):
         else:
             outputs = map(param_func, params)
             inputs = None
-        output_samples = np.asarray(outputs).reshape(n_dep_param, n_input_sample)
+        output_samples = outputs
 
         # Add back the results
         if len(params_not_to_compute) > 0:
@@ -197,14 +197,16 @@ class ConservativeEstimate(object):
         else:
             saved_nevals = 0
 
-        return ListDependenceResult(dep_params=params,
-                                    output_samples=output_samples,
-                                    input_samples=inputs,
-                                    q_func=q_func,
-                                    run_type=run_type,
+        return ListDependenceResult(margins=self.margins,
                                     families=self.families,
                                     vine_structure = self.vine_structure,
-                                    margins=self.margins,
+                                    bounds_tau=self.bounds_tau,
+                                    dep_params=params,
+                                    input_samples=inputs,
+                                    output_samples=output_samples,
+                                    q_func=q_func,
+                                    run_type=run_type,
+                                    grid_type=grid_type,
                                     random_state=rng)
 
     def stochastic_function(self, param, n_input_sample=1, return_input_sample=True, random_state=None):
@@ -595,13 +597,31 @@ class ListDependenceResult(list):
 
     Parameters
     ----------
+    run_type : str
+        The type of estimation: independence, grid-search, iterative, ...
     """
-    def __init__(self, families=None, vine_structure=None,
-                 
-                 dep_params=None, output_samples=None, input_samples=None,
-                 q_func=None, run_type=None, n_evals=None, 
-                  grid_type=None, margins=None, 
+    def __init__(self, 
+                 margins=None,
+                 families=None,
+                 vine_structure=None,
+                 bounds_tau=None,
+                 dep_params=None,
+                 input_samples=None,
+                 output_samples=None,
+                 q_func=None,
+                 run_type=None,
+                 n_evals=None,
+                 grid_type=None,  
                  random_state=None):
+        
+        self.margins = margins
+        self.families = families
+        self.vine_structure = vine_structure
+        self.bounds_tau = bounds_tau
+        self.q_func = q_func
+        self.run_type = run_type
+        self.input_dim = len(margins)
+        self.corr_dim = self.input_dim * (self.input_dim - 1) / 2
 
         if dep_params is not None:
             assert output_samples is not None, \
@@ -611,22 +631,18 @@ class ListDependenceResult(list):
                 input_sample = None if input_samples is None else input_samples[k]
                 output_sample = output_samples[k]
     
-                result = DependenceResult(dep_param=dep_param,
+                result = DependenceResult(margins=margins,
+                                          families=families,
+                                          vine_structure=vine_structure,
+                                          dep_param=dep_param,
                                           input_sample=input_sample,
                                           output_sample=output_sample,
                                           q_func=q_func,
-                                          families=families,
-                                          margins=margins,
-                                          vine_structure = vine_structure,
-                                          random_state=self.rng)
+                                          random_state=random_state)
                 self.append(result)
 
-        self.q_func = q_func
-        self.families = families
-        self.margins = margins
-        self.input_dim = self.families.shape[0]
-        self.output_dim = self.output_samples.shape[0]
-        self.corr_dim = self.input_dim * (self.input_dim - 1) / 2
+            self.output_dim = output_sample.shape[1]
+            
         self.rng = check_random_state(random_state)
         self._bootstrap_samples = None
 
@@ -659,14 +675,14 @@ class ListDependenceResult(list):
         if self.n_params == 0:
             print("There is no data...")
         else:
-            return [result.dep_param for result in self]
+            return np.asarray([result.dep_param for result in self])
         
     @property
     def kendalls(self):
         if self.n_params == 0:
             print("There is no data...")
         else:
-            return [result.kendall_tau for result in self]
+            return np.asarray([result.kendall_tau for result in self])
         
     @property
     def n_pairs(self):
@@ -683,7 +699,7 @@ class ListDependenceResult(list):
             print("There is no data...")
         else:
             # TODO: Must be changed if the number of sample is different for each param
-            return np.asarray([result.output_sample for result in self])
+            return [result.output_sample for result in self]
     
     @property
     def n_input_sample(self):
@@ -773,14 +789,8 @@ class ListDependenceResult(list):
             for i in range(self.output_dim):
                 output_names.append("y_%d" % (i + 1))
 
-        margin_dict = {}
-        # List of marginal names
-        for i, marginal in enumerate(self.margins):
-                name = marginal.getName()
-                params = list(marginal.getParameter())
-                margin_dict['Marginal_%d Family' % (i)] = name
-                margin_dict['Marginal_%d Parameters' % (i)] = params
-
+        margin_dict = margins_to_dict(self.margins)
+        
         filename_exists = True
         init_file_name = path_or_buf
         k = 0
@@ -818,24 +828,26 @@ class ListDependenceResult(list):
                     else:
                         # We save the attributes in the empty new file
                         hdf_store.create_dataset('dependence_params', data=self.dep_params)
-                        hdf_store.attrs['K'] = self.n_params
-                        hdf_store.attrs['Input Dimension'] = self.input_dim
-                        hdf_store.attrs['Output Dimension'] = self.output_dim
-                        hdf_store.attrs['Run Type'] = self._run_type
-                        hdf_store.attrs['Copula Families'] = self.families
-                        hdf_store.attrs['Fixed Parameters'] = self._fixed_params
-                        hdf_store.attrs['Bounds Tau'] = self._bounds_tau
-                        hdf_store.attrs['Copula Structure'] = self._vine_structure
-                        hdf_store.attrs['Copula Type'] = self._copula_type
-                        hdf_store.attrs['Input Names'] = input_names
-                        hdf_store.attrs['Output Names'] = output_names
+                        # Margins
                         for i in range(self.input_dim):
                             hdf_store.attrs['Marginal_%d Family' % (i)] = margin_dict['Marginal_%d Family' % (i)]
                             hdf_store.attrs['Marginal_%d Parameters' % (i)] = margin_dict['Marginal_%d Parameters' % (i)]
                         
-                        if self._run_type == 'Classic':
+                        hdf_store.attrs['Copula Families'] = self.families
+                        hdf_store.attrs['Copula Structure'] = self.vine_structure
+                        hdf_store.attrs['Bounds Tau'] = self.bounds_tau                        
+                        hdf_store.attrs['Grid Size'] = self.n_params
+                        hdf_store.attrs['Input Dimension'] = self.input_dim
+                        hdf_store.attrs['Output Dimension'] = self.output_dim
+                        # TODO: think about fixed params
+#                        hdf_store.attrs['Fixed Parameters'] = self._fixed_params
+                        hdf_store.attrs['Input Names'] = input_names
+                        hdf_store.attrs['Output Names'] = output_names                        
+                        
+                        # TODO: Take care of the problem from the grid
+                        if self.run_type == 'Classic':
                             hdf_store.attrs['Dependence Measure'] = self._dep_measure
-                            hdf_store.attrs['Grid Type'] = self._grid
+                            hdf_store.attrs['Grid Type'] = self.grid_type
                             if self._grid_filename:
                                 hdf_store.attrs['Grid Filename'] = os.path.basename(self._grid_filename)
                             if self._grid == 'lhs':
@@ -847,22 +859,24 @@ class ListDependenceResult(list):
                     list_groups.remove('dependence_params')
                     list_groups = [int(g) for g in list_groups]
                     list_groups.sort()
+                    
+                    # If there is already groups in the file
                     if list_groups:
                         grp_number = list_groups[-1] + 1
 
                     grp = hdf_store.create_group(str(grp_number))
-                    grp.attrs['n'] = self._n_input_sample
-                    grp.create_dataset('input_sample', data=self._input_sample)
-                    grp.create_dataset('output_sample', data=self._all_output_sample.reshape((self._n_sample, self._output_dim)))
+                    for i in range(self.n_params):
+                        grp_i = grp.create_group(str(i))
+                        grp_i.attrs['n'] = self[i].n_sample
+                        grp_i.create_dataset('input_sample', data=self[i].input_sample)
+                        grp_i.create_dataset('output_sample', data=self[i].output_sample)
                     filename_exists = False
             except AssertionError:
-                print('File %s already has different configurations' % (file_name))
-                file_name = '%s_%d.hdf5' % (init_file_name[:-5], k)
+                print('File %s already has different configurations' % (path_or_buf))
+                path_or_buf = '%s_%d.hdf5' % (init_file_name[:-5], k)
                 k += 1
 
-        print('Data saved in %s' % (file_name))
-
-        return file_name
+        print('Data saved in %s' % (path_or_buf))
 
     @classmethod
     def from_hdf(cls, filepath_or_buffer, id_of_experiment='all', out_ID=0, 
@@ -1016,6 +1030,8 @@ class DependenceResult(object):
         The OT distributions.
     families : array
         The matrix array of the families.
+    vine_structure : array
+        The matrix array of the R-vine. If None, it is considered as Gaussian.
     dep_param : array
         The dependence parameters.
     input_sample : array
@@ -1024,8 +1040,6 @@ class DependenceResult(object):
         The output sample.
     q_func : callable or None
         The output quantity of intereset function.
-    run_type : str
-        The type of estimation: independence, grid-search, iterative, ...
     random_state : int, RandomState or None,
         The random state of the computation.
     
@@ -1049,6 +1063,14 @@ class DependenceResult(object):
         self.margins = margins
         self.rng = check_random_state(random_state)
         
+        self.n_sample = input_sample.shape[0]
+        self.n_param = len(dep_param)
+        self.input_dim = len(margins)
+        if output_sample.shape[0] == output_sample.size:
+            self.output_dim = 1
+        else:
+            self.output_dim = output_sample.shape[1]            
+        self.corr_dim = self.input_dim * (self.input_dim - 1) / 2
         self._bootstrap_sample = None
 
     def compute_bootstrap(self, n_bootstrap=1000, inplace=True):
@@ -1108,245 +1130,11 @@ class DependenceResult(object):
                 kendall = kendall.item()
             kendalls.append(kendall)
         return kendalls
-        
-    @property
-    def configs(self):
-        return self._configs
-
-    @configs.setter
-    def configs(self, value):
-        assert isinstance(value, dict), \
-            TypeError("It should be a dictionnary")
-
-        self._quantity_name = value['Quantity Name']
-        self._confidence_level = value['Confidence Level']
-        self._estimation_method = value['Estimation Method']
-
-        if self._quantity_name == 'Probability':
-            self._threshold = value['Threshold']
-            self._operator = value['Operator']
-        elif self._quantity_name == 'Quantile':
-            self._alpha = value['Quantile Probability']
-
-        self._configs = value
-        
+                
     def draw_input_sample():
         """
         """
         raise NotImplementedError("Available soon, when I'll have the time")
-
-    def draw_bounds(self, indep_quant=None, figsize=(10, 6)):
-        """
-        """
-        min_quantile = self.quantity.min(axis=1)
-        max_quantile = self.quantity.max(axis=1)
-
-        fig, ax = plt.subplots()
-        if indep_quant is not None:
-            ax.plot(indep_quant._alpha, indep_quant.quantity, 'b')
-        ax.plot(self._alpha, min_quantile, '--b')
-        ax.plot(self._alpha, max_quantile, '--b')
-
-        ax.set_ylabel(self._quantity_name)
-        ax.set_xlabel('$\\alpha$')
-        ax.axis('tight')
-        fig.tight_layout()
-
-    def draw(self, id_alpha=0, dep_meas="KendallTau", figsize=(10, 6), 
-             color_map="jet", max_eps=1.E-1,
-             savefig=False, figpath='.'):
-        """Draw the quantity with the dependence measure or copula
-        parameter
-        """
-        obj = self._dependence
-        copula_params = self._cond_params
-        n_param, n_pairs = copula_params.shape
-
-        assert n_pairs in [1, 2, 3],\
-            EnvironmentError("Cannot draw the quantity for dim > 3")
-
-        if dep_meas == "KendallTau":
-            params = np.zeros((n_param, n_pairs))
-            for i, k in enumerate(obj._pairs):
-                params[:, i] = obj._copula_converters[k].to_Kendall(copula_params[:, i])
-            param_name = "\\tau"
-        elif dep_meas == "CopulaParam":
-            params = copula_params
-            param_name = "\\rho"
-        elif dep_meas == "PearsonRho":
-            raise NotImplementedError("Still not done")
-            params = None
-            param_name = "\\rho^{Pearson}"
-        else:
-            raise AttributeError("Undefined param")
-
-        
-        # Output quantities of interest
-        quantity = self.quantity[id_alpha, :].reshape(n_param, -1)
-        if self.confidence_interval is not None:
-            interval = self.confidence_interval[id_alpha, :]
-        else:
-            interval = None
-        quantity_name = self._quantity_name
-
-        # Find the "almost" independent configuration
-        if n_pairs == 1:
-            id_indep = (np.abs(params)).argmin()
-        else:
-            id_indep = np.abs(params).sum(axis=1).argmin()
-
-        # Independent parameter and quantile
-        indep_param = params[id_indep]
-        indep_quant = quantity[id_indep]
-
-        # If we have confidence interval
-        if interval is not None:
-            low_bound = quantity - interval
-            up_bound = quantity + interval
-            indep_quant_l_bound = low_bound[id_indep]
-            indep_quant_u_bound = up_bound[id_indep]
-
-        # If it's greater than the tolerence, no need to show it
-        if np.sum(indep_param) > max_eps:
-            print_indep = False
-        else:
-            print_indep = True
-
-        fig = plt.figure(figsize=figsize)  # Create the fig object
-
-        if n_pairs == 1:  # One used correlation parameter
-            ax = fig.add_subplot(111)  # Create the axis object
-
-            # Ids of the sorted parameters for the plot
-            id_sorted_params = np.argsort(params, axis=0).ravel()
-
-            # Plot of the quantile conditionally to the correlation parameter
-            ax.plot(params[id_sorted_params], quantity[id_sorted_params, :],
-                    'ob', label=quantity_name, linewidth=2)
-
-            # Plot the confidence bounds
-            if interval is not None:
-                ax.plot(params[id_sorted_params], up_bound[id_sorted_params],
-                        '--b', label=quantity_name + " confidence",
-                        linewidth=2)
-                ax.plot(params[id_sorted_params], low_bound[id_sorted_params],
-                        '--b', linewidth=2)
-
-            # Print a line to distinguish the difference with the independence
-            # case
-            if print_indep:
-                p_min, p_max = params.min(), params.max()
-                ax.plot([p_min, p_max], [indep_quant] * 2, "r-",
-                        label="Independence")
-                if interval is not None:
-                    ax.plot([p_min, p_max], [indep_quant_l_bound] * 2, "r--")
-                    ax.plot([p_min, p_max], [indep_quant_u_bound] * 2, "r--")
-
-            i, j = obj._pairs_ij[0][0], obj._pairs_ij[0][1]
-            ax.set_xlabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
-            ax.set_ylabel(quantity_name)
-            ax.legend(loc="best")
-
-        elif n_pairs == 2:  # For 2 correlation parameters
-            view = "3d"
-            if view == "3d":
-                # Dependence parameters values
-                r1, r2 = params[:, 0], params[:, 1]
-
-                # 3d ax
-                ax = fig.add_subplot(111, projection='3d')
-                # Draw the point with the colors
-                ax.scatter(r1, r2, quantity, s=40)
-
-                # Plot the confidence bounds
-                if interval is not None:
-                    ax.plot_trisurf(r1, r2, low_bound,
-                                    color="red", alpha=0.05, linewidth=1)
-                    ax.plot_trisurf(r1, r2, up_bound, color="red",
-                                    alpha=0.05, linewidth=1)
-                    #ax.plot(r1, r2, up_bound, 'r.')
-                    #ax.plot(r1, r2, low_bound, 'r.')
-
-                # Print a line to distinguish the difference with the
-                # independence case
-                if print_indep:
-                    p1_min, p1_max = r1.min(), r1.max()
-                    p2_min, p2_max = r2.min(), r2.max()
-                    p1_ = np.linspace(p1_min, p1_max, 3)
-                    p2_ = np.linspace(p2_min, p2_max, 3)
-                    p1, p2 = np.meshgrid(p1_, p2_)
-                    q = np.zeros(p1.shape) + indep_quant
-                    ax.plot_wireframe(p1, p2, q, color="red")
-
-                    if interval is not None:
-                        q_l = np.zeros(p1.shape) + indep_quant_l_bound
-                        q_u = np.zeros(p1.shape) + indep_quant_u_bound
-                        ax.plot_wireframe(p1, p2, q_l, color="red")
-                        ax.plot_wireframe(p1, p2, q_u, color="red")
-                    #    ax.plot([p_min, p_max], [indep_quant_l_bound] * 2,
-                    #    "r--")
-                    #    ax.plot([p_min, p_max], [indep_quant_u_bound] * 2,
-                    #    "r--")
-                # Labels
-                i, j = obj._pairs_ij[0][0], obj._pairs_ij[0][1]
-                ax.set_xlabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
-                i, j = obj._pairs_ij[1][0], obj._pairs_ij[1][1]
-                ax.set_ylabel("$%s_{%d%d}$" % (param_name, i, j), fontsize=14)
-
-                ax.set_zlabel(quantity_name)
-
-        elif n_pairs == 3:  # For 2 correlation parameters
-            color_scale = quantity.ravel()
-            cm = plt.get_cmap(color_map)
-            c_min, c_max = min(color_scale), max(color_scale)
-            cNorm = matplotlib.colors.Normalize(vmin=c_min, vmax=c_max)
-            scalar_map = cmx.ScalarMappable(norm=cNorm, cmap=cm)
-
-            x, y, z = params[:, 0], params[:, 1], params[:, 2]
-
-            ax = fig.add_subplot(111, projection='3d')
-            ax.scatter(x, y, z, c=scalar_map.to_rgba(color_scale), s=40)
-            scalar_map.set_array(color_scale)
-            cbar = fig.colorbar(scalar_map)
-            if print_indep:
-                pos = cbar.ax.get_position()
-                cbar.ax.set_aspect('auto')
-                ax2 = cbar.ax.twinx()
-                ax2.set_ylim([c_min, c_max])
-                width = 0.05
-                pos.x0 = pos.x1 - width
-                ax2.set_position(pos)
-                cbar.ax.set_position(pos)
-                n_label = 5
-                labels_val = np.linspace(c_min, c_max, n_label).tolist()
-                labels = [str(round(labels_val[i], 2)) for i in range(n_label)]
-                labels_val.append(indep_quant)
-                labels.append("Indep=%.2f" % indep_quant)
-                ax2.set_yticks([indep_quant])
-                ax2.set_yticklabels(["Indep"])
-
-            ax.set_xlabel("$%s_{12}$" % (param_name), fontsize=14)
-            ax.set_ylabel("$%s_{13}$" % (param_name), fontsize=14)
-            ax.set_zlabel("$%s_{23}$" % (param_name), fontsize=14)
-        
-        # Other figure stuffs
-        title = r"%s - $n = %d$" % (quantity_name, obj._n_input_sample)
-        ax.set_title(title, fontsize=18)
-        ax.axis("tight")
-        fig.tight_layout()
-    
-        # Saving the figure
-        if savefig:
-            fname = figpath + '/'
-            if isinstance(savefig, str):
-                fname += savefig
-            else:
-                fname += "fig" + quantity_name
-            fig.savefig(fname + ".pdf")
-            fig.savefig(fname + ".png")
-            
-        return ax
-
 
 def to_matrix(param, dim):
     """
@@ -1464,3 +1252,14 @@ def to_copula_params(converters, kendalls):
     if params.size == 1:
         params = params.item()
     return params
+
+def margins_to_dict(margins):
+    margin_dict = {}
+    # List of marginal names
+    for i, marginal in enumerate(margins):
+            name = marginal.getName()
+            params = list(marginal.getParameter())
+            margin_dict['Marginal_%d Family' % (i)] = name
+            margin_dict['Marginal_%d Parameters' % (i)] = params
+            
+    return margin_dict
