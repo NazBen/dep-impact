@@ -145,10 +145,10 @@ class ConservativeEstimate(object):
 
         # TODO: add conversion from kendall to dependence parameters
         if dep_measure == "copula-parameter":
-            bounds = [self._bounds_par_list[pair] for pair in self._pair_ids]
+            bounds = self._bounds_par_list
             params = get_grid_sample(bounds, n_dep_param, grid_type)
         elif dep_measure == "kendall-tau":
-            bounds = [self._bounds_tau_list[pair] for pair in self._pair_ids]
+            bounds = self._bounds_tau_list
             kendalls = get_grid_sample(bounds, n_dep_param, grid_type)
             params = to_copula_params(self._copula_converters, kendalls)
         else:
@@ -239,7 +239,8 @@ class ConservativeEstimate(object):
         else:
             return output_sample
 
-    def independence(self, n_input_sample, q_func=np.var, keep_input_sample=True, random_state=None):
+    def independence(self, n_input_sample, q_func=np.var, 
+                     keep_input_sample=True, random_state=None):
         """Generates and evaluates observations at the independence
         configuration.
 
@@ -253,16 +254,21 @@ class ConservativeEstimate(object):
             If None, ``seed`` is the seed is random.
         """
         rng = check_random_state(random_state)
-        run_type = 'Independence'
         assert callable(q_func), "Quantity function is not callable"
 
         # Creates the sample of input parameters
-        input_sample = np.asarray(ot.ComposedDistribution(self._margins).getSample(n_input_sample))
+        input_sample = np.asarray(ot.ComposedDistribution(self._margins).\
+                                  getSample(n_input_sample))
         output_sample = self.model_func(input_sample)
+        
         if not keep_input_sample:
             input_sample = None
-        return DependenceResult(output_sample=output_sample, input_sample=input_sample,
-                                q_func=q_func, margins=self.margins,random_state=rng)
+            
+        return DependenceResult(margins=self._margins,
+                                input_sample=input_sample,
+                                output_sample=output_sample,
+                                q_func=q_func,
+                                random_state=rng)
 
     def _get_sample(self, param, n_sample, param2=None):
         """Creates the observations of the joint input distribution.
@@ -590,13 +596,17 @@ class ListDependenceResult(list):
     Parameters
     ----------
     """
-    def __init__(self, dep_params=None, output_samples=None, input_samples=None,
-                 q_func=None, families=None, run_type=None, n_evals=None, vine_structure=None,
-                 grid_type=None, margins=None, random_state=None):
-        self.rng = check_random_state(random_state)
-        self.q_func = q_func
+    def __init__(self, families=None, vine_structure=None,
+                 
+                 dep_params=None, output_samples=None, input_samples=None,
+                 q_func=None, run_type=None, n_evals=None, 
+                  grid_type=None, margins=None, 
+                 random_state=None):
 
         if dep_params is not None:
+            assert output_samples is not None, \
+                "Add some output sample if you're adding dependence parameters"
+                
             for k, dep_param in enumerate(dep_params):
                 input_sample = None if input_samples is None else input_samples[k]
                 output_sample = output_samples[k]
@@ -611,11 +621,13 @@ class ListDependenceResult(list):
                                           random_state=self.rng)
                 self.append(result)
 
+        self.q_func = q_func
         self.families = families
         self.margins = margins
         self.input_dim = self.families.shape[0]
         self.output_dim = self.output_samples.shape[0]
         self.corr_dim = self.input_dim * (self.input_dim - 1) / 2
+        self.rng = check_random_state(random_state)
         self._bootstrap_samples = None
 
     def extend(self, value):
@@ -1000,6 +1012,10 @@ class DependenceResult(object):
     
     Parameters
     ----------
+    margins : list
+        The OT distributions.
+    families : array
+        The matrix array of the families.
     dep_param : array
         The dependence parameters.
     input_sample : array
@@ -1010,24 +1026,29 @@ class DependenceResult(object):
         The output quantity of intereset function.
     run_type : str
         The type of estimation: independence, grid-search, iterative, ...
-    families : array
-        The matrix array of the families.
     random_state : int, RandomState or None,
         The random state of the computation.
     
     """
-    def __init__(self, dep_param=None, input_sample=None, output_sample=None, 
-                 q_func=None, run_type=None, families=None, vine_structure=None, 
-                 margins=None, random_state=None):
+    def __init__(self, 
+                 margins=None,
+                 families=None,
+                 vine_structure=None,
+                 dep_param=None, 
+                 input_sample=None, 
+                 output_sample=None, 
+                 q_func=None,
+                 random_state=None):
+        
         self.dep_param = dep_param
         self.output_sample = output_sample
         self.input_sample = input_sample
         self.q_func = q_func
-        self.run_type = run_type
         self.families = families
         self.vine_structure = vine_structure
         self.margins = margins
         self.rng = check_random_state(random_state)
+        
         self._bootstrap_sample = None
 
     def compute_bootstrap(self, n_bootstrap=1000, inplace=True):
