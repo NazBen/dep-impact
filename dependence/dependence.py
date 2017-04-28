@@ -18,10 +18,6 @@ import numpy as np
 import pandas as pd
 import openturns as ot
 import h5py
-import matplotlib
-import matplotlib.pyplot as plt
-import matplotlib.cm as cmx
-from mpl_toolkits.mplot3d import Axes3D
 from sklearn.utils import check_random_state
 
 from .gridsearch import Space
@@ -103,7 +99,8 @@ class ConservativeEstimate(object):
                             dep_measure='kendall-tau', q_func=np.var, 
                             lhs_grid_criterion='centermaximin',
                             use_grid=None, save_grid=None,
-                            done_results=None, keep_input_sample=True, random_state=None):
+                            done_results=None, keep_input_sample=True, 
+                            random_state=None, grid_path='.'):
         """Quantile minimization through a grid in the dependence parameter
         space.
         
@@ -142,17 +139,30 @@ class ConservativeEstimate(object):
         run_type = 'grid-search'
 
         assert callable(q_func), "Quantity function is not callable"
-
-        if dep_measure == "copula-parameter":
-            bounds = self._bounds_par_list
-            params = get_grid_sample(bounds, n_dep_param, grid_type)
-        elif dep_measure == "kendall-tau":
-            bounds = self._bounds_tau_list
-            kendalls = get_grid_sample(bounds, n_dep_param, grid_type)
-            params = to_copula_params(self._copula_converters, kendalls)
+        
+        kendalls = None
+        grid_filename = None
+        # Load a grid
+        if use_grid is not None:
+            # Load the sample from file and get the filename
+            params, grid_filename = load_dependence_grid(grid_path, self._n_pairs, n_dep_param, grid_type, self._bounds_tau_list,
+                                                         use_grid)
         else:
-            raise ValueError("Unknow dependence measure type")
-        n_dep_param = len(params)
+            if dep_measure == "copula-parameter":
+                bounds = self._bounds_par_list
+                params = get_grid_sample(bounds, n_dep_param, grid_type)
+            elif dep_measure == "kendall-tau":
+                bounds = self._bounds_tau_list
+                kendalls = get_grid_sample(bounds, n_dep_param, grid_type)
+                params = to_copula_params(self._copula_converters, kendalls)
+            else:
+                raise ValueError("Unknow dependence measure type")
+                
+        # The grid is save if it was asked and if it does not already exists
+        if save_grid is not None and use_grid is None:
+            if kendalls is None:
+                kendalls = to_kendalls(self._copula_converters, params)
+            save_dependence_grid(grid_path, kendalls, self._bounds_tau_list, grid_type)
 
         params_not_to_compute = []
         # Params not to compute
@@ -207,7 +217,9 @@ class ConservativeEstimate(object):
                                     q_func=q_func,
                                     run_type=run_type,
                                     grid_type=grid_type,
-                                    random_state=rng)
+                                    random_state=rng,
+                                    lhs_grid_criterion=lhs_grid_criterion,
+                                    grid_filename=grid_filename)
 
     def stochastic_function(self, param, n_input_sample=1, return_input_sample=True, random_state=None):
         """This function considers the model output as a stochastic function by 
@@ -613,7 +625,8 @@ class ListDependenceResult(list):
                  run_type=None,
                  n_evals=None,
                  grid_type=None,  
-                 random_state=None):
+                 random_state=None,
+                 **kwargs):
         
         self.margins = margins
         self.families = families
@@ -622,8 +635,17 @@ class ListDependenceResult(list):
         self.fixed_params = fixed_params
         self.q_func = q_func
         self.run_type = run_type
+        self.grid_type = grid_type
         self.input_dim = len(margins)
         self.corr_dim = self.input_dim * (self.input_dim - 1) / 2
+        
+        self.grid_filename = None
+        if "grid_filename" in kwargs:
+            self.grid_filename = kwargs["grid_filename"]   
+            
+        self.lhs_grid_criterion = None
+        if "lhs_grid_criterion" in kwargs:
+            self.lhs_grid_criterion = kwargs["lhs_grid_criterion"]   
 
         if dep_params is not None:
             assert output_samples is not None, \
@@ -824,9 +846,8 @@ class ListDependenceResult(list):
                             assert hdf_store.attrs['Marginal_%d Family' % (i)] == margin_dict['Marginal_%d Family' % (i)]
                             np.testing.assert_array_equal(hdf_store.attrs['Marginal_%d Parameters' % (i)], margin_dict['Marginal_%d Parameters' % (i)])
                             
-                        if self.run_type == 'Classic':
-                            assert hdf_store.attrs['Dependence Measure'] == self._dep_measure
-                            assert hdf_store.attrs['Grid Type'] == self._grid
+                        if self.run_type == 'grid-search':
+                            assert hdf_store.attrs['Grid Type'] == self.grid_type
                     else:
                         # We save the attributes in the empty new file
                         hdf_store.create_dataset('dependence_params', data=self.dep_params)
@@ -847,13 +868,12 @@ class ListDependenceResult(list):
                         hdf_store.attrs['Output Names'] = output_names                        
                         
                         # TODO: Take care of the problem from the grid
-                        if self.run_type == 'Classic':
-                            hdf_store.attrs['Dependence Measure'] = self._dep_measure
+                        if self.run_type == 'grid-search':
                             hdf_store.attrs['Grid Type'] = self.grid_type
-                            if self._grid_filename:
-                                hdf_store.attrs['Grid Filename'] = os.path.basename(self._grid_filename)
-                            if self._grid == 'lhs':
-                                hdf_store.attrs['LHS Criterion'] = self._lhs_grid_criterion
+                            if self.grid_filename is not None:
+                                hdf_store.attrs['Grid Filename'] = os.path.basename(self.grid_filename)
+                            if self.grid_type == 'lhs':
+                                hdf_store.attrs['LHS Criterion'] = self.lhs_grid_criterion
                     
                     # Check the number of experiments
                     grp_number = 0
@@ -1209,7 +1229,7 @@ def create_bounds_grid(dimensions):
         
     return params
 
-def get_grid_sample(dimensions, n_sample, grid_type):
+def get_grid_sample(dimensions, n_sample, grid_type, savefig=False):
     """Get a sample of observation from a design space.
     
     Parameters
@@ -1219,7 +1239,6 @@ def get_grid_sample(dimensions, n_sample, grid_type):
     # We create the grid
     space = Space(dimensions)
     sample = space.rvs(n_sample, sampling=grid_type)
-
     return sample
 
 def to_kendalls(converters, params):
@@ -1268,3 +1287,65 @@ def margins_to_dict(margins):
             margin_dict['Marginal_%d Parameters' % (i)] = params
             
     return margin_dict
+
+
+def save_dependence_grid(dirname, kendalls, bounds_tau, grid_type):
+    """The grid is always saved in Kendall's Tau measures.
+    """
+    kendalls = np.asarray(kendalls)
+    n_param, n_pairs = kendalls.shape
+    
+    # The sample variable to save
+    sample = np.zeros((n_param, n_pairs))
+    for k in range(n_pairs):
+        tau_min, tau_max = bounds_tau[k]
+        sample[:, k] = (kendalls[:, k] - tau_min) / (tau_max - tau_min)
+        
+    k = 0
+    do_save = True
+    name = '%s_p_%d_n_%d_%d.csv' % (grid_type, n_pairs, n_param, k)
+    
+    grid_filename = os.path.join(dirname, name)
+    # If this file already exists
+    while os.path.exists(grid_filename):
+        existing_sample = np.loadtxt(grid_filename).reshape(n_param, -1)
+        # We check if the build sample and the existing one are equivalents
+        if np.allclose(np.sort(existing_sample, axis=0), np.sort(sample, axis=0)):
+            do_save = False
+            print 'The DOE already exist in %s' % (name)
+            break
+        k += 1
+        name = '%s_p_%d_n_%d_%d.csv' % (grid_type, n_pairs, n_param, k)
+        grid_filename = os.path.join(dirname, name)
+        
+    # It is saved
+    if do_save:
+        np.savetxt(grid_filename, sample)
+        
+
+def load_dependence_grid(dirname, n_pairs, n_params, grid_type, 
+                         bounds_tau, use_grid=None):
+    """Load a grid of parameters
+    """
+    if isinstance(use_grid, str):
+        filename = use_grid
+        name = os.path.basename(filename)
+    elif isinstance(use_grid, (int, bool)):
+        k = int(use_grid)
+        name = '%s_p_%d_n_%d_%d.csv' % (grid_type, n_pairs, n_params, k)
+        filename = os.path.join(dirname, name)
+    else:
+        raise AttributeError('Unknow use_grid')
+    assert os.path.exists(filename), 'Grid file %s does not exists' % name
+    print('loading file %s' % name)
+    sample = np.loadtxt(filename).reshape(n_params, n_pairs)
+    assert n_params == sample.shape[0], 'Wrong grid size'
+    assert n_pairs == sample.shape[1], 'Wrong dimension'
+    
+    meas_param = np.zeros((n_params, n_pairs))
+    
+    for k in range(n_pairs):
+        tau_min, tau_max = bounds_tau[k]
+        meas_param[:, k] = sample[:, k]*(tau_max - tau_min) + tau_min
+        
+    return meas_param, filename
