@@ -143,7 +143,6 @@ class ConservativeEstimate(object):
 
         assert callable(q_func), "Quantity function is not callable"
 
-        # TODO: add conversion from kendall to dependence parameters
         if dep_measure == "copula-parameter":
             bounds = self._bounds_par_list
             params = get_grid_sample(bounds, n_dep_param, grid_type)
@@ -201,6 +200,7 @@ class ConservativeEstimate(object):
                                     families=self.families,
                                     vine_structure = self.vine_structure,
                                     bounds_tau=self.bounds_tau,
+                                    fixed_params=self.fixed_params,
                                     dep_params=params,
                                     input_samples=inputs,
                                     output_samples=output_samples,
@@ -232,6 +232,7 @@ class ConservativeEstimate(object):
 
         full_param = np.zeros((self._corr_dim, ))
         full_param[self._pair_ids] = param
+        full_param[self._fixed_pairs_ids] = self._fixed_params_list
         
         input_sample = self._get_sample(full_param, n_input_sample)
         output_sample = self.model_func(input_sample)
@@ -426,10 +427,10 @@ class ConservativeEstimate(object):
         return self._pairs
 
     @property
-    def pairs_ids_(self):
+    def pair_ids_(self):
         """The possibly dependent pairs.
         """
-        return self._pairs_ids
+        return self._pair_ids
 
     @property
     def n_pairs_(self):
@@ -472,7 +473,6 @@ class ConservativeEstimate(object):
     @vine_structure.setter
     def vine_structure(self, structure):
         if structure is None:
-            # TODO: The structure is standard, think about changing it.
             dim = self._input_dim
             structure = np.zeros((dim, dim), dtype=int)
             for i in range(dim):
@@ -548,13 +548,12 @@ class ConservativeEstimate(object):
 
     @property
     def fixed_params(self):
+        """The pairs that are fixed to a given dependence parameter value.
+        """
         return self._fixed_params
 
     @fixed_params.setter
     def fixed_params(self, value):
-        """
-        Setter of the matrix of fixed params.
-        """
         if value is None:
             # There is no fixed pairs
             matrix = np.zeros((self._input_dim, self._input_dim), dtype=float)
@@ -569,10 +568,11 @@ class ConservativeEstimate(object):
         check_matrix(matrix)
             
         # The lists only contains the fixed pairs informations
-        self._fixed_pairs = []
+        self._fixed_pairs_ids = []
         self._fixed_params = matrix
         self._fixed_params_list = []
         k = 0
+        # TODO: do it like for the families property
         for i in range(1, self._input_dim):
             for j in range(i):
                 if self._families[i, j] > 0:
@@ -580,10 +580,10 @@ class ConservativeEstimate(object):
                         warnings.warn('The parameter of the pair %d-%d is set to 0. Check if this is correct.' % (i, j))
                     if not np.isnan(matrix[i, j]):
                         # The pair is fixed we add it in the list
-                        self._fixed_pairs.append(k)
+                        self._fixed_pairs_ids.append(k)
                         self._fixed_params_list.append(matrix[i, j])
                         # And we remove it from the list of dependent pairs
-                        self._pairs_ids.remove(k)
+                        self._pair_ids.remove(k)
                         self._pairs.remove([i, j])
                         self._n_pairs -= 1
                 k += 1
@@ -605,6 +605,7 @@ class ListDependenceResult(list):
                  families=None,
                  vine_structure=None,
                  bounds_tau=None,
+                 fixed_params=None,
                  dep_params=None,
                  input_samples=None,
                  output_samples=None,
@@ -618,6 +619,7 @@ class ListDependenceResult(list):
         self.families = families
         self.vine_structure = vine_structure
         self.bounds_tau = bounds_tau
+        self.fixed_params = fixed_params
         self.q_func = q_func
         self.run_type = run_type
         self.input_dim = len(margins)
@@ -634,6 +636,7 @@ class ListDependenceResult(list):
                 result = DependenceResult(margins=margins,
                                           families=families,
                                           vine_structure=vine_structure,
+                                          fixed_params=fixed_params,
                                           dep_param=dep_param,
                                           input_sample=input_sample,
                                           output_sample=output_sample,
@@ -698,7 +701,6 @@ class ListDependenceResult(list):
         if self.n_params == 0:
             print("There is no data...")
         else:
-            # TODO: Must be changed if the number of sample is different for each param
             return [result.output_sample for result in self]
     
     @property
@@ -795,34 +797,34 @@ class ListDependenceResult(list):
         init_file_name = path_or_buf
         k = 0
         while filename_exists:
+            # If the file has the same run configuration
             try:
                 with h5py.File(path_or_buf, 'a') as hdf_store:
-                    # General attributes
-                    # Check the attributes of the file, if it already exists
+                    # If the file already exists and already has data
                     if hdf_store.attrs.keys():
-                        np.testing.assert_allclose(hdf_store['dependence_params'].value, self._params)
+                        # Check the attributes of the file, if it already exists
+                        np.testing.assert_allclose(hdf_store['dependence_params'].value, self.dep_params)
                         assert hdf_store.attrs['Input Dimension'] == self.input_dim
                         assert hdf_store.attrs['Output Dimension'] == self.output_dim
-                        assert hdf_store.attrs['Run Type'] == self._run_type
-                        np.testing.assert_array_equal(hdf_store.attrs['Copula Families'], self._families)                        
+                        assert hdf_store.attrs['Run Type'] == self.run_type
+                        np.testing.assert_array_equal(hdf_store.attrs['Copula Families'], self.families)       
                         if 'Fixed Parameters' in hdf_store.attrs.keys():
-                            np.testing.assert_array_equal(hdf_store.attrs['Fixed Parameters'], self._fixed_params)  
+                            np.testing.assert_array_equal(hdf_store.attrs['Fixed Parameters'], self.fixed_params)
                         elif self._fixed_pairs:
                             # Save only if there is no fixed params
                             raise ValueError('It should not have constraints to be in the same output file.')
                         if 'Bounds Tau' in hdf_store.attrs.keys():
-                            np.testing.assert_array_equal(hdf_store.attrs['Bounds Tau'], self._bounds_tau)           
+                            np.testing.assert_array_equal(hdf_store.attrs['Bounds Tau'], self.bounds_tau)           
                         elif self._fixed_pairs:
                             raise ValueError('It should not have constraints to be in the same output file.')
-                        np.testing.assert_array_equal(hdf_store.attrs['Copula Structure'], self._vine_structure)
-                        assert hdf_store.attrs['Copula Type'] == self._copula_type
+                        np.testing.assert_array_equal(hdf_store.attrs['Copula Structure'], self.vine_structure)
                         np.testing.assert_array_equal(hdf_store.attrs['Input Names'], input_names)
                         np.testing.assert_array_equal(hdf_store.attrs['Output Names'], output_names)
                         for i in range(self.input_dim):
                             assert hdf_store.attrs['Marginal_%d Family' % (i)] == margin_dict['Marginal_%d Family' % (i)]
                             np.testing.assert_array_equal(hdf_store.attrs['Marginal_%d Parameters' % (i)], margin_dict['Marginal_%d Parameters' % (i)])
                             
-                        if self._run_type == 'Classic':
+                        if self.run_type == 'Classic':
                             assert hdf_store.attrs['Dependence Measure'] == self._dep_measure
                             assert hdf_store.attrs['Grid Type'] == self._grid
                     else:
@@ -839,8 +841,8 @@ class ListDependenceResult(list):
                         hdf_store.attrs['Grid Size'] = self.n_params
                         hdf_store.attrs['Input Dimension'] = self.input_dim
                         hdf_store.attrs['Output Dimension'] = self.output_dim
-                        # TODO: think about fixed params
-#                        hdf_store.attrs['Fixed Parameters'] = self._fixed_params
+                        hdf_store.attrs['Fixed Parameters'] = self.fixed_params
+                        hdf_store.attrs['Run Type'] = self.run_type
                         hdf_store.attrs['Input Names'] = input_names
                         hdf_store.attrs['Output Names'] = output_names                        
                         
@@ -872,7 +874,7 @@ class ListDependenceResult(list):
                         grp_i.create_dataset('output_sample', data=self[i].output_sample)
                     filename_exists = False
             except AssertionError:
-                print('File %s already has different configurations' % (path_or_buf))
+                print('File %s has different configurations' % (path_or_buf))
                 path_or_buf = '%s_%d.hdf5' % (init_file_name[:-5], k)
                 k += 1
 
@@ -1048,19 +1050,21 @@ class DependenceResult(object):
                  margins=None,
                  families=None,
                  vine_structure=None,
+                 fixed_params=None,
                  dep_param=None, 
                  input_sample=None, 
                  output_sample=None, 
                  q_func=None,
                  random_state=None):
         
-        self.dep_param = dep_param
-        self.output_sample = output_sample
-        self.input_sample = input_sample
-        self.q_func = q_func
+        self.margins = margins
         self.families = families
         self.vine_structure = vine_structure
-        self.margins = margins
+        self.fixed_params = fixed_params
+        self.dep_param = dep_param
+        self.input_sample = input_sample
+        self.output_sample = output_sample
+        self.q_func = q_func
         self.rng = check_random_state(random_state)
         
         self.n_sample = input_sample.shape[0]
@@ -1112,11 +1116,12 @@ class DependenceResult(object):
     def full_dep_params(self):
         """The matrix of parameters for all the pairs.
         """
-        dim = self.families.shape[0]
-        corr_dim = dim * (dim - 1) / 2
-        full_params = np.zeros((corr_dim, ))
+        full_params = np.zeros((self.corr_dim, ))
         pair_ids = to_list(self.families, return_ids=True)[1]
         full_params[pair_ids] = self.dep_param
+        if self.fixed_params is not None:
+            fixed_params, fixed_pairs = to_list(self.fixed_params, return_ids=True)
+            full_params[fixed_pairs] = fixed_params
         return full_params
 
     @property
