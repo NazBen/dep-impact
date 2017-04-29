@@ -740,10 +740,11 @@ class ListDependenceResult(list):
     def n_input_sample(self):
         """The sample size for each dependence parameter.
         """
+        # TODO: maybe not all the samples have the same number of observations...
         if self.n_params == 0:
             return 0
         else:  
-            return self.output_samples.shape[1]
+            return self[0].n_sample
 
     @property
     def n_evals(self):
@@ -809,7 +810,8 @@ class ListDependenceResult(list):
         if self.n_params == 0:
             print("There is no data...")
         else:
-            (result.compute_bootstrap(n_bootstrap) for result in self)
+            for result in self:
+                result.compute_bootstrap(n_bootstrap)
 
             if not inplace:
                 return self.bootstrap_samples
@@ -1114,17 +1116,16 @@ class DependenceResult(object):
         self.q_func = q_func
         self.rng = check_random_state(random_state)
         
-        self.n_sample = input_sample.shape[0]
-        self.n_param = len(dep_param)
+        self.n_sample = output_sample.shape[0]
         self.input_dim = len(margins)
         if output_sample.shape[0] == output_sample.size:
             self.output_dim = 1
         else:
-            self.output_dim = output_sample.shape[1]            
+            self.output_dim = output_sample.shape[1]
         self.corr_dim = self.input_dim * (self.input_dim - 1) / 2
         self._bootstrap_sample = None
 
-    def compute_bootstrap(self, n_bootstrap=1000, inplace=True):
+    def compute_bootstrap(self, n_bootstrap=1000, inplace=False):
         """Bootstrap of the output quantity of interest.
         
         Parameters
