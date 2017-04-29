@@ -6,7 +6,6 @@ of interest of a model output.
 TODO:
     - Make test functions
     - Clean the code
-    - Add the algorithm in the class or a seperated one
 """
 
 import operator
@@ -145,8 +144,9 @@ class ConservativeEstimate(object):
         # Load a grid
         if use_grid is not None:
             # Load the sample from file and get the filename
-            params, grid_filename = load_dependence_grid(grid_path, self._n_pairs, n_dep_param, grid_type, self._bounds_tau_list,
-                                                         use_grid)
+            params, grid_filename = load_dependence_grid(
+                grid_path, self._n_pairs, n_dep_param, grid_type, 
+                self._bounds_tau_list, use_grid)
         else:
             if dep_measure == "copula-parameter":
                 bounds = self._bounds_par_list
@@ -162,7 +162,8 @@ class ConservativeEstimate(object):
         if save_grid is not None and use_grid is None:
             if kendalls is None:
                 kendalls = to_kendalls(self._copula_converters, params)
-            save_dependence_grid(grid_path, kendalls, self._bounds_tau_list, grid_type)
+            save_dependence_grid(grid_path, kendalls, self._bounds_tau_list,
+                                 grid_type)
 
         params_not_to_compute = []
         # Params not to compute
@@ -323,27 +324,6 @@ class ConservativeEstimate(object):
 
         return input_sample
 
-    def _load_grid(self, n_param, dep_measure, use_grid, gridname):
-        """
-        """
-        p = self._n_pairs
-        if isinstance(use_grid, str):
-            assert gridname in use_grid, "Not the same configurations"
-            filename = use_grid
-            name = os.path.basename(filename)
-        elif isinstance(use_grid, (int, bool)):
-            k = int(use_grid)
-            name = '%s_p_%d_n_%d_%s_%d.csv' % (gridname, p, n_param, dep_measure, k)
-            filename = os.path.join(self._grid_folder, name)
-        else:
-            raise AttributeError('Unknow use_grid')
-        assert os.path.exists(filename), 'Grid file %s does not exists' % name
-        print('loading file %s' % name)
-        sample = np.loadtxt(filename).reshape(n_param, -1)
-        assert n_param == sample.shape[0], 'Wrong grid size'
-        assert p == sample.shape[1], 'Wrong dimension'
-        return sample, filename
-
     @property
     def model_func(self):
         """The callable model function.
@@ -495,14 +475,20 @@ class ConservativeEstimate(object):
 
     @property
     def input_dim(self):
+        """The input dimension.
+        """
         return self._input_dim
 
     @property
     def bounds_tau(self):
+        """The matrix bound for the kendall's tau.
+        """
         return self._bounds_tau
 
     @property
     def bounds_par(self):
+        """The matrix bound for the dependence parameters.
+        """
         return self._bounds_par
 
     @bounds_tau.setter
@@ -609,8 +595,29 @@ class ListDependenceResult(list):
 
     Parameters
     ----------
+    margins : list of OpenTURNS distributions
+        The OT distributions.
+    families : array
+        The matrix array of the families.
+    vine_structure : array
+        The matrix array of the R-vine. If None, it is considered as Gaussian.
+    bounds_tau : array,
+        The matrix array of the bounds for the dependence parameters.
+    dep_param : array
+        The dependence parameters.
+    input_sample : array
+        The input sample.
+    output_sample : array
+        The output sample.
+    q_func : callable or None
+        The output quantity of intereset function.
     run_type : str
         The type of estimation: independence, grid-search, iterative, ...
+    grid_type : str
+        The type of grid use if it was a grid search.
+    random_state : int, RandomState or None,
+        The random state of the computation.
+
     """
     def __init__(self, 
                  margins=None,
@@ -627,7 +634,7 @@ class ListDependenceResult(list):
                  grid_type=None,  
                  random_state=None,
                  **kwargs):
-        
+
         self.margins = margins
         self.families = families
         self.vine_structure = vine_structure
@@ -641,11 +648,11 @@ class ListDependenceResult(list):
         
         self.grid_filename = None
         if "grid_filename" in kwargs:
-            self.grid_filename = kwargs["grid_filename"]   
+            self.grid_filename = kwargs["grid_filename"]
             
         self.lhs_grid_criterion = None
         if "lhs_grid_criterion" in kwargs:
-            self.lhs_grid_criterion = kwargs["lhs_grid_criterion"]   
+            self.lhs_grid_criterion = kwargs["lhs_grid_criterion"]
 
         if dep_params is not None:
             assert output_samples is not None, \
@@ -688,7 +695,7 @@ class ListDependenceResult(list):
 
     @property
     def pairs(self):
-        """
+        """The dependent pairs of the problem.
         """
         if self.families is None:
             print('Family matrix was not defined')
@@ -697,6 +704,8 @@ class ListDependenceResult(list):
     
     @property
     def dep_params(self):
+        """The dependence parameters.
+        """
         if self.n_params == 0:
             print("There is no data...")
         else:
@@ -704,6 +713,8 @@ class ListDependenceResult(list):
         
     @property
     def kendalls(self):
+        """The Kendall's tau dependence measure.
+        """
         if self.n_params == 0:
             print("There is no data...")
         else:
@@ -727,6 +738,8 @@ class ListDependenceResult(list):
     
     @property
     def n_input_sample(self):
+        """The sample size for each dependence parameter.
+        """
         if self.n_params == 0:
             return 0
         else:  
@@ -734,14 +747,20 @@ class ListDependenceResult(list):
 
     @property
     def n_evals(self):
+        """The total number of observations.
+        """
         return self.n_params*self.n_input_sample
 
     @property
     def n_params(self):
+        """The number of dependence parameters.
+        """
         return len(self)
     
     @property
     def quantities(self):
+        """The quantity values of each parameters.
+        """
         if self.n_params == 0:
             print("There is no data...")
         else:
@@ -749,6 +768,8 @@ class ListDependenceResult(list):
 
     @property
     def min_result(self):
+        """The dependence parameter that minimizes the output quantity.
+        """
         if self.n_params == 0:
             print("There is no data...")
         else:
@@ -756,20 +777,17 @@ class ListDependenceResult(list):
 
     @property
     def min_quantity(self):
+        """The minimum quantity from all the dependence parameters.
+        """
         if self.n_params == 0:
             print("There is no data...")
         else:
             return self.quantities.min()
 
     @property
-    def argmin_quantity(self):
-        if self.n_params == 0:
-            print("There is no data...")
-        else:
-            return self[self.quantities.argmin()].dep_param
-    
-    @property
     def full_dep_params(self):
+        """The dependence parameters with the columns from the fixed parameters.
+        """
         if self.n_params == 0:
             print("There is no data...")
         else:
@@ -777,18 +795,24 @@ class ListDependenceResult(list):
 
     @property
     def bootstrap_samples(self):
+        """The computed bootstrap sample of all the dependence parameters.
+        """
         sample = [result._bootstrap_sample for result in self]
         if not any((boot is None for boot in sample)):
             return np.asarray(sample)
         else:
             raise AttributeError('The boostrap must be computed first')
 
-    def compute_bootstraps(self, n_bootstrap=1000):
+    def compute_bootstraps(self, n_bootstrap=1000, inplace=False):
+        """Compute bootstrap of the quantity for each element of the list
+        """
         if self.n_params == 0:
             print("There is no data...")
         else:
-            for result in self:
-                result.compute_bootstrap(n_bootstrap)
+            (result.compute_bootstrap(n_bootstrap) for result in self)
+
+            if not inplace:
+                return self.bootstrap_samples
 
     def to_hdf(self, path_or_buf, input_names=[], output_names=[]):
         """Write the contained data to an HDF5 file using HDFStore.
@@ -796,6 +820,11 @@ class ListDependenceResult(list):
         Parameters
         ----------
         path_or_buf : the path (string) or HDFStore object
+            The path of the file or an hdf instance.
+        input_names : list of strings, optional
+            The name of the inputs variables.
+        output_names : list of strings, optional
+            The name of the outputs.
         """
         # List of input variable names
         if input_names:
@@ -858,16 +887,15 @@ class ListDependenceResult(list):
                         
                         hdf_store.attrs['Copula Families'] = self.families
                         hdf_store.attrs['Copula Structure'] = self.vine_structure
-                        hdf_store.attrs['Bounds Tau'] = self.bounds_tau                        
+                        hdf_store.attrs['Bounds Tau'] = self.bounds_tau
                         hdf_store.attrs['Grid Size'] = self.n_params
                         hdf_store.attrs['Input Dimension'] = self.input_dim
                         hdf_store.attrs['Output Dimension'] = self.output_dim
                         hdf_store.attrs['Fixed Parameters'] = self.fixed_params
                         hdf_store.attrs['Run Type'] = self.run_type
                         hdf_store.attrs['Input Names'] = input_names
-                        hdf_store.attrs['Output Names'] = output_names                        
+                        hdf_store.attrs['Output Names'] = output_names
                         
-                        # TODO: Take care of the problem from the grid
                         if self.run_type == 'grid-search':
                             hdf_store.attrs['Grid Type'] = self.grid_type
                             if self.grid_filename is not None:
@@ -1064,7 +1092,6 @@ class DependenceResult(object):
         The output quantity of intereset function.
     random_state : int, RandomState or None,
         The random state of the computation.
-    
     """
     def __init__(self, 
                  margins=None,
