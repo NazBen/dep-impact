@@ -227,3 +227,4 @@ GeneratedArtifacts/
 _Pvt_Extensions/
 ModelManifest.xml
 *.pyperf
+*.hdf5
