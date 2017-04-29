@@ -64,29 +64,36 @@ class Conversion(object):
     def __init__(self, family):
         self.family = family
 
-    def to_copula_parameter(self, measure_param, dep_measure):
+    def to_copula_parameter(self, measure_param, dep_measure='kendall-tau'):
         """Convert the dependence_measure to the copula parameter.
         """
+        if isinstance(measure_param, list):
+            measure_param = np.asarray(measure_param)
+
         if isinstance(measure_param, np.ndarray):
             n_sample = measure_param.shape[0]
             assert n_sample == measure_param.size, \
                 AttributeError("It must be a vector")
         elif isinstance(measure_param, float):
             n_sample = 1
+            measure_param = np.asarray([measure_param])
         else:
             raise TypeError("Wrong type for measure_param")
         
-        if dep_measure == "KendallTau":
+        if dep_measure == "kendall-tau":
             r_params = numpy2ri(measure_param)
             copula_param = np.asarray(VINECOPULA.BiCopTau2Par(self._family, r_params))
-        elif dep_measure == "PearsonRho":
+        elif dep_measure == "pearson-rho":
             copula_param = self._copula.fromPearsonToParam(measure_param)
         else:
             raise ValueError("Unknow Dependence Measure")
 
-        return copula_param
+        if copula_param.size == 1:
+            return copula_param.item()
+        else:
+            return copula_param
     
-    def to_Kendall(self, params):
+    def to_kendall(self, params):
         """Convert the dependence_measure to the copula parameter.
         """
         if isinstance(params, np.ndarray):

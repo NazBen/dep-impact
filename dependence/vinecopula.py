@@ -25,6 +25,8 @@ def check_family(matrix):
                 raise ValueError("Uncorrect Family matrix")
 
     return matrix
+
+
 class VineCopula(object):
     """Vine Copula Class."""
 
@@ -33,9 +35,7 @@ class VineCopula(object):
         self.family = family
         self.param1 = param1
         self.param2 = param2
-
         ri.initr()
-
         self.build_vine()
 
     @property
@@ -47,6 +47,7 @@ class VineCopula(object):
         check_matrix(value)
         self._dim = value.shape[0]
         self._structure = value
+        self._to_rebuild = True
 
     @property
     def family(self):
@@ -59,6 +60,7 @@ class VineCopula(object):
         assert value.shape[0] == self._dim, \
             AttributeError('Family matrix should be of dimension == %d' % (self._dim))
         self._family = value
+        self._to_rebuild = True
 
     @property
     def param1(self):
@@ -70,6 +72,7 @@ class VineCopula(object):
         assert value.shape[0] == self._dim, \
             AttributeError('Family matrix should be of dimension == %d' % (self._dim))
         self._param1 = value
+        self._to_rebuild = True
 
     @property
     def param2(self):
@@ -83,6 +86,7 @@ class VineCopula(object):
         assert value.shape[0] == self._dim, \
             AttributeError('Family matrix should be of dimension == %d' % (self._dim))
         self._param2 = value
+        self._to_rebuild = True
 
     def build_vine(self):
         """
@@ -92,6 +96,7 @@ class VineCopula(object):
         r_par = numpy2ri(self.param1)
         r_par2 = numpy2ri(self.param2)
         self._rvine = VINECOPULA.RVineMatrix(r_structure, r_family, r_par, r_par2)
+        self._to_rebuild = False
 
     def get_sample(self, n_obs):
         """
@@ -100,4 +105,6 @@ class VineCopula(object):
             TypeError("Sample size must be an integer.")
         assert n_obs > 0, \
             ValueError("Sample size must be positive.")
+        if self._to_rebuild:
+            self.build_vine()
         return np.asarray(VINECOPULA.RVineSim(n_obs, self._rvine))
