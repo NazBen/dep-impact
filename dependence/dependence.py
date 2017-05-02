@@ -640,7 +640,7 @@ class ListDependenceResult(list):
         self.vine_structure = vine_structure
         self.bounds_tau = bounds_tau
         self.fixed_params = fixed_params
-        self.q_func = q_func
+        self._q_func = q_func
         self.run_type = run_type
         self.grid_type = grid_type
         self.input_dim = len(margins)
@@ -957,10 +957,7 @@ class ListDependenceResult(list):
         -------
         obj : :class:`~ImpactOfDependence`
             The Impact Of Dependence instance with the loaded informations.
-        """
-        # Ghost function
-        def tmp(): return None
-        
+        """        
         # Load of the hdf5 file
         with h5py.File(filepath_or_buffer, 'r') as hdf_store:
             # The file may contain multiple experiments. The user can load one 
@@ -976,10 +973,10 @@ class ListDependenceResult(list):
             
             params = hdf_store['dependence_params'].value
             run_type = hdf_store.attrs['Run Type']
-            n_params = hdf_store.attrs['K']
+            n_params = hdf_store.attrs['Grid Size']
             families = hdf_store.attrs['Copula Families']
-            structure = hdf_store.attrs['Copula Structure']
-            copula_type = hdf_store.attrs['Copula Type']
+            vine_structure = hdf_store.attrs['Copula Structure']
+            #copula_type = hdf_store.attrs['Copula Type']
             input_dim = hdf_store.attrs['Input Dimension']
             input_names = hdf_store.attrs['Input Names']
             
@@ -1002,8 +999,7 @@ class ListDependenceResult(list):
                 marginal = getattr(ot, hdf_store.attrs[marg_f])(*hdf_store.attrs[marg_p])
                 margins.append(marginal)
                 
-            if run_type == 'Classic':
-                dep_measure = hdf_store.attrs['Dependence Measure']
+            if run_type == 'grid-search':
                 grid_type = hdf_store.attrs['Grid Type']
                 if 'Grid Filename' in hdf_store.attrs.keys():
                     grid_filename = hdf_store.attrs['Grid Filename']
@@ -1021,33 +1017,38 @@ class ListDependenceResult(list):
             list_output_sample = []
             list_n = []
             n = 0
-            for k, index in enumerate(list_index):
+            # For each experiment
+            for index in list_index:
                 grp = hdf_store[index] # Group of the experiment
                 
-                data_in = grp['input_sample']
-                data_out = grp['output_sample']
+                input_samples = []
+                output_samples = []
+                n_samples = []
+                for k in grp.keys():
+                    res = grp[k]
+                    data_in = res['input_sample'].value
+                    data_out = res['output_sample'].value
 
-                list_input_sample.append(data_in.value)
-                list_output_sample.append(data_out.value)
-                list_n.append(grp.attrs['n'])
+                    input_samples.append(data_in)
+                    output_samples.append(data_out)
+                    n_samples.append(res.attrs['n'])
+                    
+                list_input_sample.append(input_samples)
+                list_output_sample.append(output_samples)
 
         # Each sample is made from the same dependence parameters
         # They need to be reordered
-        n = sum(list_n)
-        n_sample = n*n_params
-        input_sample = np.zeros((n_sample, input_dim))
-        output_sample = np.zeros((n_sample, output_dim))
-        a = 0
-        for i, ni in enumerate(list_n):
-            for k in range(n_params):
-                start = a + k*n
-                end = start + ni
-                input_sample[start:end, :] = list_input_sample[i][k*ni:(k+1)*ni, :]
-                output_sample[start:end, :] = list_output_sample[i][k*ni:(k+1)*ni, :]
-            a += ni
-                    
-        obj = cls(tmp, margins, families, fixed_params=fixed_params,
-                  bounds_tau=bounds_tau, vine_structure=structure)
+
+        cls(margins=margins, 
+            families=families,
+            vine_structure=vine_structure,
+            bounds_tau=bounds_tau,
+            fixed_params=fixed_params,
+            dep_params=params,
+            input_samples=list_input_sample,
+            output_samples=list_output_sample,
+            grid_type=grid_type)
+                      
                 
         obj._params = params
         obj._n_param = n_params
