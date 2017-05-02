@@ -631,7 +631,7 @@ class ListDependenceResult(list):
                  q_func=None,
                  run_type=None,
                  n_evals=None,
-                 grid_type=None,  
+                 grid_type=None,
                  random_state=None,
                  **kwargs):
 
@@ -653,6 +653,10 @@ class ListDependenceResult(list):
         self.lhs_grid_criterion = None
         if "lhs_grid_criterion" in kwargs:
             self.lhs_grid_criterion = kwargs["lhs_grid_criterion"]
+
+        self.output_id = 0
+        if "output_id" in kwargs:
+            self.output_id = kwargs["output_id"]
 
         if dep_params is not None:
             assert output_samples is not None, \
@@ -860,14 +864,14 @@ class ListDependenceResult(list):
                         assert hdf_store.attrs['Input Dimension'] == self.input_dim
                         assert hdf_store.attrs['Output Dimension'] == self.output_dim
                         assert hdf_store.attrs['Run Type'] == self.run_type
-                        np.testing.assert_array_equal(hdf_store.attrs['Copula Families'], self.families)       
+                        np.testing.assert_array_equal(hdf_store.attrs['Copula Families'], self.families)
                         if 'Fixed Parameters' in hdf_store.attrs.keys():
                             np.testing.assert_array_equal(hdf_store.attrs['Fixed Parameters'], self.fixed_params)
                         elif self._fixed_pairs:
                             # Save only if there is no fixed params
                             raise ValueError('It should not have constraints to be in the same output file.')
                         if 'Bounds Tau' in hdf_store.attrs.keys():
-                            np.testing.assert_array_equal(hdf_store.attrs['Bounds Tau'], self.bounds_tau)           
+                            np.testing.assert_array_equal(hdf_store.attrs['Bounds Tau'], self.bounds_tau)
                         elif self._fixed_pairs:
                             raise ValueError('It should not have constraints to be in the same output file.')
                         np.testing.assert_array_equal(hdf_store.attrs['Copula Structure'], self.vine_structure)
@@ -931,8 +935,8 @@ class ListDependenceResult(list):
         print('Data saved in %s' % (path_or_buf))
 
     @classmethod
-    def from_hdf(cls, filepath_or_buffer, id_of_experiment='all', out_ID=0, 
-        with_input_sample=True):
+    def from_hdf(cls, filepath_or_buffer, id_of_experiment='all', output_id=0,
+        with_input_sample=True, q_func=np.var):
         """Loads result from HDF5 file.
 
         This class method creates an instance of :class:`~ImpactOfDependence` 
@@ -946,7 +950,7 @@ class ListDependenceResult(list):
             The experiments to load. The hdf5 file can gather multiple 
             experiments with the same metadatas. The user can chose to load all
             or one experiments.
-        out_ID : int, optional (default=0)
+        output_id : int, optional (default=0)
             The index of the output if the function output is multidimensional.
         with_input_sample : bool, optional (default=True)
             If False the samples of input observations are not loaded. Input 
@@ -983,14 +987,12 @@ class ListDependenceResult(list):
             # Many previous experiments did not have this attribute. 
             # The checking is temporary and should be deleted in future
             # versions.
+            fixed_params = None
             if 'Fixed Parameters' in hdf_store.attrs.keys():
                 fixed_params = hdf_store.attrs['Fixed Parameters']
-            else:
-                fixed_params = None
+            bounds_tau = None
             if 'Bounds Tau' in hdf_store.attrs.keys():
                 bounds_tau = hdf_store.attrs['Bounds Tau']
-            else:
-                bounds_tau = None
 
             margins = []
             for i in range(input_dim):
@@ -1001,22 +1003,15 @@ class ListDependenceResult(list):
                 
             if run_type == 'grid-search':
                 grid_type = hdf_store.attrs['Grid Type']
+                grid_filename = None
                 if 'Grid Filename' in hdf_store.attrs.keys():
                     grid_filename = hdf_store.attrs['Grid Filename']
-                else:
-                    grid_filename = None
+                lhs_grid_criterion = None
                 if grid_type == 'lhs':
                     lhs_grid_criterion = hdf_store.attrs['LHS Criterion']
-                else:
-                    lhs_grid_criterion = None
                 
-            output_dim = hdf_store.attrs['Output Dimension']
             output_names = hdf_store.attrs['Output Names']
-            
-            list_input_sample = []
-            list_output_sample = []
-            list_n = []
-            n = 0
+            results = []
             # For each experiment
             for index in list_index:
                 grp = hdf_store[index] # Group of the experiment
@@ -1032,47 +1027,27 @@ class ListDependenceResult(list):
                     input_samples.append(data_in)
                     output_samples.append(data_out)
                     n_samples.append(res.attrs['n'])
-                    
-                list_input_sample.append(input_samples)
-                list_output_sample.append(output_samples)
 
-        # Each sample is made from the same dependence parameters
-        # They need to be reordered
+                results.append(
+                    cls(margins=margins, 
+                    families=families,
+                    vine_structure=vine_structure,
+                    bounds_tau=bounds_tau,
+                    fixed_params=fixed_params,
+                    dep_params=params,
+                    input_samples=input_samples,
+                    output_samples=output_samples,
+                    grid_type=grid_type,
+                    q_func=q_func,
+                    grid_filename=grid_filename,
+                    lhs_grid_criterion=lhs_grid_criterion,
+                    output_id=output_id)
+                    )
 
-        cls(margins=margins, 
-            families=families,
-            vine_structure=vine_structure,
-            bounds_tau=bounds_tau,
-            fixed_params=fixed_params,
-            dep_params=params,
-            input_samples=list_input_sample,
-            output_samples=list_output_sample,
-            grid_type=grid_type)
-                      
-                
-        obj._params = params
-        obj._n_param = n_params
-        obj._n_sample = n_sample
-        obj._n_input_sample = n
-        if with_input_sample:
-            obj._input_sample = input_sample
-        obj._all_output_sample = output_sample
-        obj._output_dim = output_dim
-        obj._copula_type = copula_type
-        obj._input_names = input_names
-        obj._output_names = output_names
-        obj._run_type = run_type
-        
-        obj._output_ID = out_ID
-        obj._load_data = True
-        
-        if run_type == 'Classic':
-            obj._dep_measure = dep_measure
-            obj._grid = grid_type
-            obj._grid_filename = grid_filename
-            obj._lhs_grid_criterion = lhs_grid_criterion
-
-        return obj
+        if len(results) == 1:
+            return results[0]
+        else:
+            return results
 
 class DependenceResult(object):
     """Result from conservative estimate.
@@ -1105,6 +1080,7 @@ class DependenceResult(object):
                  input_sample=None, 
                  output_sample=None, 
                  q_func=None,
+                 output_id=0,
                  random_state=None):
         
         self.margins = margins
@@ -1116,6 +1092,7 @@ class DependenceResult(object):
         self.output_sample = output_sample
         self.q_func = q_func
         self.rng = check_random_state(random_state)
+        self.output_id = output_id
         
         self.n_sample = output_sample.shape[0]
         self.input_dim = len(margins)
@@ -1140,7 +1117,7 @@ class DependenceResult(object):
         -------
             The bootstrap sample if inplace is true.
         """
-        self._bootstrap_sample = bootstrap(self.output_sample, n_bootstrap, self.q_func)
+        self._bootstrap_sample = bootstrap(self.output_sample_id, n_bootstrap, self.q_func)
         
         if not inplace:
             return self._bootstrap_sample
@@ -1158,9 +1135,17 @@ class DependenceResult(object):
     def quantity_(self):
         """The computed output quantity.
         """
-        quantity = self.q_func(self.output_sample, axis=0)
+        quantity = self.q_func(self.output_sample_id, axis=0)
         return quantity.item() if quantity.size == 1 else quantity
 
+    @property
+    def output_sample_id(self):
+        """
+        """
+        if self.output_dim == 1:
+            return self.output_sample
+        else:
+            return self.output_sample[:, self.output_id]
     @property
     def full_dep_params(self):
         """The matrix of parameters for all the pairs.
