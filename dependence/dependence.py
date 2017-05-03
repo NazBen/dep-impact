@@ -674,7 +674,8 @@ class ListDependenceResult(list):
                                           input_sample=input_sample,
                                           output_sample=output_sample,
                                           q_func=q_func,
-                                          random_state=random_state)
+                                          random_state=random_state,
+                                          output_id=self.output_id)
                 self.append(result)
 
             self.output_dim = output_sample.shape[1]
@@ -685,6 +686,18 @@ class ListDependenceResult(list):
     def extend(self, value):
         super(ListDependenceResult, self).extend(value)
         self.families = value.families
+
+    @property
+    def output_id(self):
+        """Id of the output.
+        """
+        return self._output_id
+
+    @output_id.setter
+    def output_id(self, output_id):
+        for result in self:
+            result.output_id = output_id
+        self._output_id = output_id
 
     @property
     def q_func(self):
