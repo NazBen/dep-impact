@@ -75,7 +75,7 @@ def func_sum(x, a=None):
     Returns
     -------
         y : a.x^t
-    """        
+    """
     n, dim = x.shape
     if a is None:
         a = np.ones((dim, 1))
@@ -88,3 +88,20 @@ def func_sum(x, a=None):
     y = np.dot(x, a)
         
     return y
+
+
+def multi_output_func_sum(x, output_dim=2):
+    """Additive model function with multi output.
+
+    Parameters
+    ----------
+    x : np.ndarray
+        The input values.
+    output_dim : int
+        The number of output dimension.
+
+    Returns
+    -------
+        y : [i * x]
+    """
+    return np.asarray([x.sum(axis=1)*a for a in range(output_dim)]).T
