@@ -123,16 +123,16 @@ class ConservativeEstimate(object):
             The function output quantity of interest.
         lhs_grid_criterion : string, optional (default = 'centermaximin')
             Configuration of the LHS grid sampling.
-            
+
             * 'centermaximin' (default),
             * 'center',
             * 'maximin',
             * 'correlation'.
-        
+
         Returns
         -------
         A list of DependenceResult instances.
-        
+
         """
         rng = check_random_state(random_state)
         run_type = 'grid-search'
@@ -683,6 +683,45 @@ class ListDependenceResult(list):
             
         self.rng = check_random_state(random_state)
         self._bootstrap_samples = None
+
+    def __add__(self, results):
+        """
+        """
+        if self.n_params > 0:
+            # Assert the results are the same categories
+            np.testing.assert_equal(self.margins, results.margins, err_msg="Same margins")
+            np.testing.assert_array_equal(self.families, results.families, err_msg="Different copula families")
+            np.testing.assert_array_equal(self.vine_structure, results.vine_structure, err_msg="Different copula structures")
+            np.testing.assert_array_equal(self.bounds_tau, results.bounds_tau, err_msg="Different bounds on Tau")
+            np.testing.assert_array_equal(self.fixed_params, results.fixed_params, err_msg="Different fixed params")
+            np.testing.assert_allclose(self.dep_params, results.dep_params, err_msg="Different dependence parameters")
+            assert self.run_type == results.run_type, "Different run type"
+            assert self.grid_type == results.grid_type, "Different grid type"
+            assert self.grid_filename == results.grid_filename, "Different grid type"
+            assert self.lhs_grid_criterion == results.lhs_grid_criterion, "Different grid type"
+
+            input_samples = []
+            output_samples = []
+            for res1, res2 in zip(self, results):
+                input_samples.append(np.r_[res1.input_sample, res2.input_sample])
+                output_samples.append(np.r_[res1.output_sample, res2.output_sample])
+
+            new_results = ListDependenceResult(
+                margins=self.margins,
+                families=self.families,
+                vine_structure=self.vine_structure,
+                bounds_tau=self.bounds_tau,
+                fixed_params=self.fixed_params,
+                dep_params=self.dep_params,
+                input_samples=input_samples,
+                output_samples=output_samples,
+                grid_type=self.grid_type,
+                q_func=self.q_func,
+                run_type=self.run_type,
+                grid_filename=self.grid_filename,
+                lhs_grid_criterion=self.lhs_grid_criterion,
+                output_id=self.output_id)
+        return new_results
 
     def extend(self, value):
         super(ListDependenceResult, self).extend(value)
