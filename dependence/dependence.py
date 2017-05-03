@@ -163,8 +163,10 @@ class ConservativeEstimate(object):
         if save_grid is not None and use_grid is None:
             if kendalls is None:
                 kendalls = to_kendalls(self._copula_converters, params)
-            save_dependence_grid(grid_path, kendalls, self._bounds_tau_list,
+            grid_filename = save_dependence_grid(grid_path, kendalls, self._bounds_tau_list,
                                  grid_type)
+            print("Grid saved at %s" % (grid_filename))
+
 
         params_not_to_compute = []
         # Params not to compute
@@ -861,7 +863,7 @@ class ListDependenceResult(list):
         else:
             raise AttributeError('The boostrap must be computed first')
 
-    def compute_bootstraps(self, n_bootstrap=1000, inplace=False):
+    def compute_bootstraps(self, n_bootstrap=1000, inplace=True):
         """Compute bootstrap of the quantity for each element of the list
         """
         if self.n_params == 0:
@@ -1074,8 +1076,9 @@ class ListDependenceResult(list):
                 input_samples = []
                 output_samples = []
                 n_samples = []
-                for k in grp.keys():
-                    res = grp[k]
+                elements = [int(i) for i in grp.keys()]
+                for k in sorted(elements):
+                    res = grp[str(k)]
                     data_in = res['input_sample'].value
                     data_out = res['output_sample'].value
 
@@ -1159,7 +1162,7 @@ class DependenceResult(object):
         self.corr_dim = self.input_dim * (self.input_dim - 1) / 2
         self._bootstrap_sample = None
 
-    def compute_bootstrap(self, n_bootstrap=1000, inplace=False):
+    def compute_bootstrap(self, n_bootstrap=1000, inplace=True):
         """Bootstrap of the output quantity of interest.
         
         Parameters
@@ -1391,6 +1394,8 @@ def save_dependence_grid(dirname, kendalls, bounds_tau, grid_type):
     # It is saved
     if do_save:
         np.savetxt(grid_filename, sample)
+
+    return grid_filename
 
 
 def load_dependence_grid(dirname, n_pairs, n_params, grid_type,
