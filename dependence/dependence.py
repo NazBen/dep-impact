@@ -96,10 +96,10 @@ class ConservativeEstimate(object):
 
     def gridsearch_minimize(self, n_dep_param, n_input_sample, grid_type='lhs',
                             dep_measure='kendall-tau', q_func=np.var, 
-                            lhs_grid_criterion='centermaximin',
+                            lhs_grid_criterion='centermaximin', keep_input_sample=True,
                             use_grid=None, save_grid=None,
-                            done_results=None, keep_input_sample=True, 
-                            random_state=None, grid_path='.'):
+                            done_results=None, grid_path='.',
+                            random_state=None):
         """Quantile minimization through a grid in the dependence parameter
         space.
         
@@ -131,7 +131,7 @@ class ConservativeEstimate(object):
         
         Returns
         -------
-        A list of DependenceResult instances.                
+        A list of DependenceResult instances.
         
         """
         rng = check_random_state(random_state)
@@ -144,9 +144,10 @@ class ConservativeEstimate(object):
         # Load a grid
         if use_grid is not None:
             # Load the sample from file and get the filename
-            params, grid_filename = load_dependence_grid(
+            kendalls, grid_filename = load_dependence_grid(
                 grid_path, self._n_pairs, n_dep_param, grid_type, 
                 self._bounds_tau_list, use_grid)
+            params = to_copula_params(self._copula_converters, kendalls)
         else:
             if dep_measure == "copula-parameter":
                 bounds = self._bounds_par_list
@@ -833,7 +834,7 @@ class ListDependenceResult(list):
             if not inplace:
                 return self.bootstrap_samples
 
-    def to_hdf(self, path_or_buf, input_names=[], output_names=[]):
+    def to_hdf(self, path_or_buf, input_names=[], output_names=[], verbose=False):
         """Write the contained data to an HDF5 file using HDFStore.
         
         Parameters
@@ -873,29 +874,29 @@ class ListDependenceResult(list):
                     # If the file already exists and already has data
                     if hdf_store.attrs.keys():
                         # Check the attributes of the file, if it already exists
-                        np.testing.assert_allclose(hdf_store['dependence_params'].value, self.dep_params)
-                        assert hdf_store.attrs['Input Dimension'] == self.input_dim
-                        assert hdf_store.attrs['Output Dimension'] == self.output_dim
-                        assert hdf_store.attrs['Run Type'] == self.run_type
-                        np.testing.assert_array_equal(hdf_store.attrs['Copula Families'], self.families)
+                        np.testing.assert_allclose(hdf_store['dependence_params'].value, self.dep_params, err_msg="Different dependence parameters")
+                        assert hdf_store.attrs['Input Dimension'] == self.input_dim, "Different input dimension"
+                        assert hdf_store.attrs['Output Dimension'] == self.output_dim, "Different output dimension"
+                        assert hdf_store.attrs['Run Type'] == self.run_type, "Different run type"
+                        np.testing.assert_array_equal(hdf_store.attrs['Copula Families'], self.families, err_msg="Different copula families")
                         if 'Fixed Parameters' in hdf_store.attrs.keys():
-                            np.testing.assert_array_equal(hdf_store.attrs['Fixed Parameters'], self.fixed_params)
+                            np.testing.assert_array_equal(hdf_store.attrs['Fixed Parameters'], self.fixed_params, err_msg="Different fixed copulas")
                         elif self._fixed_pairs:
                             # Save only if there is no fixed params
                             raise ValueError('It should not have constraints to be in the same output file.')
                         if 'Bounds Tau' in hdf_store.attrs.keys():
-                            np.testing.assert_array_equal(hdf_store.attrs['Bounds Tau'], self.bounds_tau)
+                            np.testing.assert_array_equal(hdf_store.attrs['Bounds Tau'], self.bounds_tau, err_msg="Different bounds on Tau")
                         elif self._fixed_pairs:
                             raise ValueError('It should not have constraints to be in the same output file.')
-                        np.testing.assert_array_equal(hdf_store.attrs['Copula Structure'], self.vine_structure)
-                        np.testing.assert_array_equal(hdf_store.attrs['Input Names'], input_names)
-                        np.testing.assert_array_equal(hdf_store.attrs['Output Names'], output_names)
+                        np.testing.assert_array_equal(hdf_store.attrs['Copula Structure'], self.vine_structure, err_msg="Different copula structures")
+                        np.testing.assert_array_equal(hdf_store.attrs['Input Names'], input_names, err_msg="Different Input Names")
+                        np.testing.assert_array_equal(hdf_store.attrs['Output Names'], output_names, err_msg="Different output Names")
                         for i in range(self.input_dim):
-                            assert hdf_store.attrs['Marginal_%d Family' % (i)] == margin_dict['Marginal_%d Family' % (i)]
-                            np.testing.assert_array_equal(hdf_store.attrs['Marginal_%d Parameters' % (i)], margin_dict['Marginal_%d Parameters' % (i)])
+                            assert hdf_store.attrs['Marginal_%d Family' % (i)] == margin_dict['Marginal_%d Family' % (i)], "Different marginal family"
+                            np.testing.assert_array_equal(hdf_store.attrs['Marginal_%d Parameters' % (i)], margin_dict['Marginal_%d Parameters' % (i)], err_msg="Different marginal parameters")
                             
                         if self.run_type == 'grid-search':
-                            assert hdf_store.attrs['Grid Type'] == self.grid_type
+                            assert hdf_store.attrs['Grid Type'] == self.grid_type, "Different grid type"
                     else:
                         # We save the attributes in the empty new file
                         hdf_store.create_dataset('dependence_params', data=self.dep_params)
@@ -928,7 +929,7 @@ class ListDependenceResult(list):
                     list_groups.remove('dependence_params')
                     list_groups = [int(g) for g in list_groups]
                     list_groups.sort()
-                    
+
                     # If there is already groups in the file
                     if list_groups:
                         grp_number = list_groups[-1] + 1
@@ -940,8 +941,10 @@ class ListDependenceResult(list):
                         grp_i.create_dataset('input_sample', data=self[i].input_sample)
                         grp_i.create_dataset('output_sample', data=self[i].output_sample)
                     filename_exists = False
-            except AssertionError:
+            except AssertionError, msg:
                 print('File %s has different configurations' % (path_or_buf))
+                if verbose:
+                    print(str(msg))
                 path_or_buf = '%s_%d.hdf5' % (init_file_name[:-5], k)
                 k += 1
 
@@ -1042,7 +1045,7 @@ class ListDependenceResult(list):
                     n_samples.append(res.attrs['n'])
 
                 results.append(
-                    cls(margins=margins, 
+                    cls(margins=margins,
                     families=families,
                     vine_structure=vine_structure,
                     bounds_tau=bounds_tau,
@@ -1052,6 +1055,7 @@ class ListDependenceResult(list):
                     output_samples=output_samples,
                     grid_type=grid_type,
                     q_func=q_func,
+                    run_type=run_type,
                     grid_filename=grid_filename,
                     lhs_grid_criterion=lhs_grid_criterion,
                     output_id=output_id)
@@ -1348,9 +1352,9 @@ def save_dependence_grid(dirname, kendalls, bounds_tau, grid_type):
     # It is saved
     if do_save:
         np.savetxt(grid_filename, sample)
-        
 
-def load_dependence_grid(dirname, n_pairs, n_params, grid_type, 
+
+def load_dependence_grid(dirname, n_pairs, n_params, grid_type,
                          bounds_tau, use_grid=None):
     """Load a grid of parameters
     """
@@ -1363,16 +1367,16 @@ def load_dependence_grid(dirname, n_pairs, n_params, grid_type,
         filename = os.path.join(dirname, name)
     else:
         raise AttributeError('Unknow use_grid')
+
     assert os.path.exists(filename), 'Grid file %s does not exists' % name
     print('loading file %s' % name)
     sample = np.loadtxt(filename).reshape(n_params, n_pairs)
     assert n_params == sample.shape[0], 'Wrong grid size'
     assert n_pairs == sample.shape[1], 'Wrong dimension'
-    
-    meas_param = np.zeros((n_params, n_pairs))
-    
+
+    kendalls = np.zeros((n_params, n_pairs))
     for k in range(n_pairs):
         tau_min, tau_max = bounds_tau[k]
-        meas_param[:, k] = sample[:, k]*(tau_max - tau_min) + tau_min
+        kendalls[:, k] = sample[:, k]*(tau_max - tau_min) + tau_min
         
-    return meas_param, filename
+    return kendalls, filename
