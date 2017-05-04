@@ -165,7 +165,7 @@ class ConservativeEstimate(object):
         if save_grid is not None and use_grid is None:
             if kendalls is None:
                 kendalls = to_kendalls(self._copula_converters, params)
-            save_dependence_grid(grid_path, kendalls, self._bounds_tau_list,
+            grid_filename = save_dependence_grid(grid_path, kendalls, self._bounds_tau_list,
                                  grid_type)
 
 
@@ -191,18 +191,9 @@ class ConservativeEstimate(object):
             params = np.delete(params, params_id_not_to_compute, axis=0)
 
         # Evaluate the sample
-        param_func = lambda param: self.stochastic_function(param,
-                                                            n_input_sample,
-                                                            return_input_sample=keep_input_sample)
-        if keep_input_sample:
-            tmp = map(param_func, params)
-            inputs = [t[1] for t in tmp]
-            outputs = [t[0] for t in tmp]
-        else:
-            outputs = map(param_func, params)
-            inputs = None
-        output_samples = outputs
-
+        output_samples, input_samples = self.run_stochastic_models(
+                params, n_input_sample, return_input_sample=keep_input_sample)
+        
         # Add back the results
         if len(params_not_to_compute) > 0:
             params = np.r_[params, params_not_to_compute[:, self._pair_ids]]
@@ -217,7 +208,7 @@ class ConservativeEstimate(object):
                                     bounds_tau=self.bounds_tau,
                                     fixed_params=self.fixed_params,
                                     dep_params=params,
-                                    input_samples=inputs,
+                                    input_samples=input_samples,
                                     output_samples=output_samples,
                                     q_func=q_func,
                                     run_type=run_type,
@@ -225,6 +216,37 @@ class ConservativeEstimate(object):
                                     random_state=rng,
                                     lhs_grid_criterion=lhs_grid_criterion,
                                     grid_filename=grid_filename)
+
+    def run_stochastic_models(self, params, n_input_sample, return_input_sample=True, random_state=None):
+        """This function considers the model output as a stochastic function by 
+        taking the dependence parameters as inputs.
+        
+        Parameters
+        ----------
+        params : list, or `np.ndarray`
+            The list of parameters associated to the predefined copula.
+        n_input_sample : int, optional (default=1)
+            The number of evaluations for each parameter
+        random_state : 
+        """
+        n_params = len(params)
+        # First, get all the input_sample
+        input_samples = []
+        for param in params:
+            full_param = np.zeros((self._corr_dim, ))
+            full_param[self._pair_ids] = param
+            full_param[self._fixed_pairs_ids] = self._fixed_params_list
+            
+            input_samples.append(self._get_sample(full_param, n_input_sample))
+        
+        outputs = self.model_func(np.concatenate(input_samples))
+        
+        n = n_input_sample
+        output_samples = [outputs[i*n:(i+1)*n, :] for i in range(n_params)]
+        
+        if not return_input_sample:
+            input_samples = None
+        return output_samples, input_samples
 
     def stochastic_function(self, param, n_input_sample=1, return_input_sample=True, random_state=None):
         """This function considers the model output as a stochastic function by 
@@ -1393,7 +1415,7 @@ def save_dependence_grid(dirname, kendalls, bounds_tau, grid_type):
     while os.path.exists(grid_filename):
         existing_sample = np.loadtxt(grid_filename).reshape(n_param, -1)
         # We check if the build sample and the existing one are equivalents
-        if np.allclose(np.sort(existing_sample, axis=0), np.sort(sample, axis=0)):
+        if np.allclose(existing_sample, sample):
             do_save = False
             print 'The DOE already exist in %s' % (name)
             break
@@ -1406,6 +1428,7 @@ def save_dependence_grid(dirname, kendalls, bounds_tau, grid_type):
         np.savetxt(grid_filename, sample)
         print("Grid saved at %s" % (grid_filename))
 
+    return grid_filename
 
 def load_dependence_grid(dirname, n_pairs, n_params, grid_type,
                          bounds_tau, use_grid=None):
