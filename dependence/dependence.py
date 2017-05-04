@@ -147,7 +147,8 @@ class ConservativeEstimate(object):
             kendalls, grid_filename = load_dependence_grid(
                 grid_path, self._n_pairs, n_dep_param, grid_type, 
                 self._bounds_tau_list, use_grid)
-            params = to_copula_params(self._copula_converters, kendalls)
+            converter = [self._copula_converters[k] for k in self._pair_ids]
+            params = to_copula_params(converter, kendalls)
         else:
             if dep_measure == "copula-parameter":
                 bounds = self._bounds_par_list
@@ -155,7 +156,8 @@ class ConservativeEstimate(object):
             elif dep_measure == "kendall-tau":
                 bounds = self._bounds_tau_list
                 kendalls = get_grid_sample(bounds, n_dep_param, grid_type)
-                params = to_copula_params(self._copula_converters, kendalls)
+                converter = [self._copula_converters[k] for k in self._pair_ids]
+                params = to_copula_params(converter, kendalls)
             else:
                 raise ValueError("Unknow dependence measure type")
                 
@@ -393,11 +395,19 @@ class ConservativeEstimate(object):
         check_matrix(families) # Check the matrix
 
         self._families = families
-        self._family_list, self._pair_ids, self._pairs = to_list(families,
-                                                                 return_ids=True,
-                                                                 return_coord=True)
+        _, self._pair_ids, self._pairs = to_list(families, return_ids=True, 
+                                                 return_coord=True)
+                                                 
+        self._family_list = []
+        k = 0
+        for i in range(1, families.shape[0]):
+            for j in range(i):
+                if families[i, j] >= 0:
+                    self._family_list.append(families[i, j])
+                k += 1
         self._n_pairs = len(self._pair_ids)
 
+        # TODO: correct the dimension of copula_parameters. Make it the same size as the pairs.
         self._copula_converters = [Conversion(family) for family in self._family_list]
 
         if hasattr(self, '_input_dim'):
@@ -518,8 +528,9 @@ class ConservativeEstimate(object):
         bounds_par = np.zeros(bounds_tau.shape)
         bounds_tau_list = []
         bounds_par_list = []
-        for k, (i, j) in enumerate(self._pairs):
-            tau_min, tau_max = get_tau_interval(self._family_list[k])
+        for k, p in enumerate(self._pair_ids):
+            i, j = self._pairs[k]
+            tau_min, tau_max = get_tau_interval(self._family_list[p])
             if np.isnan(bounds_tau[i, j]):
                 tau_min = tau_min
             else:
@@ -532,8 +543,8 @@ class ConservativeEstimate(object):
             bounds_tau_list.append([tau_min, tau_max])
             
             # Conversion to copula parameters
-            param_min = self._copula_converters[k].to_copula_parameter(tau_min, 'kendall-tau')
-            param_max = self._copula_converters[k].to_copula_parameter(tau_max, 'kendall-tau')
+            param_min = self._copula_converters[p].to_copula_parameter(tau_min, 'kendall-tau')
+            param_max = self._copula_converters[p].to_copula_parameter(tau_max, 'kendall-tau')
             
             bounds_par[i, j] = tau_min
             bounds_par[j, i] = tau_max
