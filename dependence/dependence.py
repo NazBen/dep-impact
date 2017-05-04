@@ -163,9 +163,8 @@ class ConservativeEstimate(object):
         if save_grid is not None and use_grid is None:
             if kendalls is None:
                 kendalls = to_kendalls(self._copula_converters, params)
-            grid_filename = save_dependence_grid(grid_path, kendalls, self._bounds_tau_list,
+            save_dependence_grid(grid_path, kendalls, self._bounds_tau_list,
                                  grid_type)
-            print("Grid saved at %s" % (grid_filename))
 
 
         params_not_to_compute = []
@@ -1394,8 +1393,7 @@ def save_dependence_grid(dirname, kendalls, bounds_tau, grid_type):
     # It is saved
     if do_save:
         np.savetxt(grid_filename, sample)
-
-    return grid_filename
+        print("Grid saved at %s" % (grid_filename))
 
 
 def load_dependence_grid(dirname, n_pairs, n_params, grid_type,
