@@ -306,11 +306,11 @@ class ConservativeEstimate(object):
         if not keep_input_sample:
             input_sample = None
             
-        return DependenceResult(margins=self._margins,
-                                input_sample=input_sample,
-                                output_sample=output_sample,
-                                q_func=q_func,
-                                random_state=rng)
+        return ListDependenceResult(margins=self._margins,
+                                    input_samples=input_sample,
+                                    output_samples=output_sample,
+                                    q_func=q_func,
+                                    random_state=rng)
 
     def _get_sample(self, param, n_sample, param2=None):
         """Creates the observations of the joint input distribution.
@@ -713,8 +713,21 @@ class ListDependenceResult(list):
                                           output_id=self.output_id)
                 self.append(result)
 
-            self.output_dim = output_sample.shape[1]
+            self.output_dim = output_sample.shape[1]        
+        elif output_samples is not None:
+            # There is data and we suppose it's at independence or a fixed params
+            result = DependenceResult(margins=margins,
+                                          families=families,
+                                          vine_structure=vine_structure,
+                                          fixed_params=fixed_params,
+                                          dep_param=dep_params,
+                                          input_sample=input_samples,
+                                          output_sample=output_samples,
+                                          q_func=q_func,
+                                          random_state=random_state,
+                                          output_id=self.output_id)
             
+            self.append(result)
         self.rng = check_random_state(random_state)
         self._bootstrap_samples = None
 
@@ -1100,9 +1113,8 @@ class ListDependenceResult(list):
                     lhs_grid_criterion = hdf_store.attrs['LHS Criterion']
                 
             output_names = hdf_store.attrs['Output Names']
-            results = []
             # For each experiment
-            for index in list_index:
+            for j_exp, index in enumerate(list_index):
                 grp = hdf_store[index] # Group of the experiment
                 
                 input_samples = []
@@ -1117,9 +1129,8 @@ class ListDependenceResult(list):
                     input_samples.append(data_in)
                     output_samples.append(data_out)
                     n_samples.append(res.attrs['n'])
-
-                results.append(
-                    cls(margins=margins,
+                    
+                result = cls(margins=margins,
                     families=families,
                     vine_structure=vine_structure,
                     bounds_tau=bounds_tau,
@@ -1133,12 +1144,13 @@ class ListDependenceResult(list):
                     grid_filename=grid_filename,
                     lhs_grid_criterion=lhs_grid_criterion,
                     output_id=output_id)
-                    )
 
-        if len(results) == 1:
-            return results[0]
-        else:
-            return results
+                if j_exp == 0:
+                    results = result
+                else:
+                    results = results + result
+                    
+        return results
 
 class DependenceResult(object):
     """Result from conservative estimate.
