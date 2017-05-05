@@ -310,6 +310,7 @@ class ConservativeEstimate(object):
                                     input_samples=input_sample,
                                     output_samples=output_sample,
                                     q_func=q_func,
+                                    run_type='independence',
                                     random_state=rng)
 
     def _get_sample(self, param, n_sample, param2=None):
@@ -720,14 +721,21 @@ class ListDependenceResult(list):
                                           families=families,
                                           vine_structure=vine_structure,
                                           fixed_params=fixed_params,
-                                          dep_param=dep_params,
+                                          dep_param=0,
                                           input_sample=input_samples,
                                           output_sample=output_samples,
                                           q_func=q_func,
                                           random_state=random_state,
                                           output_id=self.output_id)
             
+            self.families = 0
+            self.vine_structure = 0
+            self.bounds_tau = 0
+            self.fixed_params = 0
+            self.grid_type = 0
             self.append(result)
+            self.output_dim = output_samples.shape[1]     
+            
         self.rng = check_random_state(random_state)
         self._bootstrap_samples = None
 
@@ -1103,12 +1111,13 @@ class ListDependenceResult(list):
                 marginal = getattr(ot, hdf_store.attrs[marg_f])(*hdf_store.attrs[marg_p])
                 margins.append(marginal)
                 
+            grid_type = None
+            grid_filename = None
+            lhs_grid_criterion = None
             if run_type == 'grid-search':
                 grid_type = hdf_store.attrs['Grid Type']
-                grid_filename = None
                 if 'Grid Filename' in hdf_store.attrs.keys():
                     grid_filename = hdf_store.attrs['Grid Filename']
-                lhs_grid_criterion = None
                 if grid_type == 'lhs':
                     lhs_grid_criterion = hdf_store.attrs['LHS Criterion']
                 

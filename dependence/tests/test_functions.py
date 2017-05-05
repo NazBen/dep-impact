@@ -48,8 +48,9 @@ def func_overflow(X, model=1):
     else:
         raise AttributeError('Unknow model.')
     
-    
-tmp = ot.Gumbel(1013., 558., ot.Gumbel.MUSIGMA)
+tmp = ot.Gumbel()
+tmp.setParameter(ot.GumbelMuSigma()([1013., 558.]))
+
 dist_Q = ot.TruncatedDistribution(tmp, 500., 3000.)
 dist_Ks = ot.TruncatedNormal(30., 8., 15., np.inf)
 dist_Zv = ot.Triangular(49., 50., 51.)
