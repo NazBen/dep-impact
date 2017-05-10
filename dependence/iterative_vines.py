@@ -33,7 +33,9 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
     p = 0
     n_dep_param = n_dep_param_init
     while p < p_max:
-        all_results = ListDependenceResult()
+        all_results = ListDependenceResult(margins=estimate_object.margins,
+                                           families=estimate_object.families,
+                                           )
         min_quantity = {}
         pair_id = 0
         for i in range(1, dim):
@@ -45,15 +47,16 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
                     
                     # Family matrix is changed
                     quant_estimate.families = tmp_families
+                    quant_estimate.bounds_tau = None
                     pairs_iter = selected_pairs + [(i, j)]
                     pairs_iter_id = [get_pair_id(dim, pair, with_plus=False) for pair in pairs_iter]
                     pairs_by_levels = get_pairs_by_levels(dim, pairs_iter_id)
                     
-                    quant_estimate.vine_structure = get_possible_structures(dim, pairs_by_levels)[1]
+                    #quant_estimate.vine_structure = get_possible_structures(dim, pairs_by_levels)[1]
 
 #                    print pairs_iter
-                    print quant_estimate.vine_structure
-                    print quant_estimate.families
+                    #print quant_estimate.vine_structure
+                    #print quant_estimate.families
                                   
                     # Lets get the results for this family structure
                     results = quant_estimate.gridsearch_minimize(n_dep_param=n_dep_param,
@@ -97,6 +100,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
         worst_quantities.append(min_quantity[selected_pair])
         if verbose:
             print('p=%d, worst quantile at %.2f, cost = %d' % (p+1, min_quantity[selected_pair], cost))
+            print('Worst quantile of {0}'.format(selected_pair))
 
         p += n_add_pairs
         if n_dep_param is not None:

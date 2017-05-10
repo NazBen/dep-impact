@@ -241,8 +241,12 @@ class ConservativeEstimate(object):
         
         outputs = self.model_func(np.concatenate(input_samples))
         
+        if outputs.shape[0] == outputs.size:
+            vars = None
+        else:
+            vars = range(outputs.shape[1])
         n = n_input_sample
-        output_samples = [outputs[i*n:(i+1)*n, :] for i in range(n_params)]
+        output_samples = [outputs[i*n:(i+1)*n, vars] for i in range(n_params)]
         
         if not return_input_sample:
             input_samples = None
@@ -734,7 +738,10 @@ class ListDependenceResult(list):
             self.fixed_params = 0
             self.grid_type = 0
             self.append(result)
-            self.output_dim = output_samples.shape[1]     
+            if output_samples.shape[0] == output_samples.size:
+                self.output_dim = 1
+            else:
+                self.output_dim = output_samples.shape[1]
             
         self.rng = check_random_state(random_state)
         self._bootstrap_samples = None
