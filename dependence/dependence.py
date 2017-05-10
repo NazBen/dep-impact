@@ -765,9 +765,12 @@ class ListDependenceResult(list):
             input_samples = []
             output_samples = []
             for res1, res2 in zip(self, results):
-                input_samples.append(np.r_[res1.input_sample, res2.input_sample])
+                if res1.input_sample is not None:
+                    input_samples.append(np.r_[res1.input_sample, res2.input_sample])
                 output_samples.append(np.r_[res1.output_sample, res2.output_sample])
 
+            if len(input_samples) == 0:
+                input_samples = None
             new_results = ListDependenceResult(
                 margins=self.margins,
                 families=self.families,
@@ -854,6 +857,13 @@ class ListDependenceResult(list):
             print("There is no data...")
         else:
             return [result.output_sample for result in self]
+        
+    @property
+    def input_samples(self):
+        if self.n_params == 0:
+            print("There is no data...")
+        else:
+            return [result.input_sample for result in self]
     
     @property
     def n_input_sample(self):
@@ -884,7 +894,7 @@ class ListDependenceResult(list):
         if self.n_params == 0:
             print("There is no data...")
         else:
-            return np.asarray([result.quantity_ for result in self])
+            return np.asarray([result.quantity for result in self])
 
     @property
     def min_result(self):
@@ -1133,16 +1143,21 @@ class ListDependenceResult(list):
             for j_exp, index in enumerate(list_index):
                 grp = hdf_store[index] # Group of the experiment
                 
-                input_samples = []
+                input_samples = None
+                if with_input_sample:
+                    input_samples = []
+                    
                 output_samples = []
                 n_samples = []
                 elements = [int(i) for i in grp.keys()]
                 for k in sorted(elements):
                     res = grp[str(k)]
-                    data_in = res['input_sample'].value
+                    if with_input_sample:
+                        data_in = res['input_sample'].value
                     data_out = res['output_sample'].value
 
-                    input_samples.append(data_in)
+                    if with_input_sample:
+                        input_samples.append(data_in)
                     output_samples.append(data_out)
                     n_samples.append(res.attrs['n'])
                     
@@ -1251,7 +1266,7 @@ class DependenceResult(object):
             raise AttributeError('The boostrap must be computed first')
 
     @property
-    def quantity_(self):
+    def quantity(self):
         """The computed output quantity.
         """
         quantity = self.q_func(self.output_sample_id, axis=0)
