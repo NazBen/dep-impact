@@ -81,8 +81,8 @@ class Conversion(object):
             raise TypeError("Wrong type for measure_param")
         
         if dep_measure == "kendall-tau":
-            r_params = numpy2ri(measure_param)
-            copula_param = np.asarray(VINECOPULA.BiCopTau2Par(self._family, r_params))
+            r_kendall = numpy2ri(measure_param)
+            copula_param = np.asarray(VINECOPULA.BiCopTau2Par(self._family, r_kendall))
         elif dep_measure == "pearson-rho":
             copula_param = self._copula.fromPearsonToParam(measure_param)
         else:

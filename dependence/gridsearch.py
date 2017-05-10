@@ -3,6 +3,7 @@
 from sklearn.utils import check_random_state
 from skopt.space import Space as sk_Space
 from sklearn.utils.fixes import sp_version
+import itertools
 import pyDOE
 
 class Space(sk_Space):
@@ -59,6 +60,24 @@ class Space(sk_Space):
             for k, dim in enumerate(self.dimensions):
                 tmp[:, k] = sample[:, k]*(dim.high - dim.low) + dim.low
             rows = tmp.tolist()
+        elif sampling == 'bounds':
+            n_pair = len(self.dimensions)
+            bounds = list(itertools.product([-1., 1., 0.], repeat=n_pair))
+            bounds = np.asarray(bounds)
+            n_bounds = len(bounds)
+            if n_samples is None:
+                n_samples = n_bounds
+            else:
+                n_samples = min(n_samples, n_bounds)
+            id_taken = np.random.choice(n_bounds, size=n_samples, replace=False)
+            sample = bounds[sorted(id_taken), :]
+            for p in range(n_pair):
+                sample_p = sample[:, p]
+                sample_p[sample_p == -1.] = self.dimensions[p].low
+                sample_p[sample_p == 1.] = self.dimensions[p].high
+            
+            return sample
+            
         elif sampling == 'fixed':
             raise NotImplementedError("Maybe I'll do it...")
         else:

@@ -1,4 +1,18 @@
-﻿from scipy.special import erf, erfinv
+﻿"""Test of the dependence library.
+
+TODO:
+    New tests to add:
+        - additive gaussian problem
+            * grid search with rand, lhs, fixed
+            * on several function of interest
+            * with bounds on the parameter
+            * with kendall or not 
+            * same with the iterative
+            * with perfect dependencies
+        - saving/loading data
+"""
+
+from scipy.special import erf, erfinv
 from numpy.testing import assert_allclose
 import openturns as ot
 import numpy as np
@@ -6,10 +20,7 @@ from itertools import combinations
 
 from dependence import ImpactOfDependence
 
-def add_function(x):
-    """
-    """
-    return x.sum(axis=1)
+
 
 def dep_params_list_to_matrix(params, dim):
     sigma = np.ones((dim, dim))

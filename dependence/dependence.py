@@ -153,11 +153,13 @@ class ConservativeEstimate(object):
             if dep_measure == "copula-parameter":
                 bounds = self._bounds_par_list
                 params = get_grid_sample(bounds, n_dep_param, grid_type)
+                n_dep_param = len(params)
             elif dep_measure == "kendall-tau":
                 bounds = self._bounds_tau_list
                 kendalls = get_grid_sample(bounds, n_dep_param, grid_type)
                 converter = [self._copula_converters[k] for k in self._pair_ids]
                 params = to_copula_params(converter, kendalls)
+                n_dep_param = len(params)               
             else:
                 raise ValueError("Unknow dependence measure type")
                 
@@ -1499,3 +1501,18 @@ def load_dependence_grid(dirname, n_pairs, n_params, grid_type,
         kendalls[:, k] = sample[:, k]*(tau_max - tau_min) + tau_min
         
     return kendalls, filename
+
+
+def get_bounds_edges(dimensions):
+    """Get the points at the edges of the space.
+    """
+    n_pair = len(dimensions)
+    params = list(itertools.product([-1., 1., 0.], repeat=n_pair))
+    params.remove((0.,)*n_pair) # remove indepencence
+    params = np.asarray(params)
+    for p in range(n_pair):
+        params_p = params[:, p]
+        params_p[params_p == -1.] = dimensions[p][0]
+        params_p[params_p == 1.] = dimensions[p][1]
+        
+    return params
