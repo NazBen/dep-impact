@@ -4,14 +4,20 @@ import itertools
 
 from .dependence import ListDependenceResult
 
-GRIDS = ['lhs', 'rand']
+GRIDS = ['lhs', 'rand', 'vertices']
 
 def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p_max, grid_type='lhs', 
                             q_func=np.var, n_add_pairs=1, n_remove_pairs=1, 
                             with_bootstrap=False, re_use_params=False, verbose=False):
-    """
-    """
+    """Use an iterative algorithm to obtain the worst case quantile and its dependence structure.
 
+    Parameters
+    ----------
+
+
+    Returns
+    -------
+    """
     quant_estimate = copy.copy(estimate_object)
     max_n_pairs = quant_estimate.corr_dim_
     assert grid_type in GRIDS, "Unknow Grid type {0}".format(grid_type)
@@ -21,14 +27,16 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
     assert callable(q_func), "Quantity function must be callable"
     
     init_family = quant_estimate.families
+    init_bounds_tau = quant_estimate.bounds_tau
     dim = quant_estimate.input_dim
     
     families = np.zeros((dim, dim))
+    bounds_tau = np.zeros((dim, dim))
+    bounds_tau[:] = np.nan
     selected_pairs = []
     removed_pairs = []
     worst_quantities = []
-    all_params = np.zeros((0, max_n_pairs))
-    
+
     cost = 0
     p = 0
     n_dep_param = n_dep_param_init
@@ -42,30 +50,30 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
             for j in range(i):
                 if ((i, j) not in selected_pairs) and ((i, j) not in removed_pairs):
                     # Family matrix for this iteration
-                    tmp_families = np.copy(families)
+                    tmp_families = families.copy()
                     tmp_families[i, j] = init_family[i, j]
+
+                    tmp_bounds_tau = bounds_tau.copy()
+                    tmp_bounds_tau[i, j] = init_bounds_tau[i, j]
+                    tmp_bounds_tau[j, i] = init_bounds_tau[j, i]
                     
                     # Family matrix is changed
                     quant_estimate.families = tmp_families
-                    quant_estimate.bounds_tau = None
+                    quant_estimate.bounds_tau = tmp_bounds_tau
                     pairs_iter = selected_pairs + [(i, j)]
                     pairs_iter_id = [get_pair_id(dim, pair, with_plus=False) for pair in pairs_iter]
                     pairs_by_levels = get_pairs_by_levels(dim, pairs_iter_id)
                     
                     #quant_estimate.vine_structure = get_possible_structures(dim, pairs_by_levels)[1]
 
-#                    print pairs_iter
-                    #print quant_estimate.vine_structure
-                    #print quant_estimate.families
-                                  
                     # Lets get the results for this family structure
                     results = quant_estimate.gridsearch_minimize(n_dep_param=n_dep_param,
-                                                                 n_input_sample=n_input_sample, 
-                                                                 grid_type=grid_type, 
+                                                                 n_input_sample=n_input_sample,
+                                                                 grid_type=grid_type,
                                                                  q_func=q_func,
                                                                  done_results=all_results)
 
-                    all_params = np.r_[all_params, results.full_dep_params]
+                    
                     
                     # How much does it costs
                     cost += results.n_evals
@@ -96,6 +104,8 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
         for pair in sorted_quantities[:n_add_pairs]:
             i, j = pair[0][0], pair[0][1]
             families[i, j] = init_family[i, j]
+            bounds_tau[i, j] = init_bounds_tau[i, j]
+            bounds_tau[j, i] = init_bounds_tau[j, i]
         selected_pairs.extend([pair[0] for pair in sorted_quantities[:n_add_pairs]])
         worst_quantities.append(min_quantity[selected_pair])
         if verbose:
@@ -105,8 +115,9 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, p
         p += n_add_pairs
         if n_dep_param is not None:
             n_dep_param = n_dep_param_init*int(np.sqrt(p+1))
+            print n_dep_param
 
-    return worst_quantities, selected_pairs, removed_pairs
+    return worst_quantities, selected_pairs, removed_pairs, results
 
 
 def check_structure_shape(structure):

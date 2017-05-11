@@ -115,7 +115,9 @@ class ConservativeEstimate(object):
                 
             - 'lhs' : a Latin Hypercube Sampling (from pyDOE package) with criterion defined by the parameter lhs_grid_criterion,
             - 'rand' : a random sampling,
-            - 'fixed' : an uniform grid.
+            - 'fixed' : an uniform grid,
+            - 'vertices' : sampling over the vertices of the space.
+
             
         dep_measure : 'kendall-tau' or 'copula-parameter', optional (default='KendallTau')
             The measure of dependence in which the dependence parameters are
