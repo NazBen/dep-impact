@@ -159,7 +159,7 @@ class ConservativeEstimate(object):
                 kendalls = get_grid_sample(bounds, n_dep_param, grid_type)
                 converter = [self._copula_converters[k] for k in self._pair_ids]
                 params = to_copula_params(converter, kendalls)
-                n_dep_param = len(params)               
+                n_dep_param = len(params)
             else:
                 raise ValueError("Unknow dependence measure type")
                 
@@ -169,7 +169,6 @@ class ConservativeEstimate(object):
                 kendalls = to_kendalls(self._copula_converters, params)
             grid_filename = save_dependence_grid(grid_path, kendalls, self._bounds_tau_list,
                                  grid_type)
-
 
         params_not_to_compute = []
         # Params not to compute
@@ -426,7 +425,7 @@ class ConservativeEstimate(object):
         self._families = families
         _, self._pair_ids, self._pairs = to_list(families, return_ids=True, 
                                                  return_coord=True)
-                                                 
+
         self._family_list = []
         k = 0
         for i in range(1, families.shape[0]):
@@ -720,7 +719,7 @@ class ListDependenceResult(list):
                                           output_id=self.output_id)
                 self.append(result)
 
-            self.output_dim = output_sample.shape[1]        
+            self.output_dim = output_sample.shape[1]
         elif output_samples is not None:
             # There is data and we suppose it's at independence or a fixed params
             result = DependenceResult(margins=margins,
@@ -1379,12 +1378,18 @@ def create_bounds_grid(dimensions):
         
     return params
 
-def get_grid_sample(dimensions, n_sample, grid_type, savefig=False):
-    """Get a sample of observation from a design space.
+def get_grid_sample(dimensions, n_sample, grid_type):
+    """Sample inside a fixed design space.
     
     Parameters
     ----------
-    dimensions : 
+    dimensions : array,
+        The bounds of the space for each dimensions.
+    n_sample: int,
+        The number of observations inside the space.
+    grid_type: str,
+        The type of sampling.
+
     """
     # We create the grid
     space = Space(dimensions)

@@ -69,13 +69,14 @@ class Space(sk_Space):
                 n_samples = n_bounds
             else:
                 n_samples = min(n_samples, n_bounds)
+
             id_taken = np.random.choice(n_bounds, size=n_samples, replace=False)
             sample = bounds[sorted(id_taken), :]
             for p in range(n_pair):
                 sample_p = sample[:, p]
                 sample_p[sample_p == -1.] = self.dimensions[p].low
                 sample_p[sample_p == 1.] = self.dimensions[p].high
-            
+
             return sample
             
         elif sampling == 'fixed':
