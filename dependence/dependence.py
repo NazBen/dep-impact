@@ -10,7 +10,6 @@ TODO:
 
 import operator
 import warnings
-import itertools
 import os
 
 import numpy as np
@@ -19,9 +18,11 @@ import openturns as ot
 import h5py
 from sklearn.utils import check_random_state
 
-from .gridsearch import Space
 from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
+from .utils import list_to_matrix, matrix_to_list, bootstrap, to_kendalls, \
+    load_dependence_grid, to_copula_params, get_grid_sample, \
+    save_dependence_grid, margins_to_dict
 
 OPERATORS = {">": operator.gt, ">=": operator.ge,
              "<": operator.lt, "<=": operator.le}
@@ -145,8 +146,12 @@ class ConservativeEstimate(object):
         if use_grid is not None:
             # Load the sample from file and get the filename
             kendalls, grid_filename = load_dependence_grid(
-                grid_path, self._n_pairs, n_dep_param, grid_type, 
-                self._bounds_tau_list, use_grid)
+                dirname=grid_path,
+                n_pairs=self._n_pairs,
+                n_params=n_dep_param,
+                bounds_tau=self._bounds_tau_list,
+                grid_type=grid_type,
+                use_grid=use_grid)
             converter = [self._copula_converters[k] for k in self._pair_ids]
             params = to_copula_params(converter, kendalls)
         else:
@@ -332,7 +337,7 @@ class ConservativeEstimate(object):
             (e.g. Student)
         """
         dim = self._input_dim
-        matrix_param = to_matrix(param, dim)
+        matrix_param = list_to_matrix(param, dim)
 
         if self._copula_type == 'vine':
             # TODO: One param is used. Do it for two parameters copulas.
@@ -423,7 +428,7 @@ class ConservativeEstimate(object):
         check_matrix(families) # Check the matrix
 
         self._families = families
-        _, self._pair_ids, self._pairs = to_list(families, return_ids=True, 
+        _, self._pair_ids, self._pairs = matrix_to_list(families, return_ids=True, 
                                                  return_coord=True)
 
         self._family_list = []
@@ -823,7 +828,7 @@ class ListDependenceResult(list):
         if self.families is None:
             print('Family matrix was not defined')
         else:
-            return to_list(self.families)[1]
+            return matrix_to_list(self.families)[1]
     
     @property
     def dep_params(self):
@@ -1286,10 +1291,10 @@ class DependenceResult(object):
         """The matrix of parameters for all the pairs.
         """
         full_params = np.zeros((self.corr_dim, ))
-        pair_ids = to_list(self.families, return_ids=True)[1]
+        pair_ids = matrix_to_list(self.families, return_ids=True)[1]
         full_params[pair_ids] = self.dep_param
         if self.fixed_params is not None:
-            fixed_params, fixed_pairs = to_list(self.fixed_params, return_ids=True)
+            fixed_params, fixed_pairs = matrix_to_list(self.fixed_params, return_ids=True)
             full_params[fixed_pairs] = fixed_params
         return full_params
 
@@ -1298,226 +1303,9 @@ class DependenceResult(object):
         """The Kendall's tau of the dependence parameters.
         """
         kendalls = []
-        for family, id_param in zip(*to_list(self.families, return_ids=True)):
+        for family, id_param in zip(*matrix_to_list(self.families, return_ids=True)):
             kendall = Conversion(family).to_kendall(self.dep_param[id_param])
             if kendall.size == 1:
                 kendall = kendall.item()
             kendalls.append(kendall)
         return kendalls
-                
-    def draw_input_sample():
-        """
-        """
-        raise NotImplementedError("Available soon, when I'll have the time")
-
-def to_matrix(param, dim):
-    """
-    """
-
-    matrix = np.zeros((dim, dim))
-    k = 0
-    for i in range(dim):
-        for j in range(i):
-            matrix[i, j] = param[k]
-            k += 1
-
-    return matrix
-
-def to_list(matrix, return_ids=False, return_coord=False):
-    """Add in a list, the positive elements of a matrix.
-    """
-    values = []
-    ids = []
-    coord = []
-    dim = matrix.shape[0]
-    k = 0
-    for i in range(dim):
-        for j in range(i):
-            if matrix[i, j] > 0:
-                values.append(matrix[i, j])
-                ids.append(k)
-                coord.append([i, j])
-            k += 1
-
-    if return_ids and return_coord:
-        return values, ids, coord
-    elif return_ids:
-        return values, ids
-    elif return_coord:
-        return values, coord
-    else:
-        return values
-
-
-def unique_rows(a):
-    a = np.ascontiguousarray(a)
-    unique_a = np.unique(a.view([('', a.dtype)]*a.shape[1]))
-    return unique_a.view(a.dtype).reshape((unique_a.shape[0], a.shape[1]))
-
-def bootstrap(data, num_samples, statistic):
-    """Returns bootstrap estimate of 100.0*(1-alpha) CI for statistic.
-    
-    Inspired from: http://people.duke.edu/~ccc14/pcfb/analysis.html"""
-    n = len(data)
-    idx = np.random.randint(0, n, (num_samples, n))
-    samples = data[idx]
-    stat = np.sort(statistic(samples, axis=1))
-    return stat
-
-def create_bounds_grid(dimensions):
-    """
-    """
-    n_pair = len(dimensions)
-    params = list(itertools.product([-1., 1., 0.], repeat=n_pair))
-    params.remove((0.,)*n_pair) # remove indepencence
-    params = np.asarray(params)
-    for p in range(n_pair):
-        params_p = params[:, p]
-        params_p[params_p == -1.] = dimensions[p][0]
-        params_p[params_p == 1.] = dimensions[p][1]
-        
-    return params
-
-def get_grid_sample(dimensions, n_sample, grid_type):
-    """Sample inside a fixed design space.
-    
-    Parameters
-    ----------
-    dimensions : array,
-        The bounds of the space for each dimensions.
-    n_sample: int,
-        The number of observations inside the space.
-    grid_type: str,
-        The type of sampling.
-
-    """
-    # We create the grid
-    space = Space(dimensions)
-    sample = space.rvs(n_sample, sampling=grid_type)
-    return sample
-
-def to_kendalls(converters, params):
-    """Convert the copula parameters to kendall's tau.
-    """
-    if isinstance(params, list):
-        params = np.asarray(params)
-    elif isinstance(params, float):
-        params = np.asarray([params])
-
-    n_params, n_pairs = params.shape
-    
-    kendalls = np.zeros(params.shape)
-    for k in range(n_pairs):
-        kendalls[:, k] = converters[k].to_kendall(params[:, k])
-
-    if kendalls.size == 1:
-        kendalls = kendalls.item()
-    return kendalls
-
-def to_copula_params(converters, kendalls):
-    """Convert the kendall'tau to copula parameters.
-    """
-    if isinstance(kendalls, list):
-        kendalls = np.asarray(kendalls)
-    elif isinstance(kendalls, float):
-        kendalls = np.asarray([kendalls])
-
-    n_params, n_pairs = kendalls.shape
-    
-    params = np.zeros(kendalls.shape)
-    for k in range(n_pairs):
-        params[:, k] = converters[k].to_copula_parameter(kendalls[:, k], dep_measure='kendall-tau')
-
-    if params.size == 1:
-        params = params.item()
-    return params
-
-def margins_to_dict(margins):
-    margin_dict = {}
-    # List of marginal names
-    for i, marginal in enumerate(margins):
-            name = marginal.getName()
-            params = list(marginal.getParameter())
-            margin_dict['Marginal_%d Family' % (i)] = name
-            margin_dict['Marginal_%d Parameters' % (i)] = params
-            
-    return margin_dict
-
-
-def save_dependence_grid(dirname, kendalls, bounds_tau, grid_type):
-    """The grid is always saved in Kendall's Tau measures.
-    """
-    kendalls = np.asarray(kendalls)
-    n_param, n_pairs = kendalls.shape
-    
-    # The sample variable to save
-    sample = np.zeros((n_param, n_pairs))
-    for k in range(n_pairs):
-        tau_min, tau_max = bounds_tau[k]
-        sample[:, k] = (kendalls[:, k] - tau_min) / (tau_max - tau_min)
-        
-    k = 0
-    do_save = True
-    name = '%s_p_%d_n_%d_%d.csv' % (grid_type, n_pairs, n_param, k)
-    
-    grid_filename = os.path.join(dirname, name)
-    # If this file already exists
-    while os.path.exists(grid_filename):
-        existing_sample = np.loadtxt(grid_filename).reshape(n_param, -1)
-        # We check if the build sample and the existing one are equivalents
-        if np.allclose(existing_sample, sample):
-            do_save = False
-            print 'The DOE already exist in %s' % (name)
-            break
-        k += 1
-        name = '%s_p_%d_n_%d_%d.csv' % (grid_type, n_pairs, n_param, k)
-        grid_filename = os.path.join(dirname, name)
-        
-    # It is saved
-    if do_save:
-        np.savetxt(grid_filename, sample)
-        print("Grid saved at %s" % (grid_filename))
-
-    return grid_filename
-
-def load_dependence_grid(dirname, n_pairs, n_params, grid_type,
-                         bounds_tau, use_grid=None):
-    """Load a grid of parameters
-    """
-    if isinstance(use_grid, str):
-        filename = use_grid
-        name = os.path.basename(filename)
-    elif isinstance(use_grid, (int, bool)):
-        k = int(use_grid)
-        name = '%s_p_%d_n_%d_%d.csv' % (grid_type, n_pairs, n_params, k)
-        filename = os.path.join(dirname, name)
-    else:
-        raise AttributeError('Unknow use_grid')
-
-    assert os.path.exists(filename), 'Grid file %s does not exists' % name
-    print('loading file %s' % name)
-    sample = np.loadtxt(filename).reshape(n_params, n_pairs)
-    assert n_params == sample.shape[0], 'Wrong grid size'
-    assert n_pairs == sample.shape[1], 'Wrong dimension'
-
-    kendalls = np.zeros((n_params, n_pairs))
-    for k in range(n_pairs):
-        tau_min, tau_max = bounds_tau[k]
-        kendalls[:, k] = sample[:, k]*(tau_max - tau_min) + tau_min
-        
-    return kendalls, filename
-
-
-def get_bounds_edges(dimensions):
-    """Get the points at the edges of the space.
-    """
-    n_pair = len(dimensions)
-    params = list(itertools.product([-1., 1., 0.], repeat=n_pair))
-    params.remove((0.,)*n_pair) # remove indepencence
-    params = np.asarray(params)
-    for p in range(n_pair):
-        params_p = params[:, p]
-        params_p[params_p == -1.] = dimensions[p][0]
-        params_p[params_p == 1.] = dimensions[p][1]
-        
-    return params

@@ -12,15 +12,13 @@ TODO:
         - saving/loading data
 """
 
+import numpy as np
+import openturns as ot
 from scipy.special import erf, erfinv
 from numpy.testing import assert_allclose
-import openturns as ot
-import numpy as np
 from itertools import combinations
 
-from dependence import ImpactOfDependence
-
-
+from dependence import ConservativeEstimate
 
 def dep_params_list_to_matrix(params, dim):
     sigma = np.ones((dim, dim))
