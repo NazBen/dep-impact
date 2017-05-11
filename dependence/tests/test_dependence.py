@@ -17,8 +17,15 @@ import openturns as ot
 from scipy.special import erf, erfinv
 from numpy.testing import assert_allclose
 from itertools import combinations
+from test_dependence import func_sum
 
 from dependence import ConservativeEstimate
+
+QUANTILES_PROB = [0.05, 0.01]
+PROB_THRESHOLDS = [1., 2.]
+DIMENSIONS = range(2, 4)
+COPULA = ["NormalCopula", "ClaytonCopula"]
+MEASURES = ["dependence-parameter", "kendall-tau"]
 
 def dep_params_list_to_matrix(params, dim):
     sigma = np.ones((dim, dim))
@@ -89,16 +96,17 @@ def true_additive_gaussian_probability(x, dim, sigma, nu=None, const=None):
     sigma_y = np.sqrt(var_y)
     return 0.5 * (1. + erf(x / (sigma_y * np.sqrt(2.))))
 
-ALPHAS = [0.05, 0.01]
-THRESHOLDS = [1., 2.]
-DIMENSIONS = range(2, 4)
-LIST_COPULA = ["NormalCopula", "ClaytonCopula"]
-LIST_MEASURES = ["PearsonRho", "KendallTau"]
 
-def test_additive_gaussian_emprical_estimation():
+def test_additive_gaussian_gridsearch():
+    """Compare
+    """
     for alpha, threshold in zip(ALPHAS, THRESHOLDS):
         for dim in DIMENSIONS:
-            impact = ImpactOfDependence(add_function, [ot.Normal()]*dim, np.ones((dim, dim)), copula_type='normal')
+            # Only Gaussian families
+            families = np.tril(np.ones((dim, dim)), k=1)
+            impact = ConservativeEstimate(model_func=func_sum,
+                                          margins=[ot.Normal()]*dim,
+                                          familie=np.ones((dim, dim)))
             impact.run(n_dep_param=50, n_input_sample=10000, grid='rand', seed=0)
 
             empirical_quantiles = impact.compute_quantiles(alpha).quantity.ravel()
@@ -117,22 +125,6 @@ def test_additive_gaussian_emprical_estimation():
                             err_msg="Failed with threshold = {0}, dim = {1}"\
                             .format(threshold, dim))
 
-def test_draw():
-    dim = 2
-    copula_name = 'ClaytonCopula'
-    measure = 'KendallTau'
-    alpha = 0.05
-    threshold = 2.
-    impact = ImpactOfDependence(add_function, [ot.Normal()] * dim, 
-                                copula_name=copula_name)
-    impact.run(n_dep_param=100, n_input_sample=10000, fixed_grid=True, 
-               dep_measure=measure, seed=0)
-
-    quant_result = impact.compute_quantiles(alpha)
-    quant_result.draw('KendallTau')
-    
-    proba_result = impact.compute_probability(threshold)
-    proba_result.draw('KendallTau')
 
 def test_fixed_grid():
     dim = 2
