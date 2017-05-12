@@ -11,6 +11,7 @@ TODO:
 import operator
 import warnings
 import os
+import json
 
 import numpy as np
 import pandas as pd
@@ -22,7 +23,7 @@ from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
 from .utils import list_to_matrix, matrix_to_list, bootstrap, to_kendalls, \
     load_dependence_grid, to_copula_params, get_grid_sample, \
-    save_dependence_grid, margins_to_dict
+    save_dependence_grid, margins_to_dict, dict_to_margins
 
 OPERATORS = {">": operator.gt, ">=": operator.ge,
              "<": operator.lt, "<=": operator.le}
@@ -98,8 +99,7 @@ class ConservativeEstimate(object):
     def gridsearch_minimize(self, n_dep_param, n_input_sample, grid_type='lhs',
                             dep_measure='kendall-tau', q_func=np.var, 
                             lhs_grid_criterion='centermaximin', keep_input_sample=True,
-                            use_grid=None, save_grid=None,
-                            done_results=None, grid_path='.',
+                            use_grid=None, save_grid=None, grid_path='.',
                             random_state=None):
         """Quantile minimization through a grid in the dependence parameter
         space.
@@ -145,18 +145,7 @@ class ConservativeEstimate(object):
         kendalls = None
         grid_filename = None
         # Load a grid
-        if use_grid is not None:
-            # Load the sample from file and get the filename
-            kendalls, grid_filename = load_dependence_grid(
-                dirname=grid_path,
-                n_pairs=self._n_pairs,
-                n_params=n_dep_param,
-                bounds_tau=self._bounds_tau_list,
-                grid_type=grid_type,
-                use_grid=use_grid)
-            converter = [self._copula_converters[k] for k in self._pair_ids]
-            params = to_copula_params(converter, kendalls)
-        else:
+        if use_grid is None:
             if dep_measure == "copula-parameter":
                 bounds = self._bounds_par_list
                 params = get_grid_sample(bounds, n_dep_param, grid_type)
@@ -169,6 +158,18 @@ class ConservativeEstimate(object):
                 n_dep_param = len(params)
             else:
                 raise ValueError("Unknow dependence measure type")
+        else:
+            # Load the sample from file and get the filename
+            kendalls, grid_filename = load_dependence_grid(
+                dirname=grid_path,
+                n_pairs=self._n_pairs,
+                n_params=n_dep_param,
+                bounds_tau=self._bounds_tau_list,
+                grid_type=grid_type,
+                use_grid=use_grid)
+            converter = [self._copula_converters[k] for k in self._pair_ids]
+            params = to_copula_params(converter, kendalls)
+        
                 
         # The grid is save if it was asked and if it does not already exists
         if save_grid is not None and use_grid is None:
@@ -177,39 +178,10 @@ class ConservativeEstimate(object):
             grid_filename = save_dependence_grid(grid_path, kendalls, self._bounds_tau_list,
                                  grid_type)
 
-        params_not_to_compute = []
-        # Params not to compute
-        if (done_results is not None) and (done_results.n_params > 0):
-            full_params = np.zeros((n_dep_param, self.corr_dim))
-            full_params[:, self._pair_ids] = params
-            done_dep_params = done_results.full_dep_params
-
-            params_not_to_compute = []
-            params_id_not_to_compute = []
-            for param in full_params:
-                k = np.where((param == done_dep_params).all(axis=1))[0].tolist()
-                if k:
-                    params_not_to_compute.append(param)
-                    params_id_not_to_compute.append(k[0])
-
-            params_not_to_compute = np.asarray(params_not_to_compute)
-            n_dep_param -= len(params_id_not_to_compute)
-
-            #print("You saved %d params to compute" % len(params_id_not_to_compute))
-            params = np.delete(params, params_id_not_to_compute, axis=0)
-
         # Evaluate the sample
         output_samples, input_samples = self.run_stochastic_models(
                 params, n_input_sample, return_input_sample=keep_input_sample)
         
-        # Add back the results
-        if len(params_not_to_compute) > 0:
-            params = np.r_[params, params_not_to_compute[:, self._pair_ids]]
-            output_samples = np.r_[output_samples, done_results.output_samples]
-            saved_nevals = len(params_not_to_compute)*n_input_sample
-        else:
-            saved_nevals = 0
-
         return ListDependenceResult(margins=self.margins,
                                     families=self.families,
                                     vine_structure = self.vine_structure,
@@ -1010,9 +982,9 @@ class ListDependenceResult(list):
                         np.testing.assert_array_equal(hdf_store.attrs['Copula Structure'], self.vine_structure, err_msg="Different copula structures")
                         np.testing.assert_array_equal(hdf_store.attrs['Input Names'], input_names, err_msg="Different Input Names")
                         np.testing.assert_array_equal(hdf_store.attrs['Output Names'], output_names, err_msg="Different output Names")
-                        for i in range(self.input_dim):
-                            assert hdf_store.attrs['Marginal_%d Family' % (i)] == margin_dict['Marginal_%d Family' % (i)], "Different marginal family"
-                            np.testing.assert_array_equal(hdf_store.attrs['Marginal_%d Parameters' % (i)], margin_dict['Marginal_%d Parameters' % (i)], err_msg="Different marginal parameters")
+      
+                        loaded_margin_dict = json.loads(hdf_store.attrs['Margins'])        
+                        assert all( loaded_margin_dict[str(k)]==margin_dict[k] for k in margin_dict ), "Not the same dictionary"
                             
                         if self.run_type == 'grid-search':
                             assert hdf_store.attrs['Grid Type'] == self.grid_type, "Different grid type"
@@ -1020,10 +992,7 @@ class ListDependenceResult(list):
                         # We save the attributes in the empty new file
                         hdf_store.create_dataset('dependence_params', data=self.dep_params)
                         # Margins
-                        for i in range(self.input_dim):
-                            hdf_store.attrs['Marginal_%d Family' % (i)] = margin_dict['Marginal_%d Family' % (i)]
-                            hdf_store.attrs['Marginal_%d Parameters' % (i)] = margin_dict['Marginal_%d Parameters' % (i)]
-                        
+                        hdf_store.attrs['Margins'] = json.dumps(margin_dict, ensure_ascii=False)                            
                         hdf_store.attrs['Copula Families'] = self.families
                         hdf_store.attrs['Copula Structure'] = self.vine_structure
                         hdf_store.attrs['Bounds Tau'] = self.bounds_tau
@@ -1064,7 +1033,8 @@ class ListDependenceResult(list):
                 print('File %s has different configurations' % (path_or_buf))
                 if verbose:
                     print(str(msg))
-                path_or_buf = '%s_%d.hdf5' % (init_file_name[:-5], k)
+                filename, extension = os.path.splitext(init_file_name)
+                path_or_buf = '%s_num_%d%s' % (filename, k, extension)
                 k += 1
 
         print('Data saved in %s' % (path_or_buf))
@@ -1074,7 +1044,7 @@ class ListDependenceResult(list):
         with_input_sample=True, q_func=np.var):
         """Loads result from HDF5 file.
 
-        This class method creates an instance of :class:`~ImpactOfDependence` 
+        This class method creates an instance of :class:`~ConservativeEstimate` 
         by loading a HDF5 with the saved result of a previous run.
 
         Parameters
@@ -1129,12 +1099,17 @@ class ListDependenceResult(list):
             if 'Bounds Tau' in hdf_store.attrs.keys():
                 bounds_tau = hdf_store.attrs['Bounds Tau']
 
-            margins = []
-            for i in range(input_dim):
-                marg_f = 'Marginal_%d Family' % (i)
-                marg_p = 'Marginal_%d Parameters' % (i)
-                marginal = getattr(ot, hdf_store.attrs[marg_f])(*hdf_store.attrs[marg_p])
-                margins.append(marginal)
+            
+            # Version 2
+            if 'Margins' in hdf_store.attrs:
+                margins = dict_to_margins(json.loads(hdf_store.attrs['Margins']))
+            else:
+                margins = []
+                for i in range(input_dim):
+                    marg_f = 'Marginal_%d Family' % (i)
+                    marg_p = 'Marginal_%d Parameters' % (i)
+                    marginal = getattr(ot, hdf_store.attrs[marg_f])(*hdf_store.attrs[marg_p])
+                    margins.append(marginal)
                 
             grid_type = None
             grid_filename = None

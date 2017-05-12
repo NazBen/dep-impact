@@ -1,6 +1,7 @@
 import os
 import operator
 import numpy as np
+import openturns as ot
 from itertools import product
 from pyDOE import lhs
 from sklearn.utils import check_random_state
@@ -117,8 +118,7 @@ class Space(sk_Space):
                 sample_p[sample_p == 1.] = self.dimensions[p].high
 
             rows = sample.tolist()
-            print rows
-
+            
         elif sampling == 'fixed':
             raise NotImplementedError("Maybe I'll do it...")
         else:
@@ -281,11 +281,43 @@ def margins_to_dict(margins):
     """
     margin_dict = {}
     for i, marginal in enumerate(margins):
-            params = list(marginal.getParameter())
-            margin_dict['Marginal_%d Family' % (i)] = marginal.getName()
-            margin_dict['Marginal_%d Parameters' % (i)] = params
+        margin_dict[i] = {}
+        name = marginal.getName()
+        params = list(marginal.getParameter())
+        if name == 'TruncatedDistribution':
+            margin_dict[i]['Type'] = 'Truncated'
+            in_marginal = marginal.getDistribution()
+            margin_dict[i]['Truncated Parameters'] = params
+            name = in_marginal.getName()
+            params = list(in_marginal.getParameter())
+        else:        
+            margin_dict[i]['Type'] = 'Standard'
             
+        margin_dict[i]['Marginal Family'] = name
+        margin_dict[i]['Marginal Parameters'] = params    
     return margin_dict
+
+def dict_to_margins(margin_dict):
+    """Convert a dictionary with margins informations into a list of distributions.
+    
+    Parameters
+    ----------
+    margin_dict : dict
+        A dictionary of information on the margins
+    
+    Returns
+    -------
+    margins
+    """
+    margins = []
+    for i in sorted(margin_dict.keys()):
+        marginal = getattr(ot, margin_dict[i]['Marginal Family'])(*margin_dict[i]['Marginal Parameters'])
+        if margin_dict[i]['Type'] == 'TruncatedDistribution':
+            params = margin_dict[i]['Bounds']        
+            marginal = ot.TruncatedDistribution(marginal, *params)
+        margins.append(marginal)
+    
+    return margins
 
 
 def save_dependence_grid(dirname, kendalls, bounds_tau, grid_type):
@@ -332,7 +364,7 @@ def save_dependence_grid(dirname, kendalls, bounds_tau, grid_type):
         # We check if the build sample and the existing one are equivalents
         if np.allclose(existing_sample, sample):
             do_save = False
-            print 'The DOE already exist in %s' % (name)
+            print('The DOE already exist in %s' % (name))
             break
         k += 1
         name = '%s_p_%d_n_%d_%d.csv' % (grid_type, n_pairs, n_param, k)
