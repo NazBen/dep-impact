@@ -10,7 +10,13 @@
 *.pyd
 *.pyc
 
+# Jupyter notebook files
 .ipynb_checkpoints/
+
+# Data files from examples
+/examples/*/*.csv
+/examples/*/*.hdf
+/examples/*/*.hdf5
 
 # Visual Studio project files
 *.pyproj
