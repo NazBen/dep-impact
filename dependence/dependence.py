@@ -925,7 +925,7 @@ class ListDependenceResult(list):
             if not inplace:
                 return self.bootstrap_samples
 
-    def to_hdf(self, path_or_buf, input_names=[], output_names=[], verbose=False):
+    def to_hdf(self, path_or_buf, input_names=[], output_names=[], verbose=False, with_input_sample=True):
         """Write the contained data to an HDF5 file using HDFStore.
         
         Parameters
@@ -992,7 +992,7 @@ class ListDependenceResult(list):
                         # We save the attributes in the empty new file
                         hdf_store.create_dataset('dependence_params', data=self.dep_params)
                         # Margins
-                        hdf_store.attrs['Margins'] = json.dumps(margin_dict, ensure_ascii=False)                            
+                        hdf_store.attrs['Margins'] = json.dumps(margin_dict, ensure_ascii=False)
                         hdf_store.attrs['Copula Families'] = self.families
                         hdf_store.attrs['Copula Structure'] = self.vine_structure
                         hdf_store.attrs['Bounds Tau'] = self.bounds_tau
@@ -1026,8 +1026,9 @@ class ListDependenceResult(list):
                     for i in range(self.n_params):
                         grp_i = grp.create_group(str(i))
                         grp_i.attrs['n'] = self[i].n_sample
-                        grp_i.create_dataset('input_sample', data=self[i].input_sample)
                         grp_i.create_dataset('output_sample', data=self[i].output_sample)
+                        if with_input_sample:
+                            grp_i.create_dataset('input_sample', data=self[i].input_sample)
                     filename_exists = False
             except AssertionError, msg:
                 print('File %s has different configurations' % (path_or_buf))
@@ -1037,7 +1038,8 @@ class ListDependenceResult(list):
                 path_or_buf = '%s_num_%d%s' % (filename, k, extension)
                 k += 1
 
-        print('Data saved in %s' % (path_or_buf))
+        if verbose:
+            print('Data saved in %s' % (path_or_buf))
 
     @classmethod
     def from_hdf(cls, filepath_or_buffer, id_of_experiment='all', output_id=0,
