@@ -8,7 +8,7 @@ from .dependence import ListDependenceResult
 GRIDS = ['lhs', 'rand', 'vertices']
 
 def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, max_n_pairs, grid_type='lhs', 
-                            q_func=np.var, n_add_pairs=1, n_remove_pairs=1, 
+                            q_func=np.var, n_add_pairs=1, n_remove_pairs=1, adapt_vine_structure=False,
                             with_bootstrap=False, verbose=False, 
                             keep_input_sample=True, **kwargs):
     """Use an iterative algorithm to obtain the worst case quantile and its dependence structure.
@@ -41,8 +41,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, m
 
     # Selected pairs through iterations
     selected_pairs = []
-
-    all_results = {}
+    all_results = []
 
     n_dep_param = n_dep_param_init
     
@@ -81,15 +80,17 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, m
     output_names = []
     if 'output_names' in kwargs:
         output_names = kwargs['output_names']
-    
+
+    ## Algorithm Loop
     cost = 0
     n_pairs = 0
     while n_pairs < max_n_pairs:
         min_quantity = {}
+        all_results.append({})
         for i, j in indices:
             # Family matrix for this iteration
             tmp_families = families.copy()
-            tmp_families[i, j] = init_family[i, j]    
+            tmp_families[i, j] = init_family[i, j]
             tmp_bounds_tau = bounds_tau.copy()
             tmp_bounds_tau[i, j] = init_bounds_tau[i, j]
             tmp_bounds_tau[j, i] = init_bounds_tau[j, i]
@@ -98,11 +99,12 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, m
             quant_estimate.families = tmp_families
             quant_estimate.bounds_tau = tmp_bounds_tau
             
-#            pairs_iter = selected_pairs + [(i, j)]
-#            pairs_iter_id = [get_pair_id(dim, pair, with_plus=False) for pair in pairs_iter]
-#            pairs_by_levels = get_pairs_by_levels(dim, pairs_iter_id)
-            
-            #quant_estimate.vine_structure = get_possible_structures(dim, pairs_by_levels)[1]
+            # Adapt the vine structure matrix
+            if adapt_vine_structure:
+                pairs_iter = selected_pairs + [(i, j)]
+                pairs_iter_id = [get_pair_id(dim, pair, with_plus=False) for pair in pairs_iter]
+                pairs_by_levels = get_pairs_by_levels(dim, pairs_iter_id)
+                quant_estimate.vine_structure = get_possible_structures(dim, pairs_by_levels)[1]
 
             # Lets get the results for this family structure
             results = quant_estimate.gridsearch_minimize(n_dep_param=n_dep_param,
@@ -113,22 +115,27 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, m
             
             cop_str = "_".join([str(l) for l in quant_estimate._family_list])
             filename = path_or_buf + cop_str + '.hdf'
+
             if iterative_save is not None:
-                results.to_hdf(filename, input_names, output_names, verbose=verbose)
-                
-            name = str(selected_pairs + [[i, j]])[1:-1]
-            all_results[name] = results
-            
-            # How much does it costs
-            cost += results.n_evals
+                results.to_hdf(filename, input_names, output_names, verbose=verbose, with_input_sample=keep_input_sample)
 
             if iterative_load is not None:
                 load_result = ListDependenceResult.from_hdf(filename, with_input_sample=keep_input_sample, q_func=q_func)
+                # TODO: create a function to check the configurations of two results
+                # TODO: is the testing necessary? If the saving worked, the loading should be ok.
                 np.testing.assert_equal(load_result.families, tmp_families, err_msg="Not good family")
                 np.testing.assert_equal(load_result.bounds_tau, tmp_bounds_tau, err_msg="Not good Bounds")
                 np.testing.assert_equal(load_result.vine_structure, quant_estimate.vine_structure, err_msg="Not good structure")
-                # TODO: Load existing params
-                pass
+
+                # Replace the actual results with the loaded results (this results + all the previous saved ones)
+                results = load_result
+
+            # Name if the result dictionary
+            result_name = str(selected_pairs + [(i, j)])[1:-1]
+            all_results[n_pairs][result_name] = results
+            
+            # How much does it costs
+            cost += results.n_evals
 
             # Save the minimum
             if not with_bootstrap:
@@ -151,7 +158,6 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, m
             for pair in sorted_quantities[-n_remove_pairs:]:
                 indices.remove(list(pair[0]))
 
-        
         selected_pair = sorted_quantities[0][0]
         # Selected pairs to add 
         for pair in sorted_quantities[:n_add_pairs]:
@@ -169,7 +175,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, m
         n_pairs += n_add_pairs
         if n_dep_param is not None:
             n_dep_param = n_dep_param_init*int(np.sqrt(n_pairs+1))
-            
+
     return all_results
 
 
