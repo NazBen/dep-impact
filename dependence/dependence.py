@@ -98,7 +98,7 @@ class ConservativeEstimate(object):
 
     def gridsearch_minimize(self, n_dep_param, n_input_sample, grid_type='lhs',
                             dep_measure='kendall-tau', q_func=np.var, 
-                            lhs_grid_criterion='centermaximin', keep_input_sample=True,
+                            lhs_grid_criterion='centermaximin', keep_input_samples=True,
                             use_grid=None, save_grid=None, grid_path='.',
                             random_state=None):
         """Quantile minimization through a grid in the dependence parameter
@@ -180,7 +180,7 @@ class ConservativeEstimate(object):
 
         # Evaluate the sample
         output_samples, input_samples = self.run_stochastic_models(
-                params, n_input_sample, return_input_sample=keep_input_sample)
+                params, n_input_sample, return_input_sample=keep_input_samples)
         
         return ListDependenceResult(margins=self.margins,
                                     families=self.families,

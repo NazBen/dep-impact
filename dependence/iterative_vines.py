@@ -6,11 +6,13 @@ import itertools
 from .dependence import ListDependenceResult
 
 GRIDS = ['lhs', 'rand', 'vertices']
+LIB_PARAMS = ['iterative_save', 'iterative_load', 'input_names', 
+              'output_names', 'keep_input_samples', 'load_input_samples']
 
-def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, max_n_pairs, grid_type='lhs', 
+
+def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_init=20, max_n_pairs=5, grid_type='lhs', 
                             q_func=np.var, n_add_pairs=1, n_remove_pairs=1, adapt_vine_structure=False,
-                            with_bootstrap=False, verbose=False, 
-                            keep_input_sample=True, **kwargs):
+                            with_bootstrap=False, verbose=False, **kwargs):
     """Use an iterative algorithm to obtain the worst case quantile and its dependence structure.
 
     Parameters
@@ -23,6 +25,8 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, m
     quant_estimate = copy.copy(estimate_object)
     corr_dim = quant_estimate.corr_dim_
     dim = quant_estimate.input_dim
+    
+    max_n_pairs = min(max_n_pairs, corr_dim)
     
     assert grid_type in GRIDS, "Unknow Grid type {0}".format(grid_type)
     assert 0 < max_n_pairs < corr_dim, "Maximum number of pairs must be positive"
@@ -48,6 +52,8 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, m
     # The pairs to do at each iterations
     indices = np.asarray(np.tril_indices(dim, k=-1)).T.tolist()
     
+    for lib_param in kwargs:
+        assert lib_param in LIB_PARAMS, "Unknow parameter %s" % (lib_param)
     iterative_save = None
     if 'iterative_save' in kwargs:
         iterative_save = kwargs['iterative_save']
@@ -73,13 +79,22 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, m
                 print("Directory %s does not exists" % (directory))
         else:
             raise TypeError("Wrong type for iterative_save")
+            
     input_names = []
     if 'input_names' in kwargs:
         input_names = kwargs['input_names']
-            
+
     output_names = []
     if 'output_names' in kwargs:
         output_names = kwargs['output_names']
+        
+    keep_input_samples = True
+    if 'keep_input_samples' in kwargs:
+        keep_input_samples = kwargs['keep_input_samples']
+        
+    load_input_samples = True
+    if 'load_input_samples' in kwargs:
+        load_input_samples = kwargs['load_input_samples']
 
     ## Algorithm Loop
     cost = 0
@@ -111,16 +126,16 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, m
                                                          n_input_sample=n_input_sample,
                                                          grid_type=grid_type,
                                                          q_func=q_func,
-                                                         keep_input_sample=keep_input_sample)
+                                                         keep_input_samples=keep_input_samples)
             
             cop_str = "_".join([str(l) for l in quant_estimate._family_list])
             filename = path_or_buf + cop_str + '.hdf'
 
             if iterative_save is not None:
-                results.to_hdf(filename, input_names, output_names, verbose=verbose, with_input_sample=keep_input_sample)
+                results.to_hdf(filename, input_names, output_names, verbose=verbose, with_input_sample=keep_input_samples)
 
             if iterative_load is not None:
-                load_result = ListDependenceResult.from_hdf(filename, with_input_sample=keep_input_sample, q_func=q_func)
+                load_result = ListDependenceResult.from_hdf(filename, with_input_sample=load_input_samples, q_func=q_func)
                 # TODO: create a function to check the configurations of two results
                 # TODO: is the testing necessary? If the saving worked, the loading should be ok.
                 np.testing.assert_equal(load_result.families, tmp_families, err_msg="Not good family")
@@ -149,6 +164,9 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, m
 
             if verbose:
                 print('Worst quantile of {0} at {1}'.format(selected_pairs + [(i, j)], min_quantity[i, j]))
+                if input_names:
+                    pair_names = [ "%s-%s" % (input_names[k1], input_names[k2]) for k1, k2 in selected_pairs + [(i, j)]]
+                    print("The variables  are: " + " ".join(pair_names))
         
         # Get the min from the iterations
         sorted_quantities = sorted(min_quantity.items(), key=lambda x: x[1])
@@ -168,9 +186,14 @@ def iterative_vine_minimize(estimate_object, n_input_sample, n_dep_param_init, m
             indices.remove(list(pair[0]))
             selected_pairs.append(pair[0])
             
-        if verbose:
-            print('p=%d, worst quantile at %.2f, cost = %d' % (n_pairs+1, min_quantity[selected_pair], cost))
-            print('Worst quantile of {0}'.format(selected_pair))
+        if True:
+            k1, k2 = selected_pair
+            tmp = 'Iteration {0}. Selected pair: {1}'.format(n_pairs+1, selected_pair)
+            if input_names:
+                tmp += " (" + "-".join(input_names[k] for k in selected_pair) + ")"
+            print(tmp)
+            print('Total number of evaluations = %d. Minimum quantity at %.2f.' % (cost, min_quantity[selected_pair]))
+            
 
         n_pairs += n_add_pairs
         if n_dep_param is not None:
