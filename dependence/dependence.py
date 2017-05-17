@@ -586,6 +586,7 @@ class ConservativeEstimate(object):
         check_matrix(matrix)
             
         # The lists only contains the fixed pairs informations
+        self._fixed_pairs = []
         self._fixed_pairs_ids = []
         self._fixed_params = matrix
         self._fixed_params_list = []
@@ -598,6 +599,7 @@ class ConservativeEstimate(object):
                         warnings.warn('The parameter of the pair %d-%d is set to 0. Check if this is correct.' % (i, j))
                     if not np.isnan(matrix[i, j]):
                         # The pair is fixed we add it in the list
+                        self._fixed_pairs.append([i, j])
                         self._fixed_pairs_ids.append(k)
                         self._fixed_params_list.append(matrix[i, j])
                         # And we remove it from the list of dependent pairs

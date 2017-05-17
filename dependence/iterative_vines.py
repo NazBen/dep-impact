@@ -52,6 +52,10 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     # The pairs to do at each iterations
     indices = np.asarray(np.tril_indices(dim, k=-1)).T.tolist()
     
+    # Remove fixed pairs
+    for pair in quant_estimate._fixed_pairs:
+        indices.remove(pair)
+    
     for lib_param in kwargs:
         assert lib_param in LIB_PARAMS, "Unknow parameter %s" % (lib_param)
     iterative_save = None
