@@ -191,7 +191,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
                 min_quantity[i, j] = results[results.bootstrap_samples.mean(axis=1).argmin()]
 
             if verbose:
-                print('Worst quantile of {0} at {1}'.format(selected_pairs + [(i, j)], min_quantity[i, j]))
+                print('n={0}. Worst quantile of {1} at {2}'.format(results.n_input_sample, selected_pairs + [(i, j)], min_quantity[i, j]))
                 if input_names:
                     pair_names = [ "%s-%s" % (input_names[k1], input_names[k2]) for k1, k2 in selected_pairs + [(i, j)]]
                     print("The variables are: " + " ".join(pair_names))
