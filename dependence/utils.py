@@ -9,7 +9,8 @@ from skopt.space import Space as sk_Space
 from sklearn.utils.fixes import sp_version
 
 OPERATORS = {">=": operator.ge,
-            ">": operator.gt}
+            ">": operator.gt,
+            "==": operator.eq}
 
 
 def get_grid_sample(dimensions, n_sample, grid_type):

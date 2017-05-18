@@ -144,6 +144,11 @@ class ConservativeEstimate(object):
         
         kendalls = None
         grid_filename = None
+        
+        if n_dep_param == None and grid_type == 'vertices':
+            use_grid = None
+            save_grid = None
+            
         # Load a grid
         if use_grid is None:
             if dep_measure == "copula-parameter":
@@ -402,16 +407,18 @@ class ConservativeEstimate(object):
         check_matrix(families) # Check the matrix
 
         self._families = families
+        
+        # The family list values. Event the independent ones
+        self._family_list = matrix_to_list(families, op_char='>=')
+        
+        # Dpendent pairs
         _, self._pair_ids, self._pairs = matrix_to_list(families, return_ids=True, 
-                                                 return_coord=True)
-
-        self._family_list = []
-        k = 0
-        for i in range(1, families.shape[0]):
-            for j in range(i):
-                if families[i, j] >= 0:
-                    self._family_list.append(families[i, j])
-                k += 1
+                                                 return_coord=True, op_char='>')
+                                                        
+        # Independent pairs
+        _, self._indep_pairs_ids, self._indep_pairs = matrix_to_list(
+                families,return_ids=True, return_coord=True, op_char='==')
+        
         self._n_pairs = len(self._pair_ids)
 
         # TODO: correct the dimension of copula_parameters. Make it the same size as the pairs.
@@ -939,6 +946,10 @@ class ListDependenceResult(list):
         output_names : list of strings, optional
             The name of the outputs.
         """
+        filename, extension = os.path.splitext(path_or_buf)
+        
+        assert extension in ['.hdf', '.hdf5'], "File extension should be hdf"
+        
         # List of input variable names
         if input_names:
             assert len(input_names) == self.input_dim, \
@@ -1036,7 +1047,6 @@ class ListDependenceResult(list):
                 print('File %s has different configurations' % (path_or_buf))
                 if verbose:
                     print(str(msg))
-                filename, extension = os.path.splitext(init_file_name)
                 path_or_buf = '%s_num_%d%s' % (filename, k, extension)
                 k += 1
 

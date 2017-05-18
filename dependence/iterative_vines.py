@@ -7,7 +7,8 @@ from .dependence import ListDependenceResult
 
 GRIDS = ['lhs', 'rand', 'vertices']
 LIB_PARAMS = ['iterative_save', 'iterative_load', 'input_names', 
-              'output_names', 'keep_input_samples', 'load_input_samples']
+              'output_names', 'keep_input_samples', 'load_input_samples',
+              'use_grid', 'save_grid', 'grid_path']
 
 
 def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_init=20, max_n_pairs=5, grid_type='lhs', 
@@ -55,6 +56,10 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     # Remove fixed pairs
     for pair in quant_estimate._fixed_pairs:
         indices.remove(pair)
+        
+    # Remove independent pairs
+    for pair in quant_estimate._indep_pairs:
+        indices.remove(pair)
     
     for lib_param in kwargs:
         assert lib_param in LIB_PARAMS, "Unknow parameter %s" % (lib_param)
@@ -65,7 +70,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
             path_or_buf = './iterative_result'
         elif isinstance(iterative_save, str):
             path_or_buf = iterative_save
-            directory = os.path.dirname(path_or_buf)
+            directory = os.path.abspath(path_or_buf)
             if not os.path.exists(directory):
                 os.makedirs(directory)
         else:
@@ -99,6 +104,18 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     load_input_samples = True
     if 'load_input_samples' in kwargs:
         load_input_samples = kwargs['load_input_samples']
+        
+    use_grid = None
+    if 'use_grid' in kwargs:
+        use_grid = kwargs['use_grid']
+        
+    save_grid = None
+    if 'save_grid' in kwargs:
+        save_grid = kwargs['save_grid']
+        
+    grid_path = '.'
+    if 'grid_path' in kwargs:
+        grid_path = kwargs['grid_path']
 
     ## Algorithm Loop
     cost = 0
@@ -130,10 +147,17 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
                                                          n_input_sample=n_input_sample,
                                                          grid_type=grid_type,
                                                          q_func=q_func,
-                                                         keep_input_samples=keep_input_samples)
+                                                         keep_input_samples=keep_input_samples,
+                                                         use_grid=use_grid,
+                                                         save_grid=save_grid,
+                                                         grid_path=grid_path)
             
             cop_str = "_".join([str(l) for l in quant_estimate._family_list])
-            filename = path_or_buf + cop_str + '.hdf'
+            filename = "%s/cop_%s_%s" % (path_or_buf, cop_str, grid_type)
+            if n_dep_param is None:
+                filename += "_K_None.hdf5"
+            else:
+                filename += "_K_%d.hdf5" % (n_dep_param)
 
             if iterative_save is not None:
                 results.to_hdf(filename, input_names, output_names, verbose=verbose, with_input_sample=keep_input_samples)
@@ -170,7 +194,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
                 print('Worst quantile of {0} at {1}'.format(selected_pairs + [(i, j)], min_quantity[i, j]))
                 if input_names:
                     pair_names = [ "%s-%s" % (input_names[k1], input_names[k2]) for k1, k2 in selected_pairs + [(i, j)]]
-                    print("The variables  are: " + " ".join(pair_names))
+                    print("The variables are: " + " ".join(pair_names))
         
         # Get the min from the iterations
         sorted_quantities = sorted(min_quantity.items(), key=lambda x: x[1])
