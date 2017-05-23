@@ -117,6 +117,8 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     if 'grid_path' in kwargs:
         grid_path = kwargs['grid_path']
 
+    if n_input_sample == 0:
+        iterative_save = None
     ## Algorithm Loop
     cost = 0
     n_pairs = 0
@@ -143,14 +145,15 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
                 quant_estimate.vine_structure = get_possible_structures(dim, pairs_by_levels)[1]
 
             # Lets get the results for this family structure
-            results = quant_estimate.gridsearch_minimize(n_dep_param=n_dep_param,
-                                                         n_input_sample=n_input_sample,
-                                                         grid_type=grid_type,
-                                                         q_func=q_func,
-                                                         keep_input_samples=keep_input_samples,
-                                                         use_grid=use_grid,
-                                                         save_grid=save_grid,
-                                                         grid_path=grid_path)
+            if n_input_sample > 0:
+                results = quant_estimate.gridsearch_minimize(n_dep_param=n_dep_param,
+                                                             n_input_sample=n_input_sample,
+                                                             grid_type=grid_type,
+                                                             q_func=q_func,
+                                                             keep_input_samples=keep_input_samples,
+                                                             use_grid=use_grid,
+                                                             save_grid=save_grid,
+                                                             grid_path=grid_path)
             
             cop_str = "_".join([str(l) for l in quant_estimate._family_list])
             filename = "%s/cop_%s_%s" % (path_or_buf, cop_str, grid_type)
