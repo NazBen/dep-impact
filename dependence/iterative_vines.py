@@ -145,7 +145,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
                 quant_estimate.vine_structure = get_possible_structures(dim, pairs_by_levels)[1]
 
             # Lets get the results for this family structure
-            if n_input_sample > 0:
+            if n_input_sample > 0 and n_pairs >= 3:
                 results = quant_estimate.gridsearch_minimize(n_dep_param=n_dep_param,
                                                              n_input_sample=n_input_sample,
                                                              grid_type=grid_type,
@@ -162,7 +162,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
             else:
                 filename += "_K_%d.hdf5" % (n_dep_param)
 
-            if iterative_save is not None:
+            if iterative_save is not None and n_pairs >= 3:
                 results.to_hdf(filename, input_names, output_names, verbose=verbose, with_input_sample=keep_input_samples)
 
             if iterative_load is not None:
