@@ -56,7 +56,6 @@ def get_n_pairs(all_results):
 def plot_iterative_results(all_results, indep_result=None, grid_result=None, q_func=None, figsize=(8, 4), quantity_name='Quantity', with_bootstrap=False):
     """
     """
-    delay = 0.02
     
     # Figure
     fig, ax = plt.subplots(figsize=figsize)
@@ -120,30 +119,30 @@ def plot_iterative_results(all_results, indep_result=None, grid_result=None, q_f
     
     for lvl in range(n_levels):
         # The quantities of this level
-        quant_lvl = np.asarray(quantities[lvl]) - delay
+        quant_lvl = np.asarray(quantities[lvl])
         # The number of results
         n_res = len(quant_lvl)
         ax.plot([n_pairs[lvl]]*n_res, quant_lvl, '.', color=colors[lvl+n_p])
         
     for lvl in range(n_levels):
         if n_pairs[lvl] == n_pairs[-1]:
-            ax.plot(n_pairs[lvl], min_quantities[lvl] - delay, 'o', color=colors[lvl+n_p])
+            ax.plot(n_pairs[lvl], min_quantities[lvl], 'o', color=colors[lvl+n_p])
             if with_bootstrap:
                 min_results_level[lvl].compute_bootstrap()
                 boot = min_results_level[lvl].bootstrap_sample
-                up = np.percentile(boot, 95) - delay
-                down = np.percentile(boot, 5) - delay
+                up = np.percentile(boot, 95)
+                down = np.percentile(boot, 5)
                 ax.plot(n_pairs[lvl], up, '.',
                     color=colors[lvl+n_p], linewidth=0.8)
                 ax.plot(n_pairs[lvl], down, '.',
                     color=colors[lvl+n_p], linewidth=0.8)
         else:
-            ax.plot([n_pairs[lvl], n_pairs[lvl+1]], [min_quantities[lvl] - delay]*2, 'o-', color=colors[lvl+n_p])
+            ax.plot([n_pairs[lvl], n_pairs[lvl+1]], [min_quantities[lvl]]*2, 'o-', color=colors[lvl+n_p])
             if with_bootstrap:
                 min_results_level[lvl].compute_bootstrap()
                 boot = min_results_level[lvl].bootstrap_sample
-                up = np.percentile(boot, 95) - delay
-                down = np.percentile(boot, 5) - delay
+                up = np.percentile(boot, 95)
+                down = np.percentile(boot, 5)
                 ax.plot([n_pairs[lvl], n_pairs[lvl+1]], [up]*2, '--', 
                     color=colors[lvl+n_p], linewidth=0.8)
                 ax.plot([n_pairs[lvl], n_pairs[lvl+1]], [down]*2, '--', 

@@ -38,6 +38,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     # Initial configurations
     init_family = quant_estimate.families
     init_bounds_tau = quant_estimate.bounds_tau
+    fixed_params = quant_estimate.fixed_params.copy()
     
     # New empty configurations
     families = np.zeros((dim, dim))
@@ -53,9 +54,10 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     # The pairs to do at each iterations
     indices = np.asarray(np.tril_indices(dim, k=-1)).T.tolist()
     
-    # Remove fixed pairs
+    # Remove fixed pairs from the list and add in the family matrix
     for pair in quant_estimate._fixed_pairs:
         indices.remove(pair)
+        families[pair[0], pair[1]] = init_family[pair[0], pair[1]]
         
     # Remove independent pairs
     for pair in quant_estimate._indep_pairs:
@@ -116,6 +118,10 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     grid_path = '.'
     if 'grid_path' in kwargs:
         grid_path = kwargs['grid_path']
+        
+    n_pairs_start = 0
+    if 'n_pairs_start' in kwargs:
+        n_pairs_start = kwargs['n_pairs_start']
 
     if n_input_sample == 0:
         iterative_save = None
@@ -135,6 +141,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
             
             # Family matrix is changed
             quant_estimate.families = tmp_families
+            quant_estimate.fixed_params = fixed_params
             quant_estimate.bounds_tau = tmp_bounds_tau
             
             # Adapt the vine structure matrix
@@ -145,7 +152,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
                 quant_estimate.vine_structure = get_possible_structures(dim, pairs_by_levels)[1]
 
             # Lets get the results for this family structure
-            if n_input_sample > 0 and n_pairs >= 3:
+            if n_input_sample > 0 and n_pairs >= n_pairs_start:
                 results = quant_estimate.gridsearch_minimize(n_dep_param=n_dep_param,
                                                              n_input_sample=n_input_sample,
                                                              grid_type=grid_type,
@@ -162,7 +169,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
             else:
                 filename += "_K_%d.hdf5" % (n_dep_param)
 
-            if iterative_save is not None and n_pairs >= 3:
+            if iterative_save is not None and n_pairs >= n_pairs_start:
                 results.to_hdf(filename, input_names, output_names, verbose=verbose, with_input_sample=keep_input_samples)
 
             if iterative_load is not None:
