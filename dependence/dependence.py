@@ -18,6 +18,7 @@ import pandas as pd
 import openturns as ot
 import h5py
 from sklearn.utils import check_random_state
+from scipy.stats import gaussian_kde, norm
 
 from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
@@ -1242,6 +1243,8 @@ class DependenceResult(object):
             self.output_dim = output_sample.shape[1]
         self.corr_dim = self.input_dim * (self.input_dim - 1) / 2
         self._bootstrap_sample = None
+        self._n_bootstrap_sample = None
+        self._gaussian_kde = None
 
     def compute_bootstrap(self, n_bootstrap=1000, inplace=True):
         """Bootstrap of the output quantity of interest.
@@ -1258,10 +1261,45 @@ class DependenceResult(object):
             The bootstrap sample if inplace is true.
         """
         self._bootstrap_sample = bootstrap(self.output_sample_id, n_bootstrap, self.q_func)
-        
+        self._n_bootstrap_sample = self._bootstrap_sample.shape[0]
         if not inplace:
             return self._bootstrap_sample
 
+    def compute_quantity_bootstrap_ci(self, alphas=[0.05, 0.95], n_bootstrap=1000):
+        """Boostrap confidence interval.
+        """
+        if (self._bootstrap_sample is None) or (self._n_bootstrap_sample != n_bootstrap):
+            self.compute_bootstrap(n_bootstrap)
+
+        return np.percentile(self._bootstrap_sample, [a*100. for a in alphas]).tolist()
+
+    def compute_quantity_asymptotic_ci(self, quantity_name, quantity_param, ci=0.95):
+        """Asymptotic confidence interval.
+        """
+        from dependence.utils import asymptotic_error_quantile
+        quantity = self.quantity
+
+        if quantity_name == 'quantile':
+            density = self.kde_estimate(self.quantity)[0]
+            error = asymptotic_error_quantile(self.n_sample, density, quantity_param)
+        elif quantity_name == 'probability':            
+            error = asymptotic_error_quantile(self.n_sample, quantity)
+        else:
+            raise 'Unknow quantity_name: {0}'.format(quantity_name)
+        gaussian_quantile = norm.ppf(1. - (1. - ci)/2.)
+        deviation = gaussian_quantile*error
+        return [quantity - deviation, quantity + deviation]
+
+    @property
+    def kde_estimate(self):
+        """
+        """
+        if self._gaussian_kde is not None:
+            return self._gaussian_kde
+        else:
+            self._gaussian_kde = gaussian_kde(self.output_sample_id)
+            return self._gaussian_kde
+        
     @property
     def bootstrap_sample(self):
         """The computed bootstrap sample.
@@ -1275,6 +1313,7 @@ class DependenceResult(object):
     def quantity(self):
         """The computed output quantity.
         """
+        # TODO: don't compute it everytime...
         quantity = self.q_func(self.output_sample_id, axis=0)
         return quantity.item() if quantity.size == 1 else quantity
 

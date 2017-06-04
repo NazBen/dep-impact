@@ -468,3 +468,18 @@ def proba_func(threshold):
     def p_func(x, axis=1):
         return (x >= threshold).mean(axis=axis)
     return p_func
+
+
+def asymptotic_error_quantile(n, q_density, q_alpha):
+    """
+    """
+
+    return np.sqrt(q_alpha * (1. - q_alpha) / (n * q_density**2))
+
+
+
+def asymptotic_error_proba(n, proba):
+    """
+    """
+    
+    return np.sqrt(proba * (1. - proba) / n)
