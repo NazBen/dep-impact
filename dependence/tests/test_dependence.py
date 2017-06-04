@@ -17,13 +17,16 @@ import openturns as ot
 from scipy.special import erf, erfinv
 from numpy.testing import assert_allclose
 from itertools import combinations
-from test_dependence import func_sum
+
+from .test_functions import func_sum
 
 from dependence import ConservativeEstimate
+from dependence.utils import quantile_func, proba_func
 
 QUANTILES_PROB = [0.05, 0.01]
 PROB_THRESHOLDS = [1., 2.]
 DIMENSIONS = range(2, 4)
+GRIDS = ['lhs', 'rand']
 COPULA = ["NormalCopula", "ClaytonCopula"]
 MEASURES = ["dependence-parameter", "kendall-tau"]
 
@@ -78,11 +81,13 @@ def true_additive_gaussian_quantile(alpha, dim, sigma, nu=None, const=None):
         nu = np.zeros((dim, 1))
     if const == None:
         const = np.ones((1, dim))
-    tmp = np.hstack(sigma[i][:i] for i in xrange(sigma.shape[0]))
+
+    tmp = np.hstack(sigma[i][:i] for i in range(sigma.shape[0]))
     var_y = (const**2 * sigma.diagonal()).sum() + (2*tmp).sum()
     sigma_y = np.sqrt(var_y)
     quantile = sigma_y * np.sqrt(2.) * erfinv(2 * alpha - 1.)
     return quantile
+
 
 def true_additive_gaussian_probability(x, dim, sigma, nu=None, const=None):
     """
@@ -91,39 +96,67 @@ def true_additive_gaussian_probability(x, dim, sigma, nu=None, const=None):
         nu = np.zeros((dim, 1))
     if const == None:
         const = np.ones((1, dim))
-    tmp = np.hstack(sigma[i][:i] for i in xrange(sigma.shape[0]))
+
+    tmp = np.hstack(sigma[i][:i] for i in range(sigma.shape[0]))
     var_y = (const**2 * sigma.diagonal()).sum() + (2*tmp).sum()
     sigma_y = np.sqrt(var_y)
     return 0.5 * (1. + erf(x / (sigma_y * np.sqrt(2.))))
 
 
+def test_independence():
+    """Test independence function
+    """
+    pass
+
+
 def test_additive_gaussian_gridsearch():
     """Compare
     """
-    for alpha, threshold in zip(ALPHAS, THRESHOLDS):
+    n_params = 5
+    n_input_sample = 10000
+
+    for alpha, threshold in zip(QUANTILES_PROB, PROB_THRESHOLDS):
         for dim in DIMENSIONS:
-            # Only Gaussian families
-            families = np.tril(np.ones((dim, dim)), k=1)
-            impact = ConservativeEstimate(model_func=func_sum,
-                                          margins=[ot.Normal()]*dim,
-                                          familie=np.ones((dim, dim)))
-            impact.run(n_dep_param=50, n_input_sample=10000, grid='rand', seed=0)
+            for grid in GRIDS:
+                # Only Gaussian families
+                families = np.tril(np.ones((dim, dim)), k=1)
 
-            empirical_quantiles = impact.compute_quantiles(alpha).quantity.ravel()
-            empirical_probabilities = impact.compute_probability(threshold, operator='<').quantity.ravel()
-            true_quantile = np.zeros((impact.n_dep_params_, ))
-            true_probability = np.zeros((impact.n_dep_params_, ))
-            for k in range(impact.n_dep_params_):
-                sigma = dep_params_list_to_matrix(impact.params_[k, :], dim)
-                true_quantile[k] = true_additive_gaussian_quantile(alpha, dim, sigma)
-                true_probability[k] = true_additive_gaussian_probability(threshold, dim, sigma)
+                impact = ConservativeEstimate(model_func=func_sum,
+                                              margins=[ot.Normal()]*dim,
+                                              families=np.ones((dim, dim)))
 
-            assert_allclose(empirical_quantiles, true_quantile, rtol=1e-01,
-                            err_msg="Failed with alpha = {0}, dim = {1}"\
-                            .format(alpha, dim))
-            assert_allclose(empirical_probabilities, true_probability, rtol=1e-01,
-                            err_msg="Failed with threshold = {0}, dim = {1}"\
-                            .format(threshold, dim))
+                # Grid results
+                grid_results = impact.gridsearch_minimize(
+                    n_dep_param=n_params, 
+                    n_input_sample=n_input_sample, 
+                    grid_type=grid, 
+                    random_state=0)
+
+                # Theorical results
+                true_quantile = np.zeros((n_params, ))
+                true_probability = np.zeros((n_params, ))
+                for k in range(n_params):
+                    sigma = dep_params_list_to_matrix(grid_results.dep_params[k, :], dim)
+                    true_quantile[k] = true_additive_gaussian_quantile(alpha, dim, sigma)
+                    true_probability[k] = true_additive_gaussian_probability(threshold, dim, sigma)
+
+                # Quantile results
+                grid_results.q_func = quantile_func(alpha)
+                empirical_quantiles = grid_results.quantities
+
+                assert_allclose(empirical_quantiles, true_quantile, rtol=1e-01,
+                                err_msg="Failed with alpha = {0}, dim = {1}"\
+                                .format(alpha, dim))
+
+                # Probability results
+                grid_results.q_func = proba_func(threshold)
+                empirical_probabilities = 1. - grid_results.quantities
+
+                assert_allclose(empirical_probabilities, true_probability, rtol=1e-01,
+                                err_msg="Failed with threshold = {0}, dim = {1}"\
+                                .format(threshold, dim))
+
+                print('oui')
 
 
 def test_fixed_grid():
@@ -323,8 +356,8 @@ def test_constraints():
     quantile = impact.compute_quantiles(alpha)
 
     impact.draw_matrix_plot()
-    print quantile.cond_params
-    print quantile.quantity
+    print(quantile.cond_params)
+    print(quantile.quantity)
 
 if __name__ == '__main__':
     test_additive_gaussian_emprical_estimation()

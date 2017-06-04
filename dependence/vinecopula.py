@@ -19,7 +19,7 @@ def check_family(matrix):
         for j in range(i):
             if isinstance(matrix[i, j], str):
                 matrix[i, j] = int(VINECOPULA.BiCopName(matrix[i, j], False)[0])
-            elif isinstance(matrix[i, j], int):
+            elif isinstance(matrix[i, j], np.integer):
                 pass
             else:
                 raise ValueError("Uncorrect Family matrix")

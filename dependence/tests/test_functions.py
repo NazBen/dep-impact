@@ -77,6 +77,8 @@ def func_sum(x, a=None):
     -------
         y : a.x^t
     """
+    if isinstance(x, list):
+        x = np.asarray(x)
     n, dim = x.shape
     if a is None:
         a = np.ones((dim, 1))
@@ -88,7 +90,12 @@ def func_sum(x, a=None):
         
     y = np.dot(x, a)
         
-    return y
+    if y.size == 1:
+        return y.item()
+    elif y.size == y.shape[0]:
+        return y.ravel()
+    else:
+        return y
 
 
 def multi_output_func_sum(x, output_dim=2):

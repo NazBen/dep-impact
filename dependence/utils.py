@@ -466,5 +466,5 @@ def proba_func(threshold):
             
     """
     def p_func(x, axis=1):
-        return (x >= threshold).sum(axis=axis)
+        return (x >= threshold).mean(axis=axis)
     return p_func

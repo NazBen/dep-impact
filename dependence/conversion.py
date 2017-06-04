@@ -34,7 +34,7 @@ def get_param1_interval(copula):
 def get_param2_interval(copula):
     """
     """
-    assert isinstance(copula, (int, str)), \
+    assert isinstance(copula, (np.integer, str)), \
         TypeError("Input must be int or str")
 
     if copula in [2, 't']:
@@ -43,7 +43,7 @@ def get_param2_interval(copula):
         raise NotImplementedError("Not implemented yet.")
 
 def get_tau_interval(copula):
-    assert isinstance(copula, (int, str)), \
+    assert isinstance(copula, (np.integer, str)), \
         TypeError("Input must be int or str. Not: ", type(copula))
     if isinstance(copula, str):
         copula = int(VINECOPULA.BiCopName(copula, False)[0])
@@ -118,10 +118,10 @@ class Conversion(object):
     def family(self, value):
         """
         """
-        if isinstance(value, (int, float)):
+        if isinstance(value, (int, float, np.integer)):
             np.testing.assert_equal(value, int(value))
-            self._family = value
-            self._family_name = VINECOPULA.BiCopName(value, False)[0]            
+            self._family = int(value)
+            self._family_name = VINECOPULA.BiCopName(int(value), False)[0]            
         elif isinstance(value, str):
             self._family = int(VINECOPULA.BiCopName(value, False)[0])
             self._family_name = value

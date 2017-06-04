@@ -230,9 +230,10 @@ class ConservativeEstimate(object):
             vars = None
         else:
             vars = range(outputs.shape[1])
-        n = n_input_sample
-        output_samples = [outputs[i*n:(i+1)*n, vars] for i in range(n_params)]
-        
+
+        # List of output samples for each param
+        output_samples = np.split(outputs, n_params)
+
         if not return_input_sample:
             input_samples = None
         return output_samples, input_samples
@@ -374,7 +375,7 @@ class ConservativeEstimate(object):
 
         self._margins = margins
         self._input_dim = len(margins)
-        self._corr_dim = self._input_dim * (self._input_dim - 1) / 2
+        self._corr_dim = int(self._input_dim * (self._input_dim - 1) / 2)
 
         if hasattr(self, '_families'):
             if self._families.shape[0] != self._input_dim:
@@ -707,7 +708,10 @@ class ListDependenceResult(list):
                                           output_id=self.output_id)
                 self.append(result)
 
-            self.output_dim = output_sample.shape[1]
+            if output_sample.shape[0] == output_sample.size:
+                self.output_dim = 1
+            else:
+                self.output_dim = output_sample.shape[1]
         elif output_samples is not None:
             # There is data and we suppose it's at independence or a fixed params
             result = DependenceResult(margins=margins,
@@ -802,6 +806,11 @@ class ListDependenceResult(list):
     @q_func.setter
     def q_func(self, q_func):
         assert callable(q_func), "Function must be callable"
+        if self.n_params == 0:
+            print("There is no data...")
+        else:
+            for result in self:
+                result.q_func = q_func
         self._q_func = q_func
 
     @property
@@ -1043,7 +1052,7 @@ class ListDependenceResult(list):
                         if with_input_sample:
                             grp_i.create_dataset('input_sample', data=self[i].input_sample)
                     filename_exists = False
-            except AssertionError, msg:
+            except (AssertionError, msg):
                 print('File %s has different configurations' % (path_or_buf))
                 if verbose:
                     print(str(msg))
