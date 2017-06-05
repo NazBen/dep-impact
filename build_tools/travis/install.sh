@@ -34,6 +34,9 @@ source activate testenv
 conda install --yes -c conda-forge openturns
 conda install --yes -c R R r-copula
 
+wget -q https://cran.r-project.org/src/contrib/VineCopula_2.1.2.tar.gz
+R CMD install VineCopula_2.1.2.tar.gz
+
 pip install pyDOE scikit-optimize rpy2 nose-timer
 
 python --version

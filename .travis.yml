@@ -1,5 +1,8 @@
 language: python
 
+notifications:
+  email: false
+  
 cache:
   directories:
    - $HOME/.cache/pip
@@ -11,7 +14,8 @@ env:
 install: source build_tools/travis/install.sh
 
 # Run test
-script:
+script: 
+  - pytest
   - if [ ${COVERAGE} == "true" ];
       then nosetests --with-coverage --with-timer --timer-top-n 10; else
       nosetests --with-timer --timer-top-n 10;
