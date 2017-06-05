@@ -25,8 +25,7 @@ conda update --yes conda
 conda info -a
 popd
 
-
-# Create env and install packages
+# Create a conda env and install packages
 conda create -n testenv --yes python=$TRAVIS_PYTHON_VERSION pip nose numpy \
 	scipy scikit-learn matplotlib pandas h5py scikit-learn
 source activate testenv
@@ -34,8 +33,8 @@ source activate testenv
 conda install --yes -c conda-forge openturns
 conda install --yes -c R R r-copula
 
-wget -q https://cran.r-project.org/src/contrib/VineCopula_2.1.2.tar.gz
-R CMD INSTALL VineCopula_2.1.2.tar.gz
+echo "Installing R package(s): $@"
+R -e 'install.packages("VineCopula", repos="https://cloud.r-project.org")'
 
 pip install pyDOE scikit-optimize rpy2 nose-timer
 
