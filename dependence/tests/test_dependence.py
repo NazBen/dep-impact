@@ -25,8 +25,8 @@ from dependence.utils import quantile_func, proba_func
 
 QUANTILES_PROB = [0.05, 0.01]
 PROB_THRESHOLDS = [1., 2.]
-DIMENSIONS = range(2, 4)
-GRIDS = ['lhs', 'rand']
+DIMENSIONS = range(2, 5)
+GRIDS = ['lhs', 'rand', 'vertices']
 COPULA = ["NormalCopula", "ClaytonCopula"]
 MEASURES = ["dependence-parameter", "kendall-tau"]
 
@@ -110,7 +110,7 @@ def test_independence():
 
 
 def test_additive_gaussian_gridsearch():
-    """Compare
+    """
     """
     n_params = 5
     n_input_sample = 10000
@@ -123,7 +123,7 @@ def test_additive_gaussian_gridsearch():
 
                 impact = ConservativeEstimate(model_func=func_sum,
                                               margins=[ot.Normal()]*dim,
-                                              families=np.ones((dim, dim)))
+                                              families=families)
 
                 # Grid results
                 grid_results = impact.gridsearch_minimize(
@@ -133,232 +133,25 @@ def test_additive_gaussian_gridsearch():
                     random_state=0)
 
                 # Theorical results
-                true_quantile = np.zeros((n_params, ))
-                true_probability = np.zeros((n_params, ))
+                true_quantiles = np.zeros((n_params, ))
+                true_probabilities = np.zeros((n_params, ))
                 for k in range(n_params):
                     sigma = dep_params_list_to_matrix(grid_results.dep_params[k, :], dim)
-                    true_quantile[k] = true_additive_gaussian_quantile(alpha, dim, sigma)
-                    true_probability[k] = true_additive_gaussian_probability(threshold, dim, sigma)
+                    true_quantiles[k] = true_additive_gaussian_quantile(alpha, dim, sigma)
+                    true_probabilities[k] = true_additive_gaussian_probability(threshold, dim, sigma)
 
                 # Quantile results
                 grid_results.q_func = quantile_func(alpha)
                 empirical_quantiles = grid_results.quantities
-
-                assert_allclose(empirical_quantiles, true_quantile, rtol=1e-01,
-                                err_msg="Failed with alpha = {0}, dim = {1}"\
+                
+                assert_allclose(empirical_quantiles, true_quantiles, rtol=1e-01,
+                                err_msg="Quantile estimation failed for alpha = {0}, dim = {1}"\
                                 .format(alpha, dim))
 
                 # Probability results
                 grid_results.q_func = proba_func(threshold)
                 empirical_probabilities = 1. - grid_results.quantities
 
-                assert_allclose(empirical_probabilities, true_probability, rtol=1e-01,
-                                err_msg="Failed with threshold = {0}, dim = {1}"\
+                assert_allclose(empirical_probabilities, true_probabilities, rtol=1e-01,
+                                err_msg="Probability estimation failed for threshold = {0}, dim = {1}"\
                                 .format(threshold, dim))
-
-                print('oui')
-
-
-def test_fixed_grid():
-    dim = 2
-    alpha = 0.05
-    threshold = 2.
-    for copula_name in LIST_COPULA:
-        for measure in LIST_MEASURES:
-            if copula_name == "ClaytonCopula" and measure == "PearsonRho":
-                pass
-            else:
-                impact = ImpactOfDependence(add_function, [ot.Normal()] * dim, 
-                                            copula_name=copula_name)
-                impact.run(n_dep_param=100, n_input_sample=10000, fixed_grid=True, 
-                           dep_measure=measure, seed=0)
-
-                quant_result = impact.compute_quantiles(alpha)
-                quant_result.draw(measure)
-                proba_result = impact.compute_probability(threshold)
-                proba_result.draw(measure)
-
-def test_dim_measure():
-    alpha = 0.05
-    threshold = 2.
-    copula_name = "NormalCopula"
-    for dim in DIMENSIONS:
-        for measure in LIST_MEASURES:
-            impact = ImpactOfDependence(add_function, [ot.Normal()] * dim, 
-                                        copula_name=copula_name)
-            impact.run(n_dep_param=100, n_input_sample=10000, fixed_grid=False, 
-                       dep_measure=measure, seed=0)
-
-            true_quant = true_quantile(alpha, dim, impact._params)
-            quant_res = impact.compute_quantiles(alpha)
-            assert_allclose(quant_res.quantity, true_quant, rtol=1e-01,
-                            err_msg="Failed with alpha = {0}, dim = {1}"\
-                            .format(alpha, dim))
-
-            true_proba = true_probability(threshold, dim, impact._params)
-            proba_res = impact.compute_probability(threshold, operator='lower')
-            assert_allclose(proba_res.quantity, true_proba, rtol=1e-01,
-                            err_msg="Failed with threshold = {0}, dim = {1}"\
-                            .format(threshold, dim))
-
-def test_custom_corr_vars():
-    dim = 4
-    alpha = 0.05
-    threshold = 2.
-    copula_name = "NormalCopula"
-
-    # We increases the number of correlated variables
-    all_corr_vars = []
-    for i, corr in enumerate(list(combinations(range(dim), 2))):
-        if i > 0:
-            tmp = all_corr_vars[i - 1] + [corr]
-            all_corr_vars.append(tmp)
-        else:
-            all_corr_vars.append([corr])
-
-    for corr_vars in all_corr_vars:
-        for measure in LIST_MEASURES:
-            impact = ImpactOfDependence(add_function, [ot.Normal()] * dim,
-                                        copula_name=copula_name)
-            impact.set_correlated_variables(corr_vars)
-            assert impact._n_corr_vars == len(corr_vars), "Not good"
-            
-            impact.run(n_dep_param=100, n_input_sample=10000, fixed_grid=False, 
-                       dep_measure=measure, seed=0)
-            
-            true_quant = true_quantile(alpha, dim, impact._params)
-            quant_res = impact.compute_quantiles(alpha)
-            
-            assert_allclose(quant_res.quantity, true_quant, rtol=1e-01,
-                            err_msg="Failed with alpha = {0}, dim = {1}"\
-                            .format(alpha, dim))
-
-            true_proba = true_probability(threshold, dim, impact._params)
-            proba_res = impact.compute_probability(threshold, operator='lower')
-            assert_allclose(proba_res.quantity, true_proba, rtol=1e-01,
-                            err_msg="Failed with threshold = {0}, dim = {1}"\
-                            .format(threshold, dim))
-
-def test_saving_loading():
-    dim = 3
-    alpha = 0.05
-    threshold = 2.
-    measure = "KendallTau"
-    margins = [ot.Weibull(), ot.Normal(), ot.Normal()]
-
-    families = np.zeros((dim, dim), dtype=int)
-    families[1, 0] = 1
-    families[2, 0] = 0
-    families[2, 1] = 1
-
-    impact = ImpactOfDependence(model_func=add_function, margins=margins, families=families)
-    impact.run(n_dep_param=10, n_input_sample=500, fixed_grid=True, 
-               dep_measure=measure, seed=0)
-    impact.save_data()
-    impact2 = ImpactOfDependence.from_structured_data()
-
-    np.testing.assert_allclose(impact2._output_sample, impact._output_sample)
-
-
-def test_last():
-    dim = 3
-    alpha = 0.05
-    threshold = 2.
-    measure = "KendallTau"
-    margins = [ot.Weibull(), ot.Normal(), ot.Normal()]
-
-    families = np.zeros((dim, dim), dtype=int)
-    families[1, 0] = 0
-    families[2, 0] = 0
-    families[2, 1] = 26
-
-    impact = ImpactOfDependence(model_func=add_function, margins=margins, families=families)
-
-    impact.run(n_dep_param=10, n_input_sample=10000, fixed_grid=True, 
-                dep_measure=measure, seed=0)
-
-    quant_res = impact.compute_quantiles(alpha)
-    id_min = quant_res.quantity.argmax()
-    impact.draw_matrix_plot(id_min, copula_space=True)
-
-    
-def test_bounds():
-    dim = 4
-    alpha = 0.05
-    threshold = 2.
-    measure = "KendallTau"
-    margins = [ot.Normal()]*dim
-    families = np.zeros((dim, dim), dtype=int)
-    for i in range(dim):
-        for j in range(i):
-            families[i, j] = 1
-    impact = ImpactOfDependence(model_func=add_function, margins=margins, families=families)
-
-    impact.minmax_run(10000, eps=1.E-4)
-    quant_res = impact.compute_quantiles(alpha)
-
-    id_min = quant_res.quantity.argmin()
-    
-    
-def test_hdf():
-    dim = 3
-    alpha = 0.05
-    threshold = 2.
-    measure = "KendallTau"
-    margins = [ot.Weibull(), ot.Normal(), ot.Normal()]
-
-    families = np.zeros((dim, dim), dtype=int)
-    families[1, 0] = 1
-    families[2, 0] = 0
-    families[2, 1] = 0
-  
-    impact = ImpactOfDependence(model_func=add_function, margins=margins, families=families)
-
-    impact.run(n_dep_param=20, n_input_sample=100, grid='fixed')
-
-    filename = impact.save_data_hdf()
-    impact_load = ImpactOfDependence.from_hdf(filename)
-    impact.compute_quantiles(alpha).draw()
-    impact_load.compute_quantiles(alpha).draw()
-
-# TODO: add a test for the saving and loading of a DOE sample
-
-def test_constraints():
-    dim = 4
-    n = 100
-    K = 10
-    margins = [ot.Normal()]*dim
-    families = np.zeros((dim, dim), dtype=int)
-    families[1, 0] = 1
-    families[2, 0] = 4
-    families[2, 1] = 1
-
-    fixed_params = np.zeros((dim, dim), dtype=float)
-    fixed_params[1, 0] = None
-    fixed_params[2, 0] = 2.27
-    fixed_params[2, 1] = None
-
-    bounds_tau = np.zeros((dim, dim), dtype=float)
-    bounds_tau[:] = None
-    bounds_tau[1, 0] = 0.
-    bounds_tau[0, 1] = None
-    bounds_tau[2, 1] = None
-    bounds_tau[1, 2] = 0.
-    alpha = 0.1
-  
-    impact = ImpactOfDependence(model_func=add_function, 
-                                margins=margins, 
-                                families=families,
-                                fixed_params=fixed_params,
-                                bounds_tau=bounds_tau)
-    
-    impact.run(n_dep_param=K, n_input_sample=n, grid='fixed', seed=0)
-    quantile = impact.compute_quantiles(alpha)
-
-    impact.draw_matrix_plot()
-    print(quantile.cond_params)
-    print(quantile.quantity)
-
-if __name__ == '__main__':
-    test_additive_gaussian_emprical_estimation()
-

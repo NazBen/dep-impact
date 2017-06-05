@@ -227,11 +227,6 @@ class ConservativeEstimate(object):
         
         outputs = self.model_func(np.concatenate(input_samples))
         
-        if outputs.shape[0] == outputs.size:
-            vars = None
-        else:
-            vars = range(outputs.shape[1])
-
         # List of output samples for each param
         output_samples = np.split(outputs, n_params)
 
