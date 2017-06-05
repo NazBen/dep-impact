@@ -1,4 +1,6 @@
 # Impact of Dependencies
+[![Build Status](https://travis-ci.org/NazBen/impact-of-dependence.svg?branch=master)](https://travis-ci.org/NazBen/impact-of-dependence)
+[![CircleCI](https://circleci.com/gh/NazBen/impact-of-dependence.svg?style=svg)](https://circleci.com/gh/NazBen/impact-of-dependence)
 
 A python package to study the impact of correlations in a probabilistic studies.
 
