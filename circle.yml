@@ -1,0 +1,4 @@
+dependencies:
+  override:
+    - bash ./build_tools/circle/install.sh:
+        timeout: 1024
