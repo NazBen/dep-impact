@@ -1,0 +1,18 @@
+language: python
+
+cache:
+  directories:
+   - $HOME/.cache/pip
+   
+env:
+  matrix:
+    - DISTRIB="conda" PYTHON_VERSION="2.7" COVERAGE="true"
+ 
+install: source build_tools/travis/install.sh
+
+# Run test
+script:
+  - if [ ${COVERAGE} == "true" ];
+      then nosetests --with-coverage --with-timer --timer-top-n 10; else
+      nosetests --with-timer --timer-top-n 10;
+    fi
