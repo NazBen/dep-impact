@@ -27,7 +27,7 @@ popd
 
 # Create a conda env and install packages
 conda create -n testenv --yes python=$TRAVIS_PYTHON_VERSION pip nose numpy \
-	scipy scikit-learn matplotlib pandas h5py scikit-learn
+	scipy scikit-learn matplotlib pandas h5py scikit-learn gcc
 source activate testenv
 
 conda install --yes -c conda-forge openturns
