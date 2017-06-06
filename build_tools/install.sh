@@ -34,8 +34,8 @@ conda info -a
 popd
 
 # Create a conda env and install packages
-echo python=$TRAVIS_PYTHON_VERSION
-conda create -n testenv --yes python=$TRAVIS_PYTHON_VERSION R nose numpy \
+echo python=$PYTHON_VERSION
+conda create -n testenv --yes python=$PYTHON_VERSION R nose numpy \
 	scipy scikit-learn matplotlib pandas h5py scikit-learn rpy2
 
 source activate testenv
