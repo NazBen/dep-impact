@@ -27,18 +27,17 @@ if [[ ! -f miniconda.sh ]]; then
 fi
 bash miniconda.sh -b -p $HOME/miniconda
 export PATH="$HOME/miniconda/bin:$PATH"
-conda update --yes conda
-conda info -a
+conda update --quiet --yes conda
 popd
 
 # Create a conda env and install packages
-conda create -n testenv --yes python=$PYTHON_VERSION nose pip \
+conda create -n testenv --quiet --yes python=$PYTHON_VERSION nose pip \
 	matplotlib pandas h5py scikit-learn R R-copula rpy2
 
 source activate testenv
 
 pip install pyDOE scikit-optimize
-conda install --yes -c conda-forge openturns
+conda install --quiet --yes -c conda-forge openturns
 
 R -e 'install.packages("VineCopula", repos="https://cloud.r-project.org")'
 
