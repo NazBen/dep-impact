@@ -20,6 +20,6 @@ addons:
 notifications:
   email: false
    
-install: source build_tools/travis/install.sh
+install: source build_tools/install.sh
 
 script: nosetests -v

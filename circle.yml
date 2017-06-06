@@ -1,4 +1,16 @@
+machine:
+  environment:
+    PATH: /home/ubuntu/miniconda/bin:$PATH
+
 dependencies:
+  #XXX: use the cache better
+  cache_directories:
+    - "/tmp"
+  pre:
+    - sudo apt-get update
+    - sudo apt-get install gcc gfortran libgsl0-dev
   override:
-    - bash ./build_tools/circle/install.sh:
-        timeout: 1024
+    - source ./build_tools/circle/install.sh
+
+test:
+  override: nosetests

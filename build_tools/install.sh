@@ -1,6 +1,11 @@
 #/usr/bin/env sh
 # Inspired from https://github.com/NazBen/scikit-optimize/blob/master/build_tools/travis/install.sh
-deactivate
+# Skip Travis related code on circle ci.
+if [ -z $CIRCLECI ]; then
+    # Deactivate the travis-provided virtual environment and setup a
+    # conda-based environment instead
+    deactivate
+fi
 
 # Install conda using miniconda
 pushd .
@@ -35,3 +40,5 @@ conda install --yes -c conda-forge openturns
 R -e 'install.packages("VineCopula", repos="https://cloud.r-project.org")'
 
 python setup.py install
+
+python -c "import matplotlib.pyplot as plt"
