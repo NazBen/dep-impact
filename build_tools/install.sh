@@ -6,8 +6,10 @@ if [ -z $CIRCLECI ]; then
     # conda-based environment instead
     deactivate
     PYTHON_VERSION=$TRAVIS_PYTHON_VERSION
+    echo "non"
 else
 	PYTHON_VERSION="2.7.12"
+	echo "oui"
 fi
 
 # Install conda using miniconda
