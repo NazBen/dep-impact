@@ -39,7 +39,7 @@ source activate testenv
 pip install -quiet pyDOE scikit-optimize
 conda install --quiet --yes -c conda-forge openturns
 
-R -e 'install.packages("VineCopula", repos="https://cloud.r-project.org")'
+R -e 'install.packages("VineCopula", repos="https://cloud.r-project.org", quiet=TRUE)'
 
 python setup.py install
 
