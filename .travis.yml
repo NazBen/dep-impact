@@ -22,4 +22,4 @@ notifications:
    
 install: source build_tools/install.sh
 
-script: nosetests -v
+script: source build_tools/execute.sh

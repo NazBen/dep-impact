@@ -2,4 +2,4 @@
 export PATH="$HOME/miniconda/bin:$PATH"
 source activate testenv
 
-nosetests
+nosetests -v
