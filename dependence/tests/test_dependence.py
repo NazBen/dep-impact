@@ -112,46 +112,46 @@ def test_independence():
 def test_additive_gaussian_gridsearch():
     """
     """
-    n_params = 5
+    n_params = 50
     n_input_sample = 10000
+    dim = 2
 
     for alpha, threshold in zip(QUANTILES_PROB, PROB_THRESHOLDS):
-        for dim in DIMENSIONS:
-            for grid in GRIDS:
-                # Only Gaussian families
-                families = np.tril(np.ones((dim, dim)), k=1)
+        for grid in GRIDS:
+            # Only Gaussian families
+            families = np.tril(np.ones((dim, dim)), k=1)
 
-                impact = ConservativeEstimate(model_func=func_sum,
-                                              margins=[ot.Normal()]*dim,
-                                              families=families)
+            impact = ConservativeEstimate(model_func=func_sum,
+                                          margins=[ot.Normal()]*dim,
+                                          families=families)
 
-                # Grid results
-                grid_results = impact.gridsearch_minimize(
-                    n_dep_param=n_params, 
-                    n_input_sample=n_input_sample, 
-                    grid_type=grid, 
-                    random_state=0)
+            # Grid results
+            grid_results = impact.gridsearch_minimize(
+                n_dep_param=n_params, 
+                n_input_sample=n_input_sample, 
+                grid_type=grid, 
+                random_state=0)
 
-                # Theorical results
-                true_quantiles = np.zeros((n_params, ))
-                true_probabilities = np.zeros((n_params, ))
-                for k in range(n_params):
-                    sigma = dep_params_list_to_matrix(grid_results.dep_params[k, :], dim)
-                    true_quantiles[k] = true_additive_gaussian_quantile(alpha, dim, sigma)
-                    true_probabilities[k] = true_additive_gaussian_probability(threshold, dim, sigma)
+            # Theorical results
+            true_quantiles = np.zeros((grid_results.n_params, ))
+            true_probabilities = np.zeros((grid_results.n_params, ))
+            for k in range(grid_results.n_params):
+                sigma = dep_params_list_to_matrix(grid_results.dep_params[k, :], dim)
+                true_quantiles[k] = true_additive_gaussian_quantile(alpha, dim, sigma)
+                true_probabilities[k] = true_additive_gaussian_probability(threshold, dim, sigma)
 
-                # Quantile results
-                grid_results.q_func = quantile_func(alpha)
-                empirical_quantiles = grid_results.quantities
-                
-                assert_allclose(empirical_quantiles, true_quantiles, rtol=1e-01,
-                                err_msg="Quantile estimation failed for alpha = {0}, dim = {1}"\
-                                .format(alpha, dim))
+            # Quantile results
+            grid_results.q_func = quantile_func(alpha)
+            empirical_quantiles = grid_results.quantities
+            
+            assert_allclose(empirical_quantiles, true_quantiles, rtol=1e-01,
+                            err_msg="Quantile estimation failed for alpha={0}, dim={1}, grid: {2}"\
+                            .format(alpha, dim, grid))
 
-                # Probability results
-                grid_results.q_func = proba_func(threshold)
-                empirical_probabilities = 1. - grid_results.quantities
+            # Probability results
+            grid_results.q_func = proba_func(threshold)
+            empirical_probabilities = 1. - grid_results.quantities
 
-                assert_allclose(empirical_probabilities, true_probabilities, rtol=1e-01,
-                                err_msg="Probability estimation failed for threshold = {0}, dim = {1}"\
-                                .format(threshold, dim))
+            assert_allclose(empirical_probabilities, true_probabilities, rtol=1e-01,
+                            err_msg="Probability estimation failed for threshold = {0}, dim = {1}, grid: {2}"\
+                            .format(alpha, dim, grid))
