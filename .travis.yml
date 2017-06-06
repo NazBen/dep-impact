@@ -21,4 +21,4 @@ notifications:
    
 install: source build_tools/travis/install.sh
 
-script: nosetests
+script: nosetests -v
