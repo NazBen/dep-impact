@@ -2,26 +2,44 @@
 [![CircleCI](https://circleci.com/gh/NazBen/impact-of-dependence.svg?style=svg)](https://circleci.com/gh/NazBen/impact-of-dependence)
 # Impact of Dependencies
 
-A python package to study the impact of correlations in a probabilistic studies.
+A python package to study the influence of dependencies between random variables in a probabilistic study. 
 
-## Dependencies
+For the moment, the class `ConservativeEstimate` create a probabilistic model with an incomplete description of the dependence structure between the input variables. 
 
-The package is developped under Python 2.7 and should work on Python 3. 
+estimates a quantity of intereset of a model output
+
+## Package Dependencies
 
 Several external modules are required:
 
-    - Numpy,
-    - OpenTURNS,
+    - numpy,
+    - scipy,
+    - pandas,
+    - openturns,
+    - rpy2,
+    - 
     - pyDOE.
+    
+The software R is also needed to execture the 
 
 And some are optional:
 
     - Matplotlib,
     - futures.
+    
 
 ## Install
 
-Like the majority of the python modules, the installation is made using distutils. To install in your home directory, use:
 ```
-  python setup.py install --user
+  python setup.py install
 ```
+
+or 
+
+```
+pip install -e.
+```
+
+## Examples
+
+Several notebook examples are available in the directory [examples](https://github.com/NazBen/impact-of-dependence/tree/master/examples).
