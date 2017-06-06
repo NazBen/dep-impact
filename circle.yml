@@ -4,7 +4,7 @@ dependencies:
     - sudo apt-get update
     - sudo apt-get install gcc gfortran libgsl0-dev
   override:
-    - source ./build_tools/circle/install.sh:
+    - source ./build_tools/install.sh:
         timeout: 1024
 
 test:
