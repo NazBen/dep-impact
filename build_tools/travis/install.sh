@@ -27,7 +27,7 @@ popd
 
 # Create a conda env and install packages
 conda create -n testenv --yes python=$TRAVIS_PYTHON_VERSION pip nose numpy \
-	scipy scikit-learn matplotlib pandas h5py scikit-learn gcc
+	scipy scikit-learn matplotlib pandas h5py scikit-learn
 source activate testenv
 
 conda install --yes -c conda-forge openturns
@@ -36,7 +36,7 @@ conda install --yes -c R R r-copula
 echo "Installing R package(s): $@"
 R -e 'install.packages("VineCopula", repos="https://cloud.r-project.org")'
 
-pip install pyDOE scikit-optimize rpy2 nose-timer
+pip install pyDOE scikit-optimize rpy2
 
 python --version
 python -c "import numpy; print('numpy %s' % numpy.__version__)"

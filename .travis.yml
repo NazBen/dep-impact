@@ -1,5 +1,15 @@
 language: python
 
+compiler:
+    - gcc
+
+addons:
+  apt:
+    sources:
+    - ubuntu-toolchain-r-test
+    packages:
+    - gcc-4.8
+
 notifications:
   email: false
   
@@ -15,7 +25,4 @@ install: source build_tools/travis/install.sh
 
 # Run test
 script: 
-  - if [ ${COVERAGE} == "true" ];
-      then nosetests --with-coverage --with-timer --timer-top-n 10; else
-      nosetests --with-timer --timer-top-n 10;
-    fi
+  - py.test
