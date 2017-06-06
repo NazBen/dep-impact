@@ -24,18 +24,14 @@ conda info -a
 popd
 
 # Create a conda env and install packages
-conda create -n testenv --yes python=$TRAVIS_PYTHON_VERSION numpy \
+conda create -n testenv --yes python=$TRAVIS_PYTHON_VERSION R numpy \
 	scipy scikit-learn matplotlib pandas h5py scikit-learn rpy2
+
 source activate testenv
 
+pip install pyDOE scikit-optimize
 conda install --yes -c conda-forge openturns
 
-echo "Installing R package(s): $@"
 R -e 'install.packages("VineCopula", repos="https://cloud.r-project.org")'
 
-pip install pyDOE scikit-optimize
-
-python --version
-python -c "import numpy; print('numpy %s' % numpy.__version__)"
-python -c "import scipy; print('scipy %s' % scipy.__version__)"
 python setup.py install

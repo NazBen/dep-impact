@@ -13,14 +13,10 @@ addons:
     packages:
     - gcc
     - gfortran
-    - r-base-core
 
 notifications:
   email: false
    
-before_install:
-  - R -e 'install.packages("VineCopula", repos="https://cloud.r-project.org")'
-
 install: source build_tools/travis/install.sh
 
 script: nosetests
