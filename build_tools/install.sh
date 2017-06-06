@@ -32,11 +32,11 @@ popd
 
 # Create a conda env and install packages
 conda create -n testenv --quiet --yes python=$PYTHON_VERSION nose pip \
-	matplotlib pandas h5py scikit-learn R R-copula rpy2
+	matplotlib pandas h5py scikit-learn rpy2 R R-copula R-cpp R-doparallel
 
 source activate testenv
 
-pip install pyDOE scikit-optimize
+pip install -quiet pyDOE scikit-optimize
 conda install --quiet --yes -c conda-forge openturns
 
 R -e 'install.packages("VineCopula", repos="https://cloud.r-project.org")'
