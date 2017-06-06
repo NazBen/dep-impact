@@ -1,4 +1,3 @@
-
 if [[ `type -t deactivate` ]]; then
   deactivate
 fi
