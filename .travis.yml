@@ -15,7 +15,7 @@ addons:
     packages:
     - gcc
     - gfortran
-    - gsl
+    - libgsl0-dev
 
 notifications:
   email: false
