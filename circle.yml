@@ -11,7 +11,6 @@ dependencies:
     - sudo apt-get update
     - sudo apt-get install gcc gfortran libgsl0-dev
   override:
-    - cd ~/dependence
     - source ./build_tools/install.sh:
         timeout: 1024
 
