@@ -5,6 +5,9 @@ if [ -z $CIRCLECI ]; then
     # Deactivate the travis-provided virtual environment and setup a
     # conda-based environment instead
     deactivate
+    PYTHON_VERSION=$TRAVIS_PYTHON_VERSION
+else
+	PYTHON_VERSION="2.7.12"
 fi
 
 # Install conda using miniconda
@@ -16,7 +19,7 @@ echo "Cached in $HOME/download :"
 ls -l
 echo
 if [[ ! -f miniconda.sh ]]; then
-	if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
+	if [[ "$PYTHON_VERSION" == "2.7" ]]; then
 		wget https://repo.continuum.io/miniconda/Miniconda2-latest-Linux-x86_64.sh -O miniconda.sh;
 	else
 		wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
