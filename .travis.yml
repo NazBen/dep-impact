@@ -1,7 +1,10 @@
 language: python
 
-compiler:
-    - gcc
+python:
+  - "2.7"
+  - "3.5"
+
+sudo: false
 
 addons:
   apt:
@@ -10,13 +13,12 @@ addons:
     packages:
     - gcc
     - gfortran
+    - r-base-core
 
 matrix:
   include:
     - os: linux
       compiler: gcc
-    - os: osx
-      compiler: clang
 
 notifications:
   email: false
@@ -24,13 +26,10 @@ notifications:
 cache:
   directories:
    - $HOME/.cache/pip
-   
-env:
-  matrix:
-    - DISTRIB="conda" PYTHON_VERSION="2.7" COVERAGE="true"
  
+before_install:
+  - R -e 'install.packages("VineCopula", repos="https://cloud.r-project.org")'
+
 install: source build_tools/travis/install.sh
 
-# Run test
-script: 
-  - py.test
+script: nosetests
