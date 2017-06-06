@@ -6,10 +6,8 @@ if [ -z $CIRCLECI ]; then
     # conda-based environment instead
     deactivate
     PYTHON_VERSION=$TRAVIS_PYTHON_VERSION
-    echo "non"
 else
 	PYTHON_VERSION="2.7.12"
-	echo "oui"
 fi
 
 # Install conda using miniconda
@@ -34,9 +32,8 @@ conda info -a
 popd
 
 # Create a conda env and install packages
-echo python=$PYTHON_VERSION
-conda create -n testenv --yes python=$PYTHON_VERSION R nose numpy \
-	scipy scikit-learn matplotlib pandas h5py scikit-learn rpy2
+conda create -n testenv --yes python=$PYTHON_VERSION nose pip \
+	matplotlib pandas h5py scikit-learn R R-copula rpy2
 
 source activate testenv
 
