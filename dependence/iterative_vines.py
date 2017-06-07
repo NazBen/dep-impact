@@ -8,7 +8,7 @@ from .dependence import ListDependenceResult
 GRIDS = ['lhs', 'rand', 'vertices']
 LIB_PARAMS = ['iterative_save', 'iterative_load', 'input_names', 
               'output_names', 'keep_input_samples', 'load_input_samples',
-              'use_grid', 'save_grid', 'grid_path']
+              'use_grid', 'save_grid', 'grid_path', 'n_pairs_start']
 
 
 def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_init=20, max_n_pairs=5, grid_type='lhs', 
@@ -65,7 +65,8 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     
     for lib_param in kwargs:
         assert lib_param in LIB_PARAMS, "Unknow parameter %s" % (lib_param)
-    iterative_save = None
+        
+    iterative_save = False
     if 'iterative_save' in kwargs:
         iterative_save = kwargs['iterative_save']
         if iterative_save is True:
@@ -75,21 +76,25 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
             directory = os.path.abspath(path_or_buf)
             if not os.path.exists(directory):
                 os.makedirs(directory)
+        elif iterative_save is False:
+            pass
         else:
-            raise TypeError("Wrong type for iterative_save")
+            raise TypeError("Wrong type for iterative_save: {0}".format(type(iterative_save)))
         
-    iterative_load = None
+    iterative_load = False
     if 'iterative_load' in kwargs:
         iterative_load = kwargs['iterative_load']
-        if iterative_save is True:
+        if iterative_load is True:
             path_or_buf = './iterative_result'
-        elif isinstance(iterative_save, str):
-            path_or_buf = iterative_save
+        elif isinstance(iterative_load, str):
+            path_or_buf = iterative_load
             directory = os.path.dirname(path_or_buf)
             if not os.path.exists(directory):
                 print("Directory %s does not exists" % (directory))
+        elif iterative_load is False:
+            pass
         else:
-            raise TypeError("Wrong type for iterative_save")
+            raise TypeError("Wrong type for iterative_load: {0}".format(type(iterative_load)))
             
     input_names = []
     if 'input_names' in kwargs:
@@ -162,17 +167,18 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
                                                              save_grid=save_grid,
                                                              grid_path=grid_path)
             
-            cop_str = "_".join([str(l) for l in quant_estimate._family_list])
-            filename = "%s/cop_%s_%s" % (path_or_buf, cop_str, grid_type)
-            if n_dep_param is None:
-                filename += "_K_None.hdf5"
-            else:
-                filename += "_K_%d.hdf5" % (n_dep_param)
+            if iterative_save or iterative_load:
+                cop_str = "_".join([str(l) for l in quant_estimate._family_list])
+                filename = "%s/cop_%s_%s" % (path_or_buf, cop_str, grid_type)
+                if n_dep_param is None:
+                    filename += "_K_None.hdf5"
+                else:
+                    filename += "_K_%d.hdf5" % (n_dep_param)
 
-            if iterative_save is not None and n_pairs >= n_pairs_start:
+            if iterative_save and n_pairs >= n_pairs_start:
                 results.to_hdf(filename, input_names, output_names, verbose=verbose, with_input_sample=keep_input_samples)
 
-            if iterative_load is not None:
+            if iterative_load :
                 load_result = ListDependenceResult.from_hdf(filename, with_input_sample=load_input_samples, q_func=q_func)
                 # TODO: create a function to check the configurations of two results
                 # TODO: is the testing necessary? If the saving worked, the loading should be ok.

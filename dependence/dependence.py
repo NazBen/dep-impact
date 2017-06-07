@@ -952,6 +952,9 @@ class ListDependenceResult(list):
             The name of the outputs.
         """
         filename, extension = os.path.splitext(path_or_buf)
+        dirname = os.path.dirname(path_or_buf)
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
         
         assert extension in ['.hdf', '.hdf5'], "File extension should be hdf"
         
@@ -974,7 +977,6 @@ class ListDependenceResult(list):
         margin_dict = margins_to_dict(self.margins)
         
         filename_exists = True
-        init_file_name = path_or_buf
         k = 0
         while filename_exists:
             # If the file has the same run configuration
@@ -1048,7 +1050,7 @@ class ListDependenceResult(list):
                         if with_input_sample:
                             grp_i.create_dataset('input_sample', data=self[i].input_sample)
                     filename_exists = False
-            except (AssertionError, msg):
+            except AssertionError, msg:
                 print('File %s has different configurations' % (path_or_buf))
                 if verbose:
                     print(str(msg))
