@@ -24,7 +24,7 @@ from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
 from .utils import list_to_matrix, matrix_to_list, bootstrap, to_kendalls, \
     load_dependence_grid, to_copula_params, get_grid_sample, \
-    save_dependence_grid, margins_to_dict, dict_to_margins
+    save_dependence_grid, margins_to_dict, dict_to_margins, asymptotic_error_quantile
 
 OPERATORS = {">": operator.gt, ">=": operator.ge,
              "<": operator.lt, "<=": operator.le}
@@ -1273,7 +1273,6 @@ class DependenceResult(object):
     def compute_quantity_asymptotic_ci(self, quantity_name, quantity_param, ci=0.95):
         """Asymptotic confidence interval.
         """
-        from dependence.utils import asymptotic_error_quantile
         quantity = self.quantity
 
         if quantity_name == 'quantile':
