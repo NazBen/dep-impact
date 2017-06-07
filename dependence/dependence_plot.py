@@ -45,15 +45,50 @@ def get_n_pairs(all_results):
     """
     n_pairs = []
     for results in all_results:
-        n_pair = results[results.keys()[0]].n_pairs
+        n_pair = results.values()[0].n_pairs
         for res_name in results:
-            assert results[res_name].n_pairs== n_pair, "Not the same numer of pairs... Weird"
+            assert results[res_name].n_pairs== n_pair, "Not the same number of pairs... Weird"
             
         n_pairs.append(n_pair)
         
     return n_pairs
 
-def plot_iterative_results(all_results, indep_result=None, grid_result=None, q_func=None, figsize=(8, 4), quantity_name='Quantity', with_bootstrap=False):
+
+def matrix_plot_results(results, indep_result=None, grid_result=None, 
+                           q_func=None, figsize=(9, 7), dep_measure='kendalls',
+                           quantity_name='Quantity', with_bootstrap=False):
+    """
+    """
+    input_dim = results.values()[0].input_dim
+    
+    # Figure
+    fig, axes = plt.subplots(input_dim, input_dim, figsize=figsize, sharex=True, sharey=True)
+    for res in results:
+        t = res.split(', ')[-1:-3:-1]
+        i = int(t[1][1])
+        j = int(t[0][0])
+        ax = axes[i, j]
+        if dep_measure == 'dependence-param':
+            measure = results[res].dep_params
+        else:
+            measure = results[res].kendalls
+        quantities = results[res].quantities
+        ax.plot(measure, quantities, '.')
+    
+    if dep_measure == 'dependence-param':
+        x_label = 'Dependence Parameter'
+    else:
+        x_label = 'Kendall tau'
+    for i in range(input_dim):
+        axes[i, 0].set_ylabel(quantity_name)
+        axes[-1, i].set_xlabel(x_label)
+    
+    fig.tight_layout()
+    
+    
+def plot_iterative_results(all_results, indep_result=None, grid_result=None, 
+                           q_func=None, figsize=(8, 4), 
+                           quantity_name='Quantity', with_bootstrap=False):
     """
     """
     

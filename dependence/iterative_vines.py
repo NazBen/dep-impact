@@ -130,9 +130,11 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
 
     if n_input_sample == 0:
         iterative_save = None
+        
     ## Algorithm Loop
     cost = 0
     n_pairs = 0
+    iteration = 0
     while n_pairs < max_n_pairs:
         min_quantity = {}
         all_results.append({})
@@ -168,6 +170,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
                                                              grid_path=grid_path)
             
             if iterative_save or iterative_load:
+                print ('oui')
                 cop_str = "_".join([str(l) for l in quant_estimate._family_list])
                 filename = "%s/cop_%s_%s" % (path_or_buf, cop_str, grid_type)
                 if n_dep_param is None:
@@ -191,7 +194,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
 
             # Name if the result dictionary
             result_name = str(selected_pairs + [(i, j)])[1:-1]
-            all_results[n_pairs][result_name] = results
+            all_results[iteration][result_name] = results
             
             # How much does it costs
             cost += results.n_evals
@@ -232,14 +235,15 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
             
         if True:
             k1, k2 = selected_pair
-            tmp = 'Iteration {0}. Selected pair: {1}'.format(n_pairs+1, selected_pair)
+            tmp = '\nIteration {0}: selected pair: {1}'.format(iteration+1, selected_pair)
             if input_names:
                 tmp += " (" + "-".join(input_names[k] for k in selected_pair) + ")"
             print(tmp)
-            print('Total number of evaluations = %d. Minimum quantity at %.2f.' % (cost, min_quantity[selected_pair]))
+            print('Total number of evaluations = %d. Minimum quantity at %.2f.\n' % (cost, min_quantity[selected_pair]))
             
 
         n_pairs += n_add_pairs
+        iteration += 1
         if n_dep_param is not None:
             n_dep_param = n_dep_param_init*int(np.sqrt(n_pairs+1))
 

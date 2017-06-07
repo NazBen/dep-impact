@@ -1050,7 +1050,7 @@ class ListDependenceResult(list):
                         if with_input_sample:
                             grp_i.create_dataset('input_sample', data=self[i].input_sample)
                     filename_exists = False
-            except AssertionError, msg:
+            except AssertionError as msg:
                 print('File %s has different configurations' % (path_or_buf))
                 if verbose:
                     print(str(msg))
@@ -1322,6 +1322,7 @@ class DependenceResult(object):
             return self.output_sample
         else:
             return self.output_sample[:, self.output_id]
+        
     @property
     def full_dep_params(self):
         """The matrix of parameters for all the pairs.
@@ -1340,7 +1341,7 @@ class DependenceResult(object):
         """
         kendalls = []
         for family, id_param in zip(*matrix_to_list(self.families, return_ids=True)):
-            kendall = Conversion(family).to_kendall(self.dep_param[id_param])
+            kendall = Conversion(family).to_kendall(self.full_dep_params[id_param])
             if kendall.size == 1:
                 kendall = kendall.item()
             kendalls.append(kendall)

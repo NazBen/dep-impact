@@ -96,6 +96,45 @@ def func_sum(x, a=None):
         return y.ravel()
     else:
         return y
+    
+def func_cum_sum_weight(x, a=None):
+    """Additive weighted model function.
+    
+    Parameters
+    ----------
+    x : np.ndarray
+        The input values.
+    a : np.ndarray
+        The input coefficients.
+        
+    Returns
+    -------
+        y : a.x^t
+    """
+    if isinstance(x, list):
+        x = np.asarray(x)
+    n, dim = x.shape
+    if a is None:
+        a = np.zeros((dim, dim))
+        corr_dim = dim * (dim-1)/2
+        k = 1
+        for i in range(1, dim):
+            for j in range(i):
+                a[i, j] = k
+                k += 1
+        a /= corr_dim
+    if a.ndim == 1:
+        a = a.reshape(-1, 1)
+        assert a.shape[0] == dim, "Shape not good"
+    elif a.ndim > 2:
+        raise AttributeError('Dimension problem for constant a')
+        
+    y = 0
+    for i in range(1, dim):
+        for j in range(i):
+            y -= a[i, j]*func_sum(np.c_[x[:, i], x[:, j]])
+            
+    return y
 
 
 def multi_output_func_sum(x, output_dim=2):
