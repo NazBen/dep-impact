@@ -24,7 +24,11 @@ def get_grid_sample(dimensions, n_sample, grid_type):
         The number of observations inside the space.
     grid_type: str,
         The type of sampling.
-
+        
+    Returns
+    -------
+    sample : array,
+        The sample from the given space and the given grid.
     """
     # We create the grid
     space = Space(dimensions)
@@ -96,6 +100,11 @@ class Space(sk_Space):
         elif sampling == 'vertices':
             # Sample on the vertices of the space.
             n_pair = len(self.dimensions)
+            
+            # XXX: too much memory when n_pair is high: 3**n_pair
+            if n_pair > 13:
+                raise MemoryError('Too much pairs to create a vertices grid.')
+                
             bounds = list(product([-1., 1., 0.], repeat=n_pair))
             if n_samples is None:
                 bounds.remove((0.,)*n_pair) # remove indepencence
@@ -473,13 +482,11 @@ def proba_func(threshold):
 def asymptotic_error_quantile(n, q_density, q_alpha):
     """
     """
-
     return np.sqrt(q_alpha * (1. - q_alpha) / (n * q_density**2))
 
 
 
 def asymptotic_error_proba(n, proba):
     """
-    """
-    
+    """    
     return np.sqrt(proba * (1. - proba) / n)
