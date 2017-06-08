@@ -33,6 +33,46 @@ However, we are still working on diminishing the number of dependencies. Especia
 
 ### Using Anaconda
 
+The installation is very straightforward using [Anaconda](https://anaconda.org/). If you don't have Anaconda, you can find the software [here](https://www.continuum.io/downloads) and follow the instruction given on the website. The library is tested on python 2.7 and 3.5.
+
+Install the classical dependencies:
+
+```
+conda install numpy scipy pandas scikit-learn matplotlib
+```
+
+Install OpenTURNS, which is in the conda-forge:
+
+```
+conda install -c conda-forge openturns
+```
+
+Install the other dependencies which are not in Anaconda:
+
+```
+pip install pyDOE scikit-optimize
+```
+
+If you don't already have R, you can install it using conda: 
+
+```
+conda install -c R R
+```
+
+You also need rpy2 to communicate between Python and R:
+
+```
+conda install rpy2
+```
+
+Then you can install VineCopula using R
+
+```
+R -e 'install.packages("VineCopula", repos="https://cloud.r-project.org")'
+```
+
+You need a recent version of gcc to install the package. If you don't have a recent one, install it with `conda install gcc`.
+
 ## Examples
 
 Several notebook examples are available in the directory [examples](https://github.com/NazBen/impact-of-dependence/tree/master/examples).
