@@ -24,12 +24,17 @@ from dependence.utils import quantile_func, proba_func
 
 QUANTILES_PROB = [0.05, 0.01]
 PROB_THRESHOLDS = [1., 2.]
-DIMENSIONS = range(2, 5)
+DIMENSIONS = range(2, 10)
 GRIDS = ['lhs', 'rand', 'vertices']
 COPULA = ["NormalCopula", "ClaytonCopula"]
 MEASURES = ["dependence-parameter", "kendall-tau"]
 
 def dep_params_list_to_matrix(params, dim):
+    """
+    """
+    if params == 0:
+        return np.identity(dim)
+
     sigma = np.ones((dim, dim))
     k = 0
     for i in range(1, dim):
@@ -102,14 +107,7 @@ def true_additive_gaussian_probability(x, dim, sigma, nu=None, const=None):
     return 0.5 * (1. + erf(x / (sigma_y * np.sqrt(2.))))
 
 
-def test_independence():
-    """Test independence function
-    """
-    pass
-
 def test_bidim_additive_gaussian_gridsearch():
-    """
-    """
     dim = 2
     n_params = 50
     n_input_sample = 10000
@@ -153,3 +151,38 @@ def test_bidim_additive_gaussian_gridsearch():
             assert_allclose(empirical_probabilities, true_probabilities, rtol=1e-01,
                             err_msg="Probability estimation failed for threshold = {0}, dim = {1}, grid: {2}"\
                             .format(alpha, dim, grid))
+                        
+def test_independence():
+    n_input_sample = 10000
+    for alpha, threshold in zip(QUANTILES_PROB, PROB_THRESHOLDS):
+        for dim in DIMENSIONS:
+            # Only Gaussian families
+            families = np.tril(np.ones((dim, dim)), k=1)
+    
+            impact = ConservativeEstimate(model_func=func_sum,
+                                          margins=[ot.Normal()]*dim,
+                                          families=families)
+    
+            indep_result = impact.independence(n_input_sample=n_input_sample)[0]
+    
+            sigma = dep_params_list_to_matrix(0., dim)
+            true_quantile = true_additive_gaussian_quantile(alpha, dim, sigma)
+            true_probability = true_additive_gaussian_probability(threshold, dim, sigma)
+    
+            # Quantile results
+            indep_result.q_func = quantile_func(alpha)
+            empirical_quantile = indep_result.quantity
+            
+            assert_allclose(empirical_quantile, true_quantile, rtol=1e-01,
+                            err_msg="Quantile estimation failed for alpha={0}, dim={1}"\
+                            .format(alpha, dim))
+    
+            # Probability results
+            indep_result.q_func = proba_func(threshold)
+            empirical_probability = 1. - indep_result.quantity
+    
+            assert_allclose(empirical_probability, true_probability, rtol=1e-01,
+                            err_msg="Probability estimation failed for threshold = {0}, dim = {1}"\
+                            .format(alpha, dim))
+            
+        
