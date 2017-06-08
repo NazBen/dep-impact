@@ -5,40 +5,33 @@
 
 A python package to study the influence of dependencies between random variables in a probabilistic study. 
 
-For the moment, the class `ConservativeEstimate` create a probabilistic model with an incomplete description of the dependence structure between the input variables. 
+For the moment, the class `ConservativeEstimate` creates a probabilistic model with an incomplete description of the dependencies between the input variables. The class can therefore estimates, through a Monte-Carlo sampling, a quantity of interest of a model output distribution. It can also give a conservative estimation of the output quantity by determining a dependence structure that minimize the quantity.
 
-estimates a quantity of intereset of a model output
+An iterative algorithm is also available.
 
-## Package Dependencies
+## Installation
 
-Several external modules are required:
+The package is still in development and is not yet availaible on [PyPi](https://pypi.python.org/pypi) or [Anaconda](https://anaconda.org/).
 
-    - numpy,
-    - scipy,
-    - pandas,
-    - openturns,
-    - rpy2,
-    - pyDOE.
-    
-The software R is also needed to execture the 
+Unfortunatly, the package needs many python library dependencies:
 
-And some are optional:
+- [numpy](http://www.numpy.org/),
+- [scipy](https://www.scipy.org/),
+- [pandas](http://pandas.pydata.org/),
+- [openturns](http://www.openturns.org/),
+- [scikit-learn](http://scikit-learn.org/),
+- [scikit-optimize](https://github.com/scikit-optimize),
+- [pyDOE](https://pythonhosted.org/pyDOE/),
+- [matplotlib](https://matplotlib.org/),
+- [rpy2](https://rpy2.readthedocs.io/en/version_2.8.x/).
 
-    - Matplotlib,
-    - futures.
-    
+Also, the software [R](https://www.r-project.org/) is needed with the package:
 
-## Install
+- [VineCopula](https://cran.r-project.org/web/packages/VineCopula/index.html).
 
-```
-  python setup.py install
-```
+However, we are still working on diminishing the number of dependencies. Especially the dependencies with R, by replacing the VineCopula R package with [vinecopulib](https://github.com/vinecopulib/vinecopulib). 
 
-or 
-
-```
-pip install -e.
-```
+### Using Anaconda
 
 ## Examples
 
