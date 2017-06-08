@@ -17,10 +17,9 @@ import openturns as ot
 from scipy.special import erf, erfinv
 from numpy.testing import assert_allclose
 
-from .test_functions import func_sum
-
 from dependence import ConservativeEstimate
 from dependence.utils import quantile_func, proba_func
+from dependence.tests import func_sum
 
 QUANTILES_PROB = [0.05, 0.01]
 PROB_THRESHOLDS = [1., 2.]
@@ -186,3 +185,25 @@ def test_independence():
                             .format(alpha, dim))
             
         
+def test_vines():
+    n_input_sample = 1000
+    dim = 3
+    n_params = 200
+    grid_type = 'lhs'
+    families = np.tril(np.ones((dim, dim)), k=1)
+    
+    impact = ConservativeEstimate(model_func=func_sum,
+                                  margins=[ot.Normal()]*dim,
+                                  families=families)
+
+    # Grid results
+    grid_results = impact.gridsearch_minimize(
+        n_dep_param=n_params, 
+        n_input_sample=n_input_sample, 
+        grid_type=grid_type, 
+        random_state=0)
+    
+    print(grid_results.min_quantity)
+    
+if __name__ == '__main__':
+    test_vines()
