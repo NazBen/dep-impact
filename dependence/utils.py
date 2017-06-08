@@ -12,6 +12,8 @@ OPERATORS = {">=": operator.ge,
             ">": operator.gt,
             "==": operator.eq}
 
+MAX_N_PAIR_VERTICES = 13
+
 
 def get_grid_sample(dimensions, n_sample, grid_type):
     """Sample inside a fixed design space.
@@ -101,25 +103,34 @@ class Space(sk_Space):
             # Sample on the vertices of the space.
             n_pair = len(self.dimensions)
             
-            # XXX: too much memory when n_pair is high: 3**n_pair
-            if n_pair > 13:
-                raise MemoryError('Too much pairs to create a vertices grid.')
+            if n_pair > MAX_N_PAIR_VERTICES:
+                if n_samples is None:
+                    raise MemoryError('Too much pairs to create a vertices grid.')
                 
-            bounds = list(product([-1., 1., 0.], repeat=n_pair))
-            if n_samples is None:
-                bounds.remove((0.,)*n_pair) # remove indepencence
-            bounds = np.asarray(bounds)
-            n_bounds = len(bounds)
-
-            if n_samples is None:
-                # We take all the vertices
-                n_samples = n_bounds
-                sample = bounds
+                # Iterative add instead of sampling in a big bounds matrix
+                sample = []
+                for i in range(n_samples):
+                    obs = np.random.choice([-1., 1., 0.], size=n_pair).tolist()
+                    if obs not in sample:
+                        sample.append(obs)
+                        
+                sample = np.asarray(sample)
             else:
-                # Random sampling over the vertices
-                n_samples = min(n_samples, n_bounds)
-                id_taken = np.random.choice(n_bounds, size=n_samples, replace=False)
-                sample = bounds[sorted(id_taken), :]
+                bounds = list(product([-1., 1., 0.], repeat=n_pair))
+                if n_samples is None:
+                    bounds.remove((0.,)*n_pair) # remove indepencence
+                bounds = np.asarray(bounds)
+                n_bounds = len(bounds)
+    
+                if n_samples is None:
+                    # We take all the vertices
+                    n_samples = n_bounds
+                    sample = bounds
+                else:
+                    # Random sampling over the vertices
+                    n_samples = min(n_samples, n_bounds)
+                    id_taken = np.random.choice(n_bounds, size=n_samples, replace=False)
+                    sample = bounds[sorted(id_taken), :]
 
             # Assert the bounds
             for p in range(n_pair):

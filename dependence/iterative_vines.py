@@ -63,6 +63,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     for pair in quant_estimate._indep_pairs:
         indices.remove(pair)
     
+    # Check if the given parameters are known
     for lib_param in kwargs:
         assert lib_param in LIB_PARAMS, "Unknow parameter %s" % (lib_param)
         
@@ -70,12 +71,11 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     if 'iterative_save' in kwargs:
         iterative_save = kwargs['iterative_save']
         if iterative_save is True:
-            path_or_buf = './iterative_result'
+            save_dir = './iterative_result'
         elif isinstance(iterative_save, str):
-            path_or_buf = iterative_save
-            directory = os.path.abspath(path_or_buf)
-            if not os.path.exists(directory):
-                os.makedirs(directory)
+            save_dir = os.path.abspath(iterative_save)
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
         elif iterative_save is False:
             pass
         else:
@@ -85,12 +85,11 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     if 'iterative_load' in kwargs:
         iterative_load = kwargs['iterative_load']
         if iterative_load is True:
-            path_or_buf = './iterative_result'
+            load_dir = './iterative_result'
         elif isinstance(iterative_load, str):
-            path_or_buf = iterative_load
-            directory = os.path.dirname(path_or_buf)
-            if not os.path.exists(directory):
-                print("Directory %s does not exists" % (directory))
+            load_dir = os.path.dirname(iterative_load)
+            if not os.path.exists(load_dir):
+                print("Directory %s does not exists" % (load_dir))
         elif iterative_load is False:
             pass
         else:
@@ -170,9 +169,8 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
                                                              grid_path=grid_path)
             
             if iterative_save or iterative_load:
-                print ('oui')
                 cop_str = "_".join([str(l) for l in quant_estimate._family_list])
-                filename = "%s/cop_%s_%s" % (path_or_buf, cop_str, grid_type)
+                filename = "%s/cop_%s_%s" % (load_dir, cop_str, grid_type)
                 if n_dep_param is None:
                     filename += "_K_None.hdf5"
                 else:
