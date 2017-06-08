@@ -97,6 +97,41 @@ def func_sum(x, a=None):
     else:
         return y
     
+    
+def func_prod(x, a=None):
+    """Product weighted model function.
+    
+    Parameters
+    ----------
+    x : np.ndarray
+        The input values.
+    a : np.ndarray
+        The input coefficients.
+        
+    Returns
+    -------
+        y : a.x^t
+    """
+    if isinstance(x, list):
+        x = np.asarray(x)
+    n, dim = x.shape
+    if a is None:
+        a = np.ones((dim, 1))
+    if a.ndim == 1:
+        a = a.reshape(-1, 1)
+        assert a.shape[0] == dim, "Shape not good"
+    elif a.ndim > 2:
+        raise AttributeError('Dimension problem for constant a')
+        
+    y = np.sum(x, axis=1)
+        
+    if y.size == 1:
+        return y.item()
+    elif y.size == y.shape[0]:
+        return y.ravel()
+    else:
+        return y
+    
 def func_cum_sum_weight(x, a=None):
     """Additive weighted model function.
     
@@ -129,10 +164,16 @@ def func_cum_sum_weight(x, a=None):
     elif a.ndim > 2:
         raise AttributeError('Dimension problem for constant a')
         
-    y = 0
-    for i in range(1, dim):
-        for j in range(i):
-            y -= a[i, j]*func_sum(np.c_[x[:, i], x[:, j]])
+    if False:
+        y = 1
+        for i in range(1, dim):
+            for j in range(i):
+                y *= (1. + a[i, j] * func_sum(np.c_[x[:, i], x[:, j]]))
+    else:
+        y = 0
+        for i in range(1, dim):
+            for j in range(i):
+                y += a[i, j] * func_prod(np.c_[x[:, i], x[:, j]])
             
     return y
 

@@ -186,6 +186,6 @@ def plot_iterative_results(all_results, indep_result=None, grid_result=None,
     ax.axis('tight')
     ax.set_xlabel('Number of considered pairs')
     ax.set_ylabel(quantity_name)
-    ax.set_xticks(range(1, n_levels+1))
+    ax.set_xticks(n_pairs)
     ax.legend(loc=0)
     fig.tight_layout()        
