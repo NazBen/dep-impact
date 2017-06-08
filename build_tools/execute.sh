@@ -3,8 +3,7 @@ export PATH="$HOME/miniconda/bin:$PATH"
 source activate testenv
 
 if [ ${COVERAGE} == "true" ]; then
-	nosetests --with-coverage --with-timer --timer-top-n 10; 
+	nosetests -v --with-coverage
 else
-    nosetests --with-timer --timer-top-n 10;
+    nosetests -v
 fi
-nosetests -v --with-timer
