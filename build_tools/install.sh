@@ -5,7 +5,6 @@ if [ -z $CIRCLECI ]; then
     # Deactivate the travis-provided virtual environment and setup a
     # conda-based environment instead
     deactivate
-    PYTHON_VERSION=$TRAVIS_PYTHON_VERSION
 else
 	PYTHON_VERSION="2.7.12"
 fi
@@ -31,13 +30,17 @@ conda update --quiet --yes conda
 popd
 
 # Create a conda env and install packages
-conda create -n testenv --quiet --yes python=$PYTHON_VERSION nose pip \
+conda create -n testenv --quiet --yes python=$PYTHON_VERSION nose pip gcc \
 	matplotlib pandas h5py scikit-learn rpy2 R R-copula R-rcpp R-doparallel R-rcpparmadillo
 
 source activate testenv
 
 pip install -q pyDOE scikit-optimize
 conda install --quiet --yes -c conda-forge openturns
+
+if [[ "$COVERAGE" == "true" ]]; then
+    pip install coverage coveralls
+fi
 
 R -e 'install.packages("VineCopula", repos="https://cloud.r-project.org", quiet=TRUE)'
 

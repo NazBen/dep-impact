@@ -1,25 +1,28 @@
-language: python
-
-python:
-  - "2.7"
-  - "3.5"
-
-os: linux
-
+# Container-based is prefered
 sudo: false
 
-addons:
-  apt:
-    sources:
-    - ubuntu-toolchain-r-test
-    packages:
-    - gcc
-    - gfortran
-    - libgsl0-dev
+dist: trusty
+
+language: python
 
 notifications:
   email: false
+
+cache:
+  directories:
+   - $HOME/.cache/pip   
+
+env:
+  matrix:
+    - DISTRIB="conda" PYTHON_VERSION="2.7" COVERAGE="true"
+    - DISTRIB="conda" PYTHON_VERSION="3.6" COVERAGE="false"
    
 install: source build_tools/install.sh
 
 script: source build_tools/execute.sh
+
+after_success: 
+  - if [ ${COVERAGE} == "true" ]; then
+      pip install codecov;
+      codecov;
+    fi
