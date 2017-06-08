@@ -1,5 +1,6 @@
 [![Build Status](https://travis-ci.org/NazBen/impact-of-dependence.svg?branch=master)](https://travis-ci.org/NazBen/impact-of-dependence)
 [![CircleCI](https://circleci.com/gh/NazBen/impact-of-dependence.svg?style=svg)](https://circleci.com/gh/NazBen/impact-of-dependence)
+[![codecov](https://codecov.io/gh/NazBen/impact-of-dependence/branch/master/graph/badge.svg)](https://codecov.io/gh/NazBen/impact-of-dependence)
 # Impact of Dependencies
 
 A python package to study the influence of dependencies between random variables in a probabilistic study. 
@@ -17,7 +18,6 @@ Several external modules are required:
     - pandas,
     - openturns,
     - rpy2,
-    - 
     - pyDOE.
     
 The software R is also needed to execture the 

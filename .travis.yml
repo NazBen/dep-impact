@@ -1,6 +1,5 @@
 # Container-based is prefered
 sudo: false
-
 dist: trusty
 
 language: python
