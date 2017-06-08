@@ -257,6 +257,7 @@ def to_kendalls(converters, params):
         kendalls = kendalls.item()
     return kendalls
 
+
 def to_copula_params(converters, kendalls):
     """Convert the kendall's tau to the copula parameters.
 
@@ -317,6 +318,7 @@ def margins_to_dict(margins):
         margin_dict[i]['Marginal Family'] = name
         margin_dict[i]['Marginal Parameters'] = params    
     return margin_dict
+
 
 def dict_to_margins(margin_dict):
     """Convert a dictionary with margins informations into a list of distributions.

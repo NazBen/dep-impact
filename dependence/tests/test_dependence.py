@@ -16,7 +16,6 @@ import numpy as np
 import openturns as ot
 from scipy.special import erf, erfinv
 from numpy.testing import assert_allclose
-from itertools import combinations
 
 from .test_functions import func_sum
 
@@ -108,13 +107,12 @@ def test_independence():
     """
     pass
 
-
-def test_additive_gaussian_gridsearch():
+def test_bidim_additive_gaussian_gridsearch():
     """
     """
+    dim = 2
     n_params = 50
     n_input_sample = 10000
-    dim = 2
 
     for alpha, threshold in zip(QUANTILES_PROB, PROB_THRESHOLDS):
         for grid in GRIDS:
