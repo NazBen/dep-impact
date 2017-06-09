@@ -457,7 +457,7 @@ def fill_structure(structure):
     for i in range(dim):
         values_i = structure[i:, i]
         used_values_i = values_i[values_i != 0].tolist() + prev_ind
-        remaining_i = range(1, dim + 1)
+        remaining_i = list(range(1, dim + 1))
         for var in used_values_i:
             if (var in remaining_i):
                 remaining_i.remove(var)
@@ -479,7 +479,7 @@ def get_pairs_by_levels(dim, forced_pairs_ids, verbose=False):
     """Given a list of sorted pairs, this gives the pairs for the different levels o    f
     conditionement.
     """
-    n_pairs = dim*(dim-1)/2
+    n_pairs = int(dim*(dim-1)/2)
     n_forced_pairs = len(forced_pairs_ids)
     assert len(np.unique(forced_pairs_ids)) == n_forced_pairs, "Unique values should be puted"
     assert n_forced_pairs <= n_pairs, "Not OK!"
@@ -487,7 +487,7 @@ def get_pairs_by_levels(dim, forced_pairs_ids, verbose=False):
     
     n_conditionned = range(dim - 1, 0, -1)
     forced_pairs = np.asarray([get_pair(dim, pair_id) for pair_id in forced_pairs_ids])
-    remaining_pairs_ids = range(0, n_pairs)
+    remaining_pairs_ids = list(range(0, n_pairs))
     for pair_id in forced_pairs_ids:
         remaining_pairs_ids.remove(pair_id)
     remaining_pairs = np.asarray([get_pair(dim, pair_id) for pair_id in remaining_pairs_ids])

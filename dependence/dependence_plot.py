@@ -45,7 +45,7 @@ def get_n_pairs(all_results):
     """
     n_pairs = []
     for results in all_results:
-        n_pair = results.values()[0].n_pairs
+        n_pair = results.popitem()[1].n_pairs
         for res_name in results:
             assert results[res_name].n_pairs== n_pair, "Not the same number of pairs... Weird"
             
