@@ -92,9 +92,9 @@ class VineCopula(object):
         """
         """
         r_structure = numpy2ri(self.structure)
-        r_family = numpy2ri(self.family)
-        r_par = numpy2ri(self.param1)
-        r_par2 = numpy2ri(self.param2)
+        r_family = numpy2ri(permute_params(self.family, self.structure))
+        r_par = numpy2ri(permute_params(self.param1, self.structure))
+        r_par2 = numpy2ri(permute_params(self.param2, self.structure))
         self._rvine = VINECOPULA.RVineMatrix(r_structure, r_family, r_par, r_par2)
         self._to_rebuild = False
 
@@ -108,3 +108,32 @@ class VineCopula(object):
         if self._to_rebuild:
             self.build_vine()
         return np.asarray(VINECOPULA.RVineSim(n_obs, self._rvine))
+
+
+def permute_params(params, structure):
+    """Permute the parameters of the initiat parameter matrix to fit to the R-vine structure.
+
+    Parameters
+    ----------
+    params : array,
+        The matrix of parameters.
+    structure : array,
+        The R-vine structure array.
+
+
+    Returns
+    -------
+    permuted_params : array,
+        The permuter matrix of parameters.
+    """
+    dim = params.shape[0]
+    permuted_params = np.zeros(params.shape)
+    for i in range(dim):
+        for j in range(i+1, dim):
+            if structure[i, i] > structure[j, i]:
+                coords = structure[i, i]-1, structure[j, i]-1
+            else:
+                coords = structure[j, i]-1, structure[i, i]-1
+            permuted_params[j, i] = params[coords]
+        
+    return permuted_params
