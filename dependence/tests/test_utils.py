@@ -31,8 +31,5 @@ def test_matrix_to_list():
     assert_array_equal(ids, true_list_ids_sup_eq)
     assert_array_equal(coord, true_list_coord_sup_eq)
     
-    assert_array_equal(list_to_matrix(values_sup_eq, 5), matrix)
-    
-    
-    
+    assert_array_equal(list_to_matrix(values_sup_eq, 5), matrix)  
     

@@ -46,33 +46,27 @@ class ConservativeEstimate(object):
     model_func : callable
         The evaluation model :math:`g : \mathbb R^d \rightarrow \mathbb R`
         such as :math:`Y = g(\mathbf X) \in \mathbb R`.
-
     margins : list of :class:`~openturns.Distribution`
         The :math:`p` marginal distributions.
-
     families : :class:`~numpy.ndarray`
         The copula family matrix. It describes the family type of each pair
         of variables. See the Vine Copula package for a description of the
         available copulas and their respective indexes.
-
     vine_structure : :class:`~numpy.ndarray` or None, optional (default=None)
         The Vine copula structure matrix. It describes the construction of the
         vine tree.
         If None, a default matrix is created.
-
     fixed_params : :class:`~numpy.ndarray`, str or None, optional(default=None)
         The matrix of copula parameters for the fixed copula. Warning: the 
         matrix should contains NaN for all parameters which are not fixed.
         If str, it should be the path to a csv file describing the matrix.
         If None, no parameters are fixed and a default matrix is created.
-        
     bounds_tau : :class:`~numpy.ndarray`, str or None, optional(default=None)
         The matrix of bounds for the exploration of dependencies. The bounds
         have to be on the Kendall's Tau.
         If str, it should be the path to a csv file describing the matrix.
         If None, no bounds are setted and a default matrix is created.
-
-    copula_type : string, optionnal (default='vine')
+    copula_type : string, optional (default='vine')
         The type of copula. Available types:
         - 'vine': Vine Copula construction
         - 'normal': Multi dimensionnal Gaussian copula.
@@ -97,20 +91,19 @@ class ConservativeEstimate(object):
         self.bounds_tau = bounds_tau
         self.copula_type = copula_type
 
-    def gridsearch_minimize(self, n_dep_param, n_input_sample, grid_type='lhs',
-                            dep_measure='kendall-tau', q_func=np.var, 
-                            lhs_grid_criterion='centermaximin', keep_input_samples=True,
-                            use_grid=None, save_grid=None, grid_path='.',
-                            random_state=None):
-        """Quantile minimization through a grid in the dependence parameter
-        space.
+    def gridsearch(self, n_dep_param, n_input_sample, grid_type='lhs',
+                   dep_measure='kendall-tau', q_func=np.var, 
+                   lhs_grid_criterion='centermaximin', keep_input_samples=True,
+                   use_grid=None, save_grid=None, grid_path='.',
+                   random_state=None):
+        """Grid search over the dependence parameter space.
         
         Parameters
         ----------
         n_dep_param : int
-            The number of dependence parameters in the grid search.
+            The number of dependence parameters in the grid search.            
         n_input_sample : int
-            The sample size for each dependence parameter.
+            The sample size for each dependence parameter.            
         grid_type : 'lhs', 'rand' or 'fixed, optional (default='lhs')
             The type of grid :
                 
@@ -118,21 +111,19 @@ class ConservativeEstimate(object):
             - 'rand' : a random sampling,
             - 'fixed' : an uniform grid,
             - 'vertices' : sampling over the vertices of the space.
-
-            
         dep_measure : 'kendall-tau' or 'copula-parameter', optional (default='KendallTau')
             The measure of dependence in which the dependence parameters are
-            created.
+            created.            
         q_func : callable, optional (default=np.var)
-            The function output quantity of interest.
+            The function output quantity of interest.            
         lhs_grid_criterion : string, optional (default = 'centermaximin')
             Configuration of the LHS grid sampling.
 
-            * 'centermaximin' (default),
-            * 'center',
-            * 'maximin',
-            * 'correlation'.
-
+            - 'centermaximin' (default),
+            - 'center',
+            - 'maximin',
+            - 'correlation'.
+            
         Returns
         -------
         A list of DependenceResult instances.
@@ -266,6 +257,40 @@ class ConservativeEstimate(object):
             return output_sample, input_sample
         else:
             return output_sample
+        
+    def incomplete(self, n_input_sample, q_func=np.var, 
+                     keep_input_sample=True, random_state=None):
+        """Simulates from the incomplete probability distribution.
+
+        Parameters
+        ----------
+        n_input_sample : int
+            The number of observations in the sampling of :math:`\mathbf X`.
+            
+        Returns
+        -------
+        
+        """
+        rng = check_random_state(random_state)
+        assert callable(q_func), "Quantity function is not callable"
+
+        param = [0.]*self._n_pairs
+        out = self.stochastic_function(param=param, 
+                                       n_input_sample=n_input_sample,
+                                       return_input_sample=keep_input_sample, 
+                                       random_state=rng)
+        
+        if keep_input_sample:
+            input_sample, output_sample = out
+        else:
+            output_sample = out
+            
+        return ListDependenceResult(margins=self._margins,
+                                    input_samples=input_sample,
+                                    output_samples=output_sample,
+                                    q_func=q_func,
+                                    run_type='incomplete',
+                                    random_state=rng)
 
     def independence(self, n_input_sample, q_func=np.var, 
                      keep_input_sample=True, random_state=None):
@@ -276,10 +301,9 @@ class ConservativeEstimate(object):
         ----------
         n_input_sample : int
             The number of observations in the sampling of :math:`\mathbf{X}`.
-
-        seed : int or None, optional (default=None)
-            If int, ``seed`` is the seed used by the random number generator;
-            If None, ``seed`` is the seed is random.
+            
+        Returns
+        -------
         """
         rng = check_random_state(random_state)
         assert callable(q_func), "Quantity function is not callable"
@@ -292,6 +316,7 @@ class ConservativeEstimate(object):
         if not keep_input_sample:
             input_sample = None
             
+        # XXX : change with a DependenceResult class
         return ListDependenceResult(margins=self._margins,
                                     input_samples=input_sample,
                                     output_samples=output_sample,

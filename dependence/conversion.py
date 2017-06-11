@@ -21,7 +21,7 @@ def get_param1_interval(copula):
     elif copula in [3, 13]:
         return 0., np.inf
     elif copula in [23, 33]:
-        return 0., -np.inf,
+        return -np.inf, 0.
     elif copula in [4, 14, 24, 34]:
         return 1., np.inf
     elif copula in [5]:
@@ -160,31 +160,6 @@ class Conversion(object):
             From Kendal dependence parameter to Pearson correlation parameter.
             """
             return rho
-            
-    class ClaytonCopula:
-        """
-        For Clayton copula
-        """
-        @staticmethod
-        def fromParamToKendall(param):
-            """
-            From Pearson correlation parameter to Kendal dependence parameter.
-            """
-            return param / (param + 2.)
-
-        @staticmethod
-        def fromKendallToParam(tau):            
-            """
-            From Kendal dependence parameter to Pearson correlation parameter.
-            """
-            return 2. * tau / (1. - tau)
-            
-        @staticmethod
-        def fromPearsonToParam(rho):
-            """
-            From Kendal dependence parameter to Pearson correlation parameter.
-            """
-            raise NotImplementedError("Cannot convert Pearson to copula parameter for Clayton Copula")
        
          
 def get_pos(dim, k):
