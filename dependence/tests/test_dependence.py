@@ -121,7 +121,7 @@ def test_bidim_additive_gaussian_gridsearch():
                                           families=families)
 
             # Grid results
-            grid_results = impact.gridsearch_minimize(
+            grid_results = impact.gridsearch(
                 n_dep_param=n_params, 
                 n_input_sample=n_input_sample, 
                 grid_type=grid, 
@@ -197,7 +197,7 @@ def test_vines():
                                   families=families)
 
     # Grid results
-    grid_results = impact.gridsearch_minimize(
+    grid_results = impact.gridsearch(
         n_dep_param=n_params, 
         n_input_sample=n_input_sample, 
         grid_type=grid_type, 

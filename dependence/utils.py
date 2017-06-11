@@ -473,6 +473,7 @@ def quantile_func(alpha):
         return np.percentile(x, alpha*100., axis=axis)
     return q_func
 
+
 def proba_func(threshold):
     """To associate an alpha to an empirical distribution function.
     
@@ -496,7 +497,6 @@ def asymptotic_error_quantile(n, q_density, q_alpha):
     """
     """
     return np.sqrt(q_alpha * (1. - q_alpha) / (n * q_density**2))
-
 
 
 def asymptotic_error_proba(n, proba):
