@@ -87,7 +87,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
         if iterative_load is True:
             load_dir = './iterative_result'
         elif isinstance(iterative_load, str):
-            load_dir = os.path.dirname(iterative_load)
+            load_dir = os.path.abspath(iterative_load)
             if not os.path.exists(load_dir):
                 print("Directory %s does not exists" % (load_dir))
         elif iterative_load is False:
@@ -177,19 +177,28 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
                     filename += "_K_%d.hdf5" % (n_dep_param)
 
             if iterative_save and n_pairs >= n_pairs_start:
-                results.to_hdf(filename, input_names, output_names, verbose=verbose, with_input_sample=keep_input_samples)
+                results.to_hdf(filename, input_names, output_names, with_input_sample=keep_input_samples)
 
             if iterative_load :
-                load_result = ListDependenceResult.from_hdf(filename, with_input_sample=load_input_samples, q_func=q_func)
-                # TODO: create a function to check the configurations of two results
-                # TODO: is the testing necessary? If the saving worked, the loading should be ok.
-                np.testing.assert_equal(load_result.families, tmp_families, err_msg="Not good family")
-                np.testing.assert_equal(load_result.bounds_tau, tmp_bounds_tau, err_msg="Not good Bounds")
-                np.testing.assert_equal(load_result.vine_structure, quant_estimate.vine_structure, err_msg="Not good structure")
-
+                name, extension = os.path.splitext(filename)
+                condition = os.path.exists(filename)
+                k = 0
+                while condition:
+                    try:
+                        load_result = ListDependenceResult.from_hdf(filename, with_input_sample=load_input_samples, q_func=q_func)
+                        # TODO: create a function to check the configurations of two results
+                        # TODO: is the testing necessary? If the saving worked, the loading should be ok.
+                        np.testing.assert_equal(load_result.families, tmp_families, err_msg="Not good family")
+                        np.testing.assert_equal(load_result.bounds_tau, tmp_bounds_tau, err_msg="Not good Bounds")
+                        np.testing.assert_equal(load_result.vine_structure, quant_estimate.vine_structure, err_msg="Not good structure")
+                        condition = False
+                    except AssertionError:
+                        filename = '%s_num_%d%s' % (name, k, extension)
+                        condition = os.path.exists(filename)
+                        k += 1
                 # Replace the actual results with the loaded results (this results + all the previous saved ones)
                 results = load_result
-
+                
             # Name if the result dictionary
             result_name = str(selected_pairs + [(i, j)])[1:-1]
             all_results[iteration][result_name] = results

@@ -1024,7 +1024,7 @@ class ListDependenceResult(list):
                             np.testing.assert_array_equal(hdf_store.attrs['Bounds Tau'], self.bounds_tau, err_msg="Different bounds on Tau")
                         elif self._fixed_pairs:
                             raise ValueError('It should not have constraints to be in the same output file.')
-                        np.testing.assert_array_equal(hdf_store.attrs['Copula Structure'], self.vine_structure, err_msg="Different copula structures")
+                        np.testing.assert_array_equal(hdf_store.attrs['Copula Structure'], self.vine_structure, err_msg="Different vine structures")
                         np.testing.assert_array_equal(hdf_store.attrs['Input Names'], input_names, err_msg="Different Input Names")
                         np.testing.assert_array_equal(hdf_store.attrs['Output Names'], output_names, err_msg="Different output Names")
       
