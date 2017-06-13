@@ -12,7 +12,7 @@ LIB_PARAMS = ['iterative_save', 'iterative_load', 'input_names',
 
 
 def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_init=20, max_n_pairs=5, grid_type='lhs', 
-                            q_func=np.var, n_add_pairs=1, n_remove_pairs=1, adapt_vine_structure=True,
+                            q_func=np.var, n_add_pairs=1, n_remove_pairs=1, adapt_vine_structure=True, delta=0.1,
                             with_bootstrap=False, verbose=False, **kwargs):
     """Use an iterative algorithm to obtain the worst case quantile and its dependence structure.
 
@@ -134,7 +134,9 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     cost = 0
     n_pairs = 0
     iteration = 0
-    while n_pairs < max_n_pairs:
+    min_quant_iter = []
+    stop_conditions = False
+    while not stop_conditions:
         min_quantity = {}
         all_results.append({})
         for i, j in indices:
@@ -225,6 +227,12 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
         # Get the min from the iterations
         sorted_quantities = sorted(min_quantity.items(), key=lambda x: x[1])
         
+        # Delay of the first iteration
+        if iteration == 0:
+            delta_q_init = abs(sorted_quantities[0][1] - sorted_quantities[-1][1])
+            
+        min_quant_iter.append(sorted_quantities[0][1])
+        
         if (n_remove_pairs > 0) and (n_remove_pairs < len(sorted_quantities)-1):
             # The pairs to remove
             for pair in sorted_quantities[-n_remove_pairs:]:
@@ -249,11 +257,22 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
             print('Total number of evaluations = %d. Minimum quantity at %.2f.\n' % (cost, min_quantity[selected_pair]))
             
 
+        # Stop conditions
+        if n_pairs >= max_n_pairs:
+            stop_conditions = True
+            print('Max number of pairs reached')
+            
+        if iteration > 0:
+            delta_q = abs(min_quant_iter[-1] - min_quant_iter[-2])
+            if delta_q <= delta*delta_q_init:
+                stop_conditions = True
+                print('Minimum_variation not fulfiled: %.2f <= %0.2f' % (delta_q, delta*delta_q_init))
+            
         n_pairs += n_add_pairs
-        iteration += 1
         if n_dep_param is not None:
             n_dep_param = n_dep_param_init*int(np.sqrt(n_pairs+1))
-
+            
+        iteration += 1
     return all_results
 
 

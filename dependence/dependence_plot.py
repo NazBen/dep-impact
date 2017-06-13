@@ -86,7 +86,7 @@ def matrix_plot_results(results, indep_result=None, grid_result=None,
     fig.tight_layout()
     
     
-def plot_iterative_results(all_results, indep_result=None, grid_result=None, 
+def plot_iterative_results(all_results, indep_result=None, grid_results=None, 
                            q_func=None, figsize=(8, 4), 
                            quantity_name='Quantity', with_bootstrap=False):
     """
@@ -102,7 +102,7 @@ def plot_iterative_results(all_results, indep_result=None, grid_result=None,
     cmap = plt.get_cmap('jet')
     n_p = 0
     n_p += 1 if indep_result is not None else 0
-    n_p += 1 if grid_result is not None else 0
+    n_p += 1 if grid_results is not None else 0
     colors = [cmap(i) for i in np.linspace(0, 1, n_levels+n_p)]
     
     # Number of pairs at each iteration
@@ -124,12 +124,13 @@ def plot_iterative_results(all_results, indep_result=None, grid_result=None,
                 color=colors[0])
         
     
-    if grid_result is not None:
-        ax.plot([n_pairs[0], n_pairs[-1]], [grid_result.quantity]*2, '-o', 
-                color=colors[1], label='grid-search with $K=1000$')
+    if grid_results is not None:
+        min_grid_result = grid_results.min_result
+        ax.plot([n_pairs[0], n_pairs[-1]], [min_grid_result.quantity]*2, '-o', 
+                color=colors[1], label='grid-search with $K=%d$' % (grid_results.n_params))
         if with_bootstrap:
-            grid_result.compute_bootstrap()
-            boot = grid_result.bootstrap_sample
+            min_grid_result.compute_bootstrap()
+            boot = min_grid_result.bootstrap_sample
             up = np.percentile(boot, 95)
             down = np.percentile(boot, 5)
             ax.plot([n_pairs[0], n_pairs[-1]], [up]*2, '--', 
