@@ -280,12 +280,17 @@ class ConservativeEstimate(object):
                                        return_input_sample=keep_input_sample, 
                                        random_state=rng)
         
+        
         if keep_input_sample:
-            input_sample, output_sample = out
+            output_sample, input_sample = out
         else:
             output_sample = out
             
         return ListDependenceResult(margins=self._margins,
+                                    families=self.families,
+                                    vine_structure = self.vine_structure,
+                                    bounds_tau=self.bounds_tau,
+                                    fixed_params=self.fixed_params,
                                     input_samples=input_sample,
                                     output_samples=output_sample,
                                     q_func=q_func,
@@ -709,7 +714,7 @@ class ListDependenceResult(list):
         if "output_id" in kwargs:
             self.output_id = kwargs["output_id"]
 
-        if dep_params is not None:
+        if run_type in ['grid-search', 'iterative']:
             assert output_samples is not None, \
                 "Add some output sample if you're adding dependence parameters"
                 
@@ -733,7 +738,29 @@ class ListDependenceResult(list):
                 self.output_dim = 1
             else:
                 self.output_dim = output_sample.shape[1]
-        elif output_samples is not None:
+        elif run_type == 'independence':
+            # There is data and we suppose it's at independence or a fixed params
+            result = DependenceResult(margins=margins,
+                                          families=families,
+                                          vine_structure=vine_structure,
+                                          fixed_params=fixed_params,
+                                          dep_param=0,
+                                          input_sample=input_samples,
+                                          output_sample=output_samples,
+                                          q_func=q_func,
+                                          random_state=random_state,
+                                          output_id=self.output_id)
+            self.families = 0
+            self.vine_structure = 0
+            self.bounds_tau = 0
+            self.fixed_params = 0
+            self.grid_type = 0
+            self.append(result)
+            if output_samples.shape[0] == output_samples.size:
+                self.output_dim = 1
+            else:
+                self.output_dim = output_samples.shape[1]
+        elif run_type == 'incomplete':
             # There is data and we suppose it's at independence or a fixed params
             result = DependenceResult(margins=margins,
                                           families=families,
@@ -746,10 +773,6 @@ class ListDependenceResult(list):
                                           random_state=random_state,
                                           output_id=self.output_id)
             
-            self.families = 0
-            self.vine_structure = 0
-            self.bounds_tau = 0
-            self.fixed_params = 0
             self.grid_type = 0
             self.append(result)
             if output_samples.shape[0] == output_samples.size:
