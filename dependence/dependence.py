@@ -6,6 +6,7 @@ of interest of a model output.
 TODO:
     - Make test functions
     - Clean the code
+    - Add a load/save to DependenceResult class
 """
 
 import operator
@@ -738,6 +739,7 @@ class ListDependenceResult(list):
                 self.output_dim = 1
             else:
                 self.output_dim = output_sample.shape[1]
+                
         elif run_type == 'independence':
             # There is data and we suppose it's at independence or a fixed params
             result = DependenceResult(margins=margins,
@@ -746,7 +748,7 @@ class ListDependenceResult(list):
                                           fixed_params=fixed_params,
                                           dep_param=0,
                                           input_sample=input_samples,
-                                          output_sample=output_samples,
+                                          output_sample=output_samples[0],
                                           q_func=q_func,
                                           random_state=random_state,
                                           output_id=self.output_id)
@@ -756,10 +758,8 @@ class ListDependenceResult(list):
             self.fixed_params = 0
             self.grid_type = 0
             self.append(result)
-            if output_samples.shape[0] == output_samples.size:
-                self.output_dim = 1
-            else:
-                self.output_dim = output_samples.shape[1]
+            self.output_dim = result.output_dim
+            
         elif run_type == 'incomplete':
             # There is data and we suppose it's at independence or a fixed params
             result = DependenceResult(margins=margins,
@@ -768,18 +768,15 @@ class ListDependenceResult(list):
                                           fixed_params=fixed_params,
                                           dep_param=0,
                                           input_sample=input_samples,
-                                          output_sample=output_samples,
+                                          output_sample=output_samples[0],
                                           q_func=q_func,
                                           random_state=random_state,
                                           output_id=self.output_id)
             
             self.grid_type = 0
             self.append(result)
-            if output_samples.shape[0] == output_samples.size:
-                self.output_dim = 1
-            else:
-                self.output_dim = output_samples.shape[1]
-            
+            self.output_dim = result.output_dim
+
         self.rng = check_random_state(random_state)
         self._bootstrap_samples = None
 
@@ -1151,7 +1148,6 @@ class ListDependenceResult(list):
             
             params = hdf_store['dependence_params'].value
             run_type = hdf_store.attrs['Run Type']
-            n_params = hdf_store.attrs['Grid Size']
             families = hdf_store.attrs['Copula Families']
             vine_structure = hdf_store.attrs['Copula Structure']
             #copula_type = hdf_store.attrs['Copula Type']
@@ -1168,17 +1164,7 @@ class ListDependenceResult(list):
             if 'Bounds Tau' in hdf_store.attrs.keys():
                 bounds_tau = hdf_store.attrs['Bounds Tau']
 
-            
-            # Version 2
-            if 'Margins' in hdf_store.attrs:
-                margins = dict_to_margins(json.loads(hdf_store.attrs['Margins']))
-            else:
-                margins = []
-                for i in range(input_dim):
-                    marg_f = 'Marginal_%d Family' % (i)
-                    marg_p = 'Marginal_%d Parameters' % (i)
-                    marginal = getattr(ot, hdf_store.attrs[marg_f])(*hdf_store.attrs[marg_p])
-                    margins.append(marginal)
+            margins = dict_to_margins(json.loads(hdf_store.attrs['Margins']))
                 
             grid_type = None
             grid_filename = None
@@ -1191,6 +1177,7 @@ class ListDependenceResult(list):
                     lhs_grid_criterion = hdf_store.attrs['LHS Criterion']
                 
             output_names = hdf_store.attrs['Output Names']
+            
             # For each experiment
             for j_exp, index in enumerate(list_index):
                 grp = hdf_store[index] # Group of the experiment
