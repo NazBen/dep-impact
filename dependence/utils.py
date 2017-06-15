@@ -842,5 +842,3 @@ def get_pair(dim, index, with_plus=True):
                 else:
                     return [i, j]
             k+=1
-
-

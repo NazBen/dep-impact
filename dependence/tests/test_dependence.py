@@ -106,6 +106,72 @@ def true_additive_gaussian_probability(x, dim, sigma, nu=None, const=None):
     return 0.5 * (1. + erf(x / (sigma_y * np.sqrt(2.))))
 
 
+def check_dims(obj, dim):
+    """
+    """
+    assert len(obj.margins) == dim
+    assert obj.families.shape[0] == dim
+    assert obj.vine_structure.shape[0] == dim
+    assert obj.bounds_tau.shape[0] == dim
+    assert obj.fixed_params.shape[0] == dim
+    
+    
+def test_modification_dimension():
+    dim = 2
+    families = np.tril(np.ones((dim, dim)), k=-1)
+    
+    impact = ConservativeEstimate(model_func=func_sum,
+                                  margins=[ot.Normal()]*dim,
+                                  families=families)    
+    check_dims(impact, dim)
+    for dim in range(3, 6):
+        impact.margins = [ot.Normal()]*dim
+        assert len(impact.margins) == dim
+        
+        impact.families = np.tril(np.ones((dim, dim)), k=-1)
+        check_dims(impact, dim)
+
+
+def test_modification_families():
+    dim = 8
+    families = np.tril(np.ones((dim, dim)), k=-1)
+    
+    impact = ConservativeEstimate(model_func=func_sum,
+                                  margins=[ot.Normal()]*dim,
+                                  families=families)
+    check_dims(impact, dim)
+    
+    n_ind_pairs = 3
+    ind_pairs = []
+    for p in range(n_ind_pairs):
+        # Set a family to independence
+        condition = True
+        while condition:
+            i = np.random.randint(1, dim)
+            j = np.random.randint(0, i)
+            pair = [i, j] 
+            if pair not in ind_pairs:
+                ind_pairs.append(pair)
+                condition = False
+        families[pair[0], pair[1]] = 0
+        impact.families = families
+        pairs_lvl = get_tree_pairs(impact.vine_structure, 0)
+        for ind_pair in ind_pairs:
+            assert (ind_pair in pairs_lvl) or (list(reversed(ind_pair)) in pairs_lvl) 
+        check_dims(impact, dim)
+    
+
+def get_tree_pairs(structure, lvl):
+    """
+    """
+    dim = structure.shape[0]
+    pairs = []
+    for l in range(dim-1-lvl):
+        i = structure[l, l] - 1
+        j = structure[-1-lvl, l] - 1
+        pairs.append([i, j])
+    return pairs
+
 def test_bidim_additive_gaussian_gridsearch():
     dim = 2
     n_params = 50
@@ -162,7 +228,7 @@ def test_independence():
                                           margins=[ot.Normal()]*dim,
                                           families=families)
     
-            indep_result = impact.independence(n_input_sample=n_input_sample)[0]
+            indep_result = impact.independence(n_input_sample=n_input_sample)
     
             sigma = dep_params_list_to_matrix(0., dim)
             true_quantile = true_additive_gaussian_quantile(alpha, dim, sigma)
@@ -205,5 +271,7 @@ def test_vines():
     
     print(grid_results.min_quantity)
     
+
 if __name__ == '__main__':
-    test_vines()
+    #test_modification_dimension()
+    test_modification_families()

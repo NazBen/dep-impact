@@ -406,8 +406,23 @@ class ConservativeEstimate(object):
                 print("Don't forget to change the family matrix.")
         if hasattr(self, '_vine_structure'):
             if self._vine_structure.shape[0] != self._input_dim:
-                print("Don't forget to change the structure matrix")
-
+                # If it was a custom vine
+                if self._custom_vine_structure:
+                    print("Don't forget to change the R-vine array")
+                else:
+                    self.vine_structure = None
+        if hasattr(self, '_bounds_tau'):
+            if self._bounds_tau.shape[0] != self._input_dim:
+                # If the user cares about the bounds
+                if self._custom_bounds_tau:
+                    print("Don't forget to change the bounds matrix")
+                else:
+                    self.bounds_tau = None
+        if hasattr(self, '_fixed_params'):
+            if self._fixed_params.shape[0] != self._input_dim:
+                if self._custom_fixed_params:
+                    print("Don't forget to change the fixed params matrix")
+                    
     @property
     def families(self):
         """The copula families.
@@ -446,7 +461,6 @@ class ConservativeEstimate(object):
         
         self._n_pairs = len(self._pair_ids)
 
-        # TODO: correct the dimension of copula_parameters. Make it the same size as the pairs.
         self._copula_converters = [Conversion(family) for family in self._family_list]
 
         if hasattr(self, '_input_dim'):
@@ -455,7 +469,20 @@ class ConservativeEstimate(object):
 
         if hasattr(self, '_vine_structure'):
             if self._families.shape[0] != self._vine_structure.shape[0]:
-                print("Don't forget to change the vine_structure.")
+                if self._custom_vine_structure:
+                    print("Don't forget to change the R-vine array.")
+                    
+            # It should always be done in case if a pair has been set independent
+            if not self._custom_vine_structure:
+                self.vine_structure = None
+                
+                
+        if hasattr(self, '_fixed_params'):
+            if self._families.shape[0] != self._fixed_params.shape[0]:
+                if self._custom_fixed_params:
+                    print("Don't forget to change the fixed parameters.")
+                else:
+                    self.fixed_params = None
 
     @property
     def corr_dim_(self):
@@ -515,17 +542,19 @@ class ConservativeEstimate(object):
     def vine_structure(self, structure):
         if structure is None:
             listed_pairs = self._indep_pairs + self._fixed_pairs      
+            dim = self.input_dim
             if len(listed_pairs) > 0:
-                dim = self.input_dim
                 pairs_iter_id = [get_pair_id(dim, pair, with_plus=False) for pair in listed_pairs]
                 pairs_by_levels = get_pairs_by_levels(dim, pairs_iter_id)
                 structure = get_possible_structures(dim, pairs_by_levels)[1]
             else:
                 structure = np.zeros((dim, dim), dtype=int)
                 for i in range(dim):
-                    structure[i, 0:i+1, ] = i + 1           
+                    structure[i, 0:i+1] = i + 1       
+            self._custom_vine_structure = False
         else:
-            check_matrix(structure)
+            check_matrix(structure)  
+            self._custom_vine_structure = True
         self._vine_structure = structure
 
     @property
@@ -557,11 +586,13 @@ class ConservativeEstimate(object):
         """
         
         dim = self._input_dim
+        self._custom_bounds_tau = True
         # If no bounds given, we take the min and max, depending on the copula family
         if value is None:
             bounds_tau = np.zeros((dim, dim))
             for i, j in self._pairs:
                 bounds_tau[i, j], bounds_tau[j, i] = get_tau_interval(self._families[i, j])
+            self._custom_bounds_tau = False
         elif isinstance(value, str):
             # It should be a path to a csv file
             bounds_tau = pd.read_csv(value, index_col=0).values
@@ -609,10 +640,12 @@ class ConservativeEstimate(object):
     @fixed_params.setter
     def fixed_params(self, value):
         # TODO: if it is changed multiple times, it keeps deleting pairs...
+        self._custom_fixed_params = True
         if value is None:
             # There is no fixed pairs
             matrix = np.zeros((self._input_dim, self._input_dim), dtype=float)
-            matrix[:] = None
+            matrix[:] = np.nan
+            self._custom_fixed_params = False
         elif isinstance(value, str):
             # It should be a path to a csv file
             matrix = pd.read_csv(value, index_col=0).values
