@@ -1,5 +1,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
+import pandas as pd
+from scipy import stats
+
+sns.set(style="ticks", color_codes=True)
 
 def get_all_quantity(results, q_func=None):
     """
@@ -53,8 +58,32 @@ def get_n_pairs(all_results):
         
     return n_pairs
 
+def corrfunc_plot(x, y, **kws):
+    """
+    
+    
+    Source: https://stackoverflow.com/a/30942817/5224576
+    """
+    r, _ = stats.pearsonr(x, y)
+    ax = plt.gca()
+    ax.annotate("r = {:.2f}".format(r),
+                xy=(.1, .9), xycoords=ax.transAxes)
 
-def matrix_plot_results(results, indep_result=None, grid_result=None, 
+def matrix_plot_input(result):
+    """
+    """
+    df = pd.DataFrame(result.input_sample)
+    
+    g = sns.PairGrid(df, palette=["red"])
+#    g.map_upper(plt.scatter, s=10)
+    g.map_offdiag(plt.scatter, s=10)
+    g.map_diag(sns.distplot, kde=False)
+#    g.map_lower(sns.kdeplot, cmap="Blues_d")
+    g.map_lower(corrfunc_plot)
+    
+    return g
+
+def matrix_plot_quantities(results, indep_result=None, grid_result=None, 
                            q_func=None, figsize=(9, 7), dep_measure='kendalls',
                            quantity_name='Quantity', with_bootstrap=False):
     """

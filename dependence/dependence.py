@@ -21,6 +21,7 @@ import h5py
 from sklearn.utils import check_random_state
 from scipy.stats import gaussian_kde, norm
 
+from .iterative_vines import get_pair_id, get_pairs_by_levels, get_possible_structures
 from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
 from .utils import list_to_matrix, matrix_to_list, bootstrap, to_kendalls, \
@@ -87,8 +88,8 @@ class ConservativeEstimate(object):
         self.model_func = model_func
         self.margins = margins
         self.families = families
-        self.vine_structure = vine_structure
         self.fixed_params = fixed_params
+        self.vine_structure = vine_structure
         self.bounds_tau = bounds_tau
         self.copula_type = copula_type
 
@@ -287,16 +288,14 @@ class ConservativeEstimate(object):
         else:
             output_sample = out
             
-        return ListDependenceResult(margins=self._margins,
-                                    families=self.families,
-                                    vine_structure = self.vine_structure,
-                                    bounds_tau=self.bounds_tau,
-                                    fixed_params=self.fixed_params,
-                                    input_samples=input_sample,
-                                    output_samples=output_sample,
-                                    q_func=q_func,
-                                    run_type='incomplete',
-                                    random_state=rng)
+        return DependenceResult(margins=self._margins,
+                                families=self.families,
+                                vine_structure = self.vine_structure,
+                                fixed_params=self.fixed_params,
+                                input_sample=input_sample,
+                                output_sample=output_sample,
+                                q_func=q_func,
+                                random_state=rng)
 
     def independence(self, n_input_sample, q_func=np.var, 
                      keep_input_sample=True, random_state=None):
@@ -322,13 +321,11 @@ class ConservativeEstimate(object):
         if not keep_input_sample:
             input_sample = None
             
-        # XXX : change with a DependenceResult class
-        return ListDependenceResult(margins=self._margins,
-                                    input_samples=input_sample,
-                                    output_samples=output_sample,
-                                    q_func=q_func,
-                                    run_type='independence',
-                                    random_state=rng)
+        return DependenceResult(margins=self._margins,
+                                input_sample=input_sample,
+                                output_sample=output_sample,
+                                q_func=q_func,
+                                random_state=rng)
 
     def _get_sample(self, param, n_sample, param2=None):
         """Creates the observations of the joint input distribution.
@@ -518,6 +515,12 @@ class ConservativeEstimate(object):
 
     @vine_structure.setter
     def vine_structure(self, structure):
+        if True:
+            listed_pairs = self._indep_pairs + self._fixed_pairs         
+            dim = self.input_dim
+            pairs_iter_id = [get_pair_id(dim, pair, with_plus=False) for pair in listed_pairs]
+            pairs_by_levels = get_pairs_by_levels(dim, pairs_iter_id)
+            structure = get_possible_structures(dim, pairs_by_levels)[1]
         if structure is None:
             dim = self._input_dim
             structure = np.zeros((dim, dim), dtype=int)
@@ -607,6 +610,7 @@ class ConservativeEstimate(object):
 
     @fixed_params.setter
     def fixed_params(self, value):
+        # TODO: if it is changed multiple times, it keeps deleting pairs...
         if value is None:
             # There is no fixed pairs
             matrix = np.zeros((self._input_dim, self._input_dim), dtype=float)
@@ -641,6 +645,8 @@ class ConservativeEstimate(object):
                         self._pair_ids.remove(k)
                         self._pairs.remove([i, j])
                         self._n_pairs -= 1
+                        self._bounds_tau[i, j] = np.nan
+                        self._bounds_tau[j, i] = np.nan
                 k += 1
 
 
