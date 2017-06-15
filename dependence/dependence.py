@@ -88,9 +88,9 @@ class ConservativeEstimate(object):
         self.model_func = model_func
         self.margins = margins
         self.families = families
+        self.bounds_tau = bounds_tau
         self.fixed_params = fixed_params
         self.vine_structure = vine_structure
-        self.bounds_tau = bounds_tau
         self.copula_type = copula_type
 
     def gridsearch(self, n_dep_param, n_input_sample, grid_type='lhs',
@@ -476,7 +476,6 @@ class ConservativeEstimate(object):
             if not self._custom_vine_structure:
                 self.vine_structure = None
                 
-                
         if hasattr(self, '_fixed_params'):
             if self._families.shape[0] != self._fixed_params.shape[0]:
                 if self._custom_fixed_params:
@@ -630,7 +629,7 @@ class ConservativeEstimate(object):
         self._bounds_par = bounds_par
         self._bounds_tau_list = bounds_tau_list
         self._bounds_par_list = bounds_par_list
-
+        
     @property
     def fixed_params(self):
         """The pairs that are fixed to a given dependence parameter value.
@@ -673,12 +672,18 @@ class ConservativeEstimate(object):
                         self._fixed_pairs_ids.append(k)
                         self._fixed_params_list.append(matrix[i, j])
                         # And we remove it from the list of dependent pairs
-                        self._pair_ids.remove(k)
-                        self._pairs.remove([i, j])
-                        self._n_pairs -= 1
+                        if k in self._pair_ids:
+                            self._pair_ids.remove(k)
+                            self._pairs.remove([i, j])
+                            self._n_pairs -= 1
                         self._bounds_tau[i, j] = np.nan
                         self._bounds_tau[j, i] = np.nan
                 k += 1
+                
+        if hasattr(self, '_vine_structure'):                  
+            # It should always be done in case if a pair has been set independent
+            if not self._custom_vine_structure:
+                self.vine_structure = None
 
 
 class ListDependenceResult(list):

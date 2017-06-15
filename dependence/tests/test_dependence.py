@@ -136,13 +136,16 @@ def test_modification_families():
     dim = 8
     families = np.tril(np.ones((dim, dim)), k=-1)
     
+    ind_pair = [3, 2]
+    families[ind_pair[0], ind_pair[1]] = 0.5
+    
     impact = ConservativeEstimate(model_func=func_sum,
                                   margins=[ot.Normal()]*dim,
                                   families=families)
     check_dims(impact, dim)
     
-    n_ind_pairs = 3
-    ind_pairs = []
+    n_ind_pairs = 2
+    ind_pairs = [ind_pair]
     for p in range(n_ind_pairs):
         # Set a family to independence
         condition = True
@@ -159,8 +162,42 @@ def test_modification_families():
         for ind_pair in ind_pairs:
             assert (ind_pair in pairs_lvl) or (list(reversed(ind_pair)) in pairs_lvl) 
         check_dims(impact, dim)
+        
+        
+def test_modification_fixed_params():
+    dim = 6
+    families = np.tril(np.ones((dim, dim)), k=-1)
+    fixed_params = np.zeros((dim, dim))
+    fixed_params[:] = np.nan
     
-
+    fixed_pair = [3, 2]
+    fixed_params[fixed_pair[0], fixed_pair[1]] = 0.5
+    
+    impact = ConservativeEstimate(model_func=func_sum,
+                                  margins=[ot.Normal()]*dim,
+                                  families=families,
+                                  fixed_params=fixed_params)
+    check_dims(impact, dim)
+   
+    n_fixed_pair = 2
+    fixed_pairs = [fixed_pair]
+    for p in range(n_fixed_pair):
+        # Set a family to independence
+        condition = True
+        while condition:
+            i = np.random.randint(1, dim)
+            j = np.random.randint(0, i)
+            pair = [i, j] 
+            if pair not in fixed_pairs:
+                fixed_pairs.append(pair)
+                condition = False
+        fixed_params[pair[0], pair[1]] = 0.5
+        impact.fixed_params = fixed_params
+        pairs_lvl = get_tree_pairs(impact.vine_structure, 0)
+        for ind_pair in fixed_pairs:
+            assert (ind_pair in pairs_lvl) or (list(reversed(ind_pair)) in pairs_lvl) 
+        check_dims(impact, dim)
+        
 def get_tree_pairs(structure, lvl):
     """
     """
@@ -274,4 +311,4 @@ def test_vines():
 
 if __name__ == '__main__':
     #test_modification_dimension()
-    test_modification_families()
+    test_modification_fixed_params()
