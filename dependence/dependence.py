@@ -21,12 +21,12 @@ import h5py
 from sklearn.utils import check_random_state
 from scipy.stats import gaussian_kde, norm
 
-from .iterative_vines import get_pair_id, get_pairs_by_levels, get_possible_structures
 from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
 from .utils import list_to_matrix, matrix_to_list, bootstrap, to_kendalls, \
     load_dependence_grid, to_copula_params, get_grid_sample, \
-    save_dependence_grid, margins_to_dict, dict_to_margins, asymptotic_error_quantile
+    save_dependence_grid, margins_to_dict, dict_to_margins, asymptotic_error_quantile, \
+    get_pair_id, get_pairs_by_levels, get_possible_structures
 
 OPERATORS = {">": operator.gt, ">=": operator.ge,
              "<": operator.lt, "<=": operator.le}
@@ -119,7 +119,7 @@ class ConservativeEstimate(object):
         q_func : callable, optional (default=np.var)
             The function output quantity of interest.            
         lhs_grid_criterion : string, optional (default = 'centermaximin')
-            Configuration of the LHS grid sampling.
+            Configuration of the LHS grid sampling:
 
             - 'centermaximin' (default),
             - 'center',
@@ -507,25 +507,23 @@ class ConservativeEstimate(object):
 
     @property
     def vine_structure(self):
-        """The structure of Vine.
-
-        Array of int.
+        """The R-vine array.
         """
         return self._vine_structure
 
     @vine_structure.setter
     def vine_structure(self, structure):
-        if True:
-            listed_pairs = self._indep_pairs + self._fixed_pairs         
-            dim = self.input_dim
-            pairs_iter_id = [get_pair_id(dim, pair, with_plus=False) for pair in listed_pairs]
-            pairs_by_levels = get_pairs_by_levels(dim, pairs_iter_id)
-            structure = get_possible_structures(dim, pairs_by_levels)[1]
         if structure is None:
-            dim = self._input_dim
-            structure = np.zeros((dim, dim), dtype=int)
-            for i in range(dim):
-                structure[i, 0:i+1, ] = i + 1
+            listed_pairs = self._indep_pairs + self._fixed_pairs      
+            if len(listed_pairs) > 0:
+                dim = self.input_dim
+                pairs_iter_id = [get_pair_id(dim, pair, with_plus=False) for pair in listed_pairs]
+                pairs_by_levels = get_pairs_by_levels(dim, pairs_iter_id)
+                structure = get_possible_structures(dim, pairs_by_levels)[1]
+            else:
+                structure = np.zeros((dim, dim), dtype=int)
+                for i in range(dim):
+                    structure[i, 0:i+1, ] = i + 1           
         else:
             check_matrix(structure)
         self._vine_structure = structure

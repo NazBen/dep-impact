@@ -69,19 +69,22 @@ def corrfunc_plot(x, y, **kws):
     ax.annotate("r = {:.2f}".format(r),
                 xy=(.1, .9), xycoords=ax.transAxes)
 
-def matrix_plot_input(result):
+def matrix_plot_input(result, kde=True):
     """
     """
     df = pd.DataFrame(result.input_sample)
     
-    g = sns.PairGrid(df, palette=["red"])
-#    g.map_upper(plt.scatter, s=10)
-    g.map_offdiag(plt.scatter, s=10)
-    g.map_diag(sns.distplot, kde=False)
-#    g.map_lower(sns.kdeplot, cmap="Blues_d")
-    g.map_lower(corrfunc_plot)
+    plot = sns.PairGrid(df, palette=["red"])
+    if kde:
+        plot.map_upper(plt.scatter, s=10)
+        plot.map_lower(sns.kdeplot, cmap="Blues_d")
+    else:
+        plot.map_offdiag(plt.scatter, s=10)
+        
+    plot.map_diag(sns.distplot, kde=False)
+    plot.map_lower(corrfunc_plot)
     
-    return g
+    return plot
 
 def matrix_plot_quantities(results, indep_result=None, grid_result=None, 
                            q_func=None, figsize=(9, 7), dep_measure='kendalls',
