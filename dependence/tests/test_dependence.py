@@ -130,19 +130,33 @@ def test_modification_dimension():
         
         impact.families = np.tril(np.ones((dim, dim)), k=-1)
         check_dims(impact, dim)
-
+        
+        # Test Grid results
+        impact.gridsearch(
+            n_dep_param=10, 
+            n_input_sample=10, 
+            grid_type='lhs', 
+            random_state=0)
 
 def test_modification_families():
     dim = 8
     families = np.tril(np.ones((dim, dim)), k=-1)
     
     ind_pair = [3, 2]
-    families[ind_pair[0], ind_pair[1]] = 0.5
+    families[ind_pair[0], ind_pair[1]] = 0
     
     impact = ConservativeEstimate(model_func=func_sum,
                                   margins=[ot.Normal()]*dim,
                                   families=families)
     check_dims(impact, dim)
+        
+    # Test Grid results
+    impact.gridsearch(
+        n_dep_param=10, 
+        n_input_sample=10, 
+        grid_type='lhs', 
+        
+        random_state=0)
     
     n_ind_pairs = 2
     ind_pairs = [ind_pair]
@@ -163,6 +177,12 @@ def test_modification_families():
             assert (ind_pair in pairs_lvl) or (list(reversed(ind_pair)) in pairs_lvl) 
         check_dims(impact, dim)
         
+        # Test Grid results
+        impact.gridsearch(
+            n_dep_param=10, 
+            n_input_sample=10, 
+            grid_type='lhs', 
+            random_state=0)
         
 def test_modification_fixed_params():
     dim = 6
@@ -177,6 +197,12 @@ def test_modification_fixed_params():
                                   margins=[ot.Normal()]*dim,
                                   families=families,
                                   fixed_params=fixed_params)
+    # Test Grid results
+    impact.gridsearch(
+        n_dep_param=10, 
+        n_input_sample=10, 
+        grid_type='lhs', 
+        random_state=0)
     check_dims(impact, dim)
    
     n_fixed_pair = 2
@@ -197,6 +223,125 @@ def test_modification_fixed_params():
         for ind_pair in fixed_pairs:
             assert (ind_pair in pairs_lvl) or (list(reversed(ind_pair)) in pairs_lvl) 
         check_dims(impact, dim)
+        
+        # Test Grid results
+        impact.gridsearch(
+            n_dep_param=10, 
+            n_input_sample=10, 
+            grid_type='lhs', 
+            random_state=0)
+        
+        
+def test_modification_bounds_tau():
+    dim = 6
+    families = np.tril(np.ones((dim, dim)), k=-1)
+    bounds_tau = np.zeros((dim, dim))
+    bounds_tau[:] = np.nan
+    
+    bounded_pair = [3, 2]
+    bounds_tau[bounded_pair[0], bounded_pair[1]] = -0.5
+    bounds_tau[bounded_pair[1], bounded_pair[0]] = 0.5
+    
+    impact = ConservativeEstimate(model_func=func_sum,
+                                  margins=[ot.Normal()]*dim,
+                                  families=families,
+                                  bounds_tau=bounds_tau)
+    
+    # Test Grid results
+    impact.gridsearch(
+        n_dep_param=10, 
+        n_input_sample=10, 
+        grid_type='lhs', 
+        random_state=0)
+    
+    check_dims(impact, dim)
+   
+    n_bounded = 2
+    bounded_pairs = [bounded_pair]
+    for p in range(n_bounded):
+        # Set a family to independence
+        condition = True
+        while condition:
+            i = np.random.randint(1, dim)
+            j = np.random.randint(0, i)
+            pair = [i, j] 
+            if pair not in bounded_pairs:
+                bounded_pairs.append(pair)
+                condition = False
+        bounds_tau[pair[0], pair[1]] = -0.5
+        bounds_tau[pair[1], pair[0]] = 0.5
+        
+        impact.bounds_tau = bounds_tau
+        check_dims(impact, dim)
+        
+        # Test Grid results
+        impact.gridsearch(
+            n_dep_param=10, 
+            n_input_sample=10, 
+            grid_type='lhs', 
+            random_state=0)
+        
+        
+def test_modification_multiple():
+    dim = 6
+    families = np.tril(np.ones((dim, dim)), k=-1)
+    
+    ind_pair = [1, 0]
+    families[ind_pair[0], ind_pair[1]] = 0
+    
+    bounds_tau = np.zeros((dim, dim))
+    bounds_tau[:] = np.nan
+    
+    bounded_pair = [3, 2]
+    bounds_tau[bounded_pair[0], bounded_pair[1]] = -0.5
+    bounds_tau[bounded_pair[1], bounded_pair[0]] = 0.5
+    
+    fixed_params = np.zeros((dim, dim))
+    fixed_params[:] = np.nan
+    
+    fixed_pair = [2, 1]
+    fixed_params[fixed_pair[0], fixed_pair[1]] = 0.5   
+    
+    
+    impact = ConservativeEstimate(model_func=func_sum,
+                                  margins=[ot.Normal()]*dim,
+                                  families=families,
+                                  bounds_tau=bounds_tau,
+                                  fixed_params=fixed_params)
+    
+    # Test Grid results
+    impact.gridsearch(
+        n_dep_param=10, 
+        n_input_sample=10, 
+        grid_type='lhs', 
+        random_state=0)
+    
+    check_dims(impact, dim)
+   
+    n_bounded = 2
+    bounded_pairs = [bounded_pair]
+    for p in range(n_bounded):
+        # Set a family to independence
+        condition = True
+        while condition:
+            i = np.random.randint(1, dim)
+            j = np.random.randint(0, i)
+            pair = [i, j] 
+            if pair not in bounded_pairs:
+                bounded_pairs.append(pair)
+                condition = False
+        bounds_tau[pair[0], pair[1]] = -0.5
+        bounds_tau[pair[1], pair[0]] = 0.5
+        
+        impact.bounds_tau = bounds_tau
+        check_dims(impact, dim)
+        
+        # Test Grid results
+        impact.gridsearch(
+            n_dep_param=10, 
+            n_input_sample=10, 
+            grid_type='lhs', 
+            random_state=0)
         
 def get_tree_pairs(structure, lvl):
     """
@@ -310,5 +455,8 @@ def test_vines():
     
 
 if __name__ == '__main__':
-    #test_modification_dimension()
-    test_modification_fixed_params()
+#    test_modification_dimension()
+#    test_modification_families()
+#    test_modification_fixed_params()
+#    test_modification_bounds_tau()
+    test_modification_multiple()

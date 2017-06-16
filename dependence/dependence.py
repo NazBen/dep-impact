@@ -7,6 +7,7 @@ TODO:
     - Make test functions
     - Clean the code
     - Add a load/save to DependenceResult class
+    - User np.tril to take the values of the matrices
 """
 
 import operator
@@ -482,6 +483,18 @@ class ConservativeEstimate(object):
                     print("Don't forget to change the fixed parameters.")
                 else:
                     self.fixed_params = None
+                    
+                        
+        if hasattr(self, '_bounds_tau'):
+            if self._families.shape[0] != self._fixed_params.shape[0]:
+                if self._custom_bounds_tau:
+                    print("Don't forget to change the fixed parameters.")
+                else:
+                    self.bounds_tau = None
+                    
+            # It should always be done in case if a pair has been set independent
+            if not self._custom_bounds_tau:
+                self.bounds_tau = None
 
     @property
     def corr_dim_(self):
@@ -555,6 +568,8 @@ class ConservativeEstimate(object):
             check_matrix(structure)  
             self._custom_vine_structure = True
         self._vine_structure = structure
+        self._vine_structure_list = structure[np.tril_indices_from(structure)]
+        
 
     @property
     def input_dim(self):
@@ -604,17 +619,14 @@ class ConservativeEstimate(object):
         for k, p in enumerate(self._pair_ids):
             i, j = self._pairs[k]
             tau_min, tau_max = get_tau_interval(self._family_list[p])
-            if np.isnan(bounds_tau[i, j]):
-                tau_min = tau_min
-            else:
+            
+            if not np.isnan(bounds_tau[i, j]):
                 tau_min = max(bounds_tau[i, j], tau_min)
-            if np.isnan(bounds_tau[j, i]):
-                tau_max = tau_max
-            else:
+                
+            if not np.isnan(bounds_tau[j, i]):
                 tau_max = min(bounds_tau[j, i], tau_max)
                 
             bounds_tau_list.append([tau_min, tau_max])
-            
             # Conversion to copula parameters
             param_min = self._copula_converters[p].to_copula_parameter(tau_min, 'kendall-tau')
             param_max = self._copula_converters[p].to_copula_parameter(tau_max, 'kendall-tau')
@@ -684,6 +696,18 @@ class ConservativeEstimate(object):
             # It should always be done in case if a pair has been set independent
             if not self._custom_vine_structure:
                 self.vine_structure = None
+                
+        if hasattr(self, '_bounds_tau'):                  
+            # It should always be done in case if a pair has been set independent
+            if not self._custom_bounds_tau:
+                self.bounds_tau = None
+            else:
+                bounds_tau = self.bounds_tau
+                # We delete the bounds for the fixed pairs
+                for fixed_pair in self._fixed_pairs:
+                    bounds_tau[fixed_pair[0], fixed_pair[1]] = np.nan
+                    bounds_tau[fixed_pair[1], fixed_pair[0]] = np.nan
+                self.bounds_tau = bounds_tau
 
 
 class ListDependenceResult(list):
