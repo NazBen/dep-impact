@@ -558,7 +558,7 @@ class ConservativeEstimate(object):
             if len(listed_pairs) > 0:
                 pairs_iter_id = [get_pair_id(dim, pair, with_plus=False) for pair in listed_pairs]
                 pairs_by_levels = get_pairs_by_levels(dim, pairs_iter_id)
-                structure = get_possible_structures(dim, pairs_by_levels)[1]
+                structure = get_possible_structures(dim, pairs_by_levels)[0]
             else:
                 structure = np.zeros((dim, dim), dtype=int)
                 for i in range(dim):
@@ -702,12 +702,15 @@ class ConservativeEstimate(object):
             if not self._custom_bounds_tau:
                 self.bounds_tau = None
             else:
-                bounds_tau = self.bounds_tau
-                # We delete the bounds for the fixed pairs
-                for fixed_pair in self._fixed_pairs:
-                    bounds_tau[fixed_pair[0], fixed_pair[1]] = np.nan
-                    bounds_tau[fixed_pair[1], fixed_pair[0]] = np.nan
-                self.bounds_tau = bounds_tau
+                if self.bounds_tau.shape[0] != self.input_dim:
+                    print("Dont't foget to update the bounds matrix")
+                else:
+                    bounds_tau = self.bounds_tau
+                    # We delete the bounds for the fixed pairs
+                    for fixed_pair in self._fixed_pairs:
+                        bounds_tau[fixed_pair[0], fixed_pair[1]] = np.nan
+                        bounds_tau[fixed_pair[1], fixed_pair[0]] = np.nan
+                    self.bounds_tau = bounds_tau
 
 
 class ListDependenceResult(list):

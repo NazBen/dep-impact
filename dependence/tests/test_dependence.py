@@ -20,6 +20,7 @@ from numpy.testing import assert_allclose
 from dependence import ConservativeEstimate
 from dependence.utils import quantile_func, proba_func
 from dependence.tests import func_sum
+from dependence.iterative_vines import iterative_vine_minimize
 
 QUANTILES_PROB = [0.05, 0.01]
 PROB_THRESHOLDS = [1., 2.]
@@ -185,7 +186,7 @@ def test_modification_families():
             random_state=0)
         
 def test_modification_fixed_params():
-    dim = 8
+    dim = 10
     families = np.tril(np.ones((dim, dim)), k=-1)
     fixed_params = np.zeros((dim, dim))
     fixed_params[:] = np.nan
@@ -343,6 +344,35 @@ def test_modification_multiple():
             grid_type='lhs', 
             random_state=0)
         
+        
+def test_iterative():
+    dim = 6
+    alpha = 0.05
+    families = np.tril(np.ones((dim, dim)), k=-1)
+    
+    impact = ConservativeEstimate(model_func=func_sum,
+                                  margins=[ot.Normal()]*dim,
+                                  families=families)
+    algorithm_parameters = {
+        "n_input_sample": 1000,
+        "n_dep_param_init": None,
+        "max_n_pairs": 3,
+        "grid_type": 'vertices',
+        "q_func": quantile_func(alpha),
+        "n_add_pairs": 1,
+        "n_remove_pairs": 0,
+        "adapt_vine_structure": True,
+        "with_bootstrap": False,
+        "verbose": True,
+        "iterative_save": False,
+        "iterative_load": False,
+        "load_input_samples": False,
+        "keep_input_samples": False
+        }
+    
+    iterative_vine_minimize(estimate_object=impact, **algorithm_parameters)
+
+        
 def get_tree_pairs(structure, lvl):
     """
     """
@@ -459,4 +489,5 @@ if __name__ == '__main__':
 #    test_modification_families()
 #    test_modification_fixed_params()
 #    test_modification_bounds_tau()
-    test_modification_multiple()
+#    test_modification_multiple()
+    test_iterative()

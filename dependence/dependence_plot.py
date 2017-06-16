@@ -65,16 +65,27 @@ def corrfunc_plot(x, y, **kws):
     Source: https://stackoverflow.com/a/30942817/5224576
     """
     r, _ = stats.pearsonr(x, y)
+    k, _ = stats.kendalltau(x, y)
     ax = plt.gca()
-    ax.annotate("r = {:.2f}".format(r),
-                xy=(.1, .9), xycoords=ax.transAxes)
+    ax.annotate("r = {:.2f}\nk = {:.2f}".format(r, k),
+                xy=(.1, .8), xycoords=ax.transAxes, 
+                weight='heavy', fontsize=14)
 
-def matrix_plot_input(result, kde=True):
+def matrix_plot_input(result, kde=False, margins=None):
     """
     """
-    df = pd.DataFrame(result.input_sample)
+    input_sample = result.input_sample    
     
-    plot = sns.PairGrid(df, palette=["red"])
+    if margins:
+        sample = np.zeros(input_sample.shape)
+        for i, marginal in enumerate(margins):
+            for j, ui in enumerate(input_sample[:, i]):
+                sample[j, i] = marginal.computeCDF(ui)
+    else:
+        sample = input_sample
+        
+    data = pd.DataFrame(sample)
+    plot = sns.PairGrid(data, palette=["red"])
     if kde:
         plot.map_upper(plt.scatter, s=10)
         plot.map_lower(sns.kdeplot, cmap="Blues_d")
@@ -83,6 +94,9 @@ def matrix_plot_input(result, kde=True):
         
     plot.map_diag(sns.distplot, kde=False)
     plot.map_lower(corrfunc_plot)
+    
+    if margins:
+        plot.set(xlim=(0, 1), ylim=(0, 1))
     
     return plot
 

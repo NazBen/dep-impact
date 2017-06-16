@@ -39,6 +39,8 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     init_family = quant_estimate.families
     init_bounds_tau = quant_estimate.bounds_tau
     fixed_params = quant_estimate.fixed_params.copy()
+    init_indep_pairs = quant_estimate._indep_pairs[:]
+    init_fixed_pairs = quant_estimate._fixed_pairs[:]
     
     # New empty configurations
     families = np.zeros((dim, dim))
@@ -55,12 +57,12 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     indices = np.asarray(np.tril_indices(dim, k=-1)).T.tolist()
     
     # Remove fixed pairs from the list and add in the family matrix
-    for pair in quant_estimate._fixed_pairs:
+    for pair in init_fixed_pairs:
         indices.remove(pair)
         families[pair[0], pair[1]] = init_family[pair[0], pair[1]]
         
     # Remove independent pairs
-    for pair in quant_estimate._indep_pairs:
+    for pair in init_indep_pairs:
         indices.remove(pair)
     
     # Check if the given parameters are known
@@ -132,7 +134,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
         
     ## Algorithm Loop
     cost = 0
-    n_pairs = 0
+    n_pairs = 1
     iteration = 0
     min_quant_iter = []
     stop_conditions = False
@@ -147,17 +149,19 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
             tmp_bounds_tau[i, j] = init_bounds_tau[i, j]
             tmp_bounds_tau[j, i] = init_bounds_tau[j, i]
             
+            # Adapt the vine structure matrix
+            if adapt_vine_structure:
+                pairs_iter = init_indep_pairs + init_fixed_pairs + selected_pairs + [(i, j)]
+                pairs_iter_id = [get_pair_id(dim, pair, with_plus=False) for pair in pairs_iter]
+                pairs_by_levels = get_pairs_by_levels(dim, pairs_iter_id)
+                quant_estimate.vine_structure = get_possible_structures(dim, pairs_by_levels)[0]
+            
             # Family matrix is changed
             quant_estimate.families = tmp_families
             quant_estimate.fixed_params = fixed_params
             quant_estimate.bounds_tau = tmp_bounds_tau
             
-            # Adapt the vine structure matrix
-            if adapt_vine_structure:
-                pairs_iter = selected_pairs + [(i, j)]
-                pairs_iter_id = [get_pair_id(dim, pair, with_plus=False) for pair in pairs_iter]
-                pairs_by_levels = get_pairs_by_levels(dim, pairs_iter_id)
-                quant_estimate.vine_structure = get_possible_structures(dim, pairs_by_levels)[1]
+
 
             # Lets get the results for this family structure
             if n_input_sample > 0 and n_pairs >= n_pairs_start:
@@ -272,7 +276,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
             
         n_pairs += n_add_pairs
         if n_dep_param is not None:
-            n_dep_param = n_dep_param_init*int(np.sqrt(n_pairs+1))
+            n_dep_param = n_dep_param_init*int(np.sqrt(n_pairs))
             
         iteration += 1
     return all_results
