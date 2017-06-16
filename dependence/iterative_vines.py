@@ -172,11 +172,13 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
             
             if iterative_save or iterative_load:
                 cop_str = "_".join([str(l) for l in quant_estimate._family_list])
-                filename = "%s/cop_%s_%s" % (load_dir, cop_str, grid_type)
+                vine_str = "_".join([str(i) for i in quant_estimate._vine_structure_list])
+                filename = "%s/%s" % (load_dir, grid_type)
                 if n_dep_param is None:
-                    filename += "_K_None.hdf5"
+                    filename += "_K_None"
                 else:
-                    filename += "_K_%d.hdf5" % (n_dep_param)
+                    filename += "_K_%d" % (n_dep_param)
+                filename += "_cop_%s_vine_%s.hdf5" % (cop_str, vine_str)
 
             if iterative_save and n_pairs >= n_pairs_start:
                 results.to_hdf(filename, input_names, output_names, with_input_sample=keep_input_samples)

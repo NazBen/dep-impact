@@ -185,7 +185,7 @@ def test_modification_families():
             random_state=0)
         
 def test_modification_fixed_params():
-    dim = 6
+    dim = 8
     families = np.tril(np.ones((dim, dim)), k=-1)
     fixed_params = np.zeros((dim, dim))
     fixed_params[:] = np.nan
@@ -221,7 +221,7 @@ def test_modification_fixed_params():
         impact.fixed_params = fixed_params
         pairs_lvl = get_tree_pairs(impact.vine_structure, 0)
         for ind_pair in fixed_pairs:
-            assert (ind_pair in pairs_lvl) or (list(reversed(ind_pair)) in pairs_lvl) 
+            assert ((ind_pair in pairs_lvl) or (list(reversed(ind_pair)) in pairs_lvl))
         check_dims(impact, dim)
         
         # Test Grid results
