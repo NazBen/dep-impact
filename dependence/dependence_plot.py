@@ -105,7 +105,7 @@ def matrix_plot_quantities(results, indep_result=None, grid_result=None,
                            quantity_name='Quantity', with_bootstrap=False):
     """
     """
-    input_dim = results.values()[0].input_dim
+    input_dim = list(results.values())[0].input_dim
     
     # Figure
     fig, axes = plt.subplots(input_dim, input_dim, figsize=figsize, sharex=True, sharey=True)

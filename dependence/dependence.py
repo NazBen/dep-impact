@@ -770,7 +770,7 @@ class ListDependenceResult(list):
         self.run_type = run_type
         self.grid_type = grid_type
         self.input_dim = len(margins)
-        self.corr_dim = self.input_dim * (self.input_dim - 1) / 2
+        self.corr_dim = int(self.input_dim * (self.input_dim - 1) / 2)
         
         self.grid_filename = None
         if "grid_filename" in kwargs:
@@ -1342,7 +1342,7 @@ class DependenceResult(object):
             self.output_dim = 1
         else:
             self.output_dim = output_sample.shape[1]
-        self.corr_dim = self.input_dim * (self.input_dim - 1) / 2
+        self.corr_dim = int(self.input_dim * (self.input_dim - 1) / 2)
         self._bootstrap_sample = None
         self._n_bootstrap_sample = None
         self._gaussian_kde = None
