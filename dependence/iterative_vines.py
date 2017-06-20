@@ -162,7 +162,6 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
             quant_estimate.bounds_tau = tmp_bounds_tau
             
 
-
             # Lets get the results for this family structure
             if n_input_sample > 0 and n_pairs >= n_pairs_start:
                 results = quant_estimate.gridsearch(n_dep_param=n_dep_param,

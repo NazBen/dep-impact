@@ -131,6 +131,35 @@ def func_prod(x, a=None):
         return y.ravel()
     else:
         return y
+
+
+def func_spec(x, a=0.8):
+    """Product weighted model function.
+    
+    Parameters
+    ----------
+    x : np.ndarray
+        The input values.
+    a : np.ndarray
+        The input coefficients.
+        
+    Returns
+    -------
+        y : a.x^t
+    """
+    if isinstance(x, list):
+        x = np.asarray(x)
+    n, dim = x.shape
+        
+    y = (x**2).prod(axis=1) - a* x.prod(axis=1)
+        
+    if y.size == 1:
+        return y.item()
+    elif y.size == y.shape[0]:
+        return y.ravel()
+    else:
+        return y
+
     
 def func_cum_sum_weight(x, a=None):
     """Additive weighted model function.
@@ -173,7 +202,7 @@ def func_cum_sum_weight(x, a=None):
         y = 0
         for i in range(1, dim):
             for j in range(i):
-                y += a[i, j] * func_prod(np.c_[x[:, i], x[:, j]])
+                y += a[i, j] * func_spec(np.c_[x[:, i], x[:, j]])
             
     return y
 
