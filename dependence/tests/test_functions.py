@@ -133,7 +133,7 @@ def func_prod(x, a=None):
         return y
 
 
-def func_spec(x, a=0.8):
+def func_spec(x, a=0.1):
     """Product weighted model function.
     
     Parameters
