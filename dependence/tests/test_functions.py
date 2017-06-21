@@ -133,7 +133,7 @@ def func_prod(x, a=None):
         return y
 
 
-def func_spec(x, a=0.1):
+def func_spec(x, a=[0.58, -1, -1.0, 0]):
     """Product weighted model function.
     
     Parameters
@@ -151,7 +151,7 @@ def func_spec(x, a=0.1):
         x = np.asarray(x)
     n, dim = x.shape
         
-    y = (x**2).prod(axis=1) - a* x.prod(axis=1)
+    y = a[0]*(x**2).prod(axis=1) + a[1]*x.prod(axis=1) + a[2]*(x**2).sum(axis=1) + a[3] * x.sum(axis=1)
         
     if y.size == 1:
         return y.item()
