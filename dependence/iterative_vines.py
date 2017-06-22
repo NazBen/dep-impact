@@ -175,7 +175,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
             
             if iterative_save or iterative_load:
                 cop_str = "_".join([str(l) for l in quant_estimate._family_list])
-                vine_str = "_".join([str(i) for i in quant_estimate._vine_structure_list])
+                vine_str = "_".join([str(l) for l in quant_estimate._vine_structure_list])
                 filename = "%s/%s" % (load_dir, grid_type)
                 if n_dep_param is None:
                     filename += "_K_None"
