@@ -555,7 +555,8 @@ class ConservativeEstimate(object):
         if structure is None:
             listed_pairs = self._indep_pairs + self._fixed_pairs      
             dim = self.input_dim
-            if len(listed_pairs) > 0:
+            #if len(listed_pairs) > 0:
+            if False:
                 pairs_iter_id = [get_pair_id(dim, pair, with_plus=False) for pair in listed_pairs]
                 pairs_by_levels = get_pairs_by_levels(dim, pairs_iter_id)
                 structure = get_possible_structures(dim, pairs_by_levels)[0]
