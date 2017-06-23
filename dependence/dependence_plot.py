@@ -4,6 +4,8 @@ import seaborn as sns
 import pandas as pd
 from scipy import stats
 
+from dependence.utils import get_grid_sample, to_copula_params
+
 sns.set(style="ticks", color_codes=True)
 
 def get_all_quantity(results, q_func=None):
@@ -236,3 +238,79 @@ def plot_iterative_results(all_results, indep_result=None, grid_results=None,
     ax.set_xticks(n_pairs)
     ax.legend(loc=0)
     fig.tight_layout()        
+
+def set_style_paper():
+    # This sets reasonable defaults for font size for
+    # a figure that will go in a paper
+    sns.set_context("paper")
+    
+    # Set the font to be serif, rather than sans
+    sns.set(font='serif')
+    
+    # Make the background white, and specify the
+    # specific font family
+    sns.set_style("white", {
+        "font.family": "serif",
+        "font.serif": ["Times", "Palatino", "serif"]
+    })
+
+
+def compute_influence(obj, K, n, copulas, pair, eps=1.E-4):
+    """
+    """
+    kendalls_fixed = [[]]*2
+    bounds = [[eps, 1.-eps]]
+    kendalls_fixed[0] = get_grid_sample(bounds, K, 'lhs')
+    bounds = [[-1.+eps, -eps]]
+    kendalls_fixed[1] = get_grid_sample(bounds, K, 'lhs')
+
+    families = np.zeros((obj.families.shape), dtype=int)
+    families[pair[0], pair[1]] = 1
+    obj.families = families
+    indep_output_sample = obj.independence(n).output_sample
+    perfect_output_sample = obj.gridsearch(None, n, 'vertices').output_samples
+
+    output_samples = {}
+    for copula in copulas:       
+        res_out_samples = []
+        res_kendalls = []
+        for i, num in enumerate(copulas[copula]):
+            families[pair[0], pair[1]] = num
+            obj.families = families
+            converter = [obj._copula_converters[k] for k in obj._pair_ids]
+            params = to_copula_params(converter, kendalls_fixed[i])
+            output_sample = obj.run_stochastic_models(params, n, return_input_sample=False)[0]
+            res_out_samples.append(np.asarray(output_sample))
+
+        output_samples[copula] = np.r_[np.concatenate(res_out_samples), indep_output_sample.reshape(1, -1), perfect_output_sample].T
+
+    kendalls = np.concatenate(kendalls_fixed).ravel()
+    kendalls = np.r_[kendalls, 0.]
+    kendalls = np.r_[kendalls, -1., 1.]
+    
+    return kendalls, output_samples
+
+def plot_variation(output_samples, kendalls, q_func, plot_full=True, figsize=(7, 4), ylabel=None):
+    """
+    """
+    set_style_paper()
+
+    if not plot_full:
+        taken = np.where(kendalls <= 0.)
+    else:
+        taken = np.where(kendalls)
+    sorting = np.argsort(kendalls[taken])
+
+    fig, ax = plt.subplots(figsize=figsize)
+    for copula in output_samples:
+        quantities = q_func(output_samples[copula].T)
+        ax.plot(kendalls[taken][sorting], quantities[taken][sorting], 'o-', label=copula, markersize=5)
+
+    ax.set_xlabel('Kendall coefficient')
+    if ylabel is not None:
+        ax.set_ylabel(ylabel)
+    else:
+        ax.set_ylabel('Output quantity')
+    ax.legend(loc=0)
+    ax.axis('tight')
+    fig.tight_layout()
