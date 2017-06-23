@@ -290,15 +290,18 @@ def compute_influence(obj, K, n, copulas, pair, eps=1.E-4):
     
     return kendalls, output_samples
 
-def plot_variation(output_samples, kendalls, q_func, plot_full=True, figsize=(7, 4), ylabel=None):
+def plot_variation(output_samples, kendalls, q_func, plot_area='left', figsize=(7, 4), ylabel=None):
     """
     """
     set_style_paper()
 
-    if not plot_full:
-        taken = np.where(kendalls <= 0.)
-    else:
+    if plot_area == 'full':
         taken = np.where(kendalls)
+    elif plot_area == 'left':
+        taken = np.where(kendalls <= 0.)
+    elif plot_area == 'right':
+        taken = np.where(kendalls >= 0.)
+
     sorting = np.argsort(kendalls[taken])
 
     fig, ax = plt.subplots(figsize=figsize)
