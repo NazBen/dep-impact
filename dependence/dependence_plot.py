@@ -290,24 +290,30 @@ def compute_influence(obj, K, n, copulas, pair, eps=1.E-4):
     
     return kendalls, output_samples
 
-def plot_variation(output_samples, kendalls, q_func, plot_area='left', figsize=(7, 4), ylabel=None):
+def plot_variation(output_samples, kendalls, q_func, plot_area='left', plt_lib='seaborn', figsize=(7, 4), ylabel=None, 
+    colors={'Normal': 'b','Clayton': 'g', 'Gumbel': 'r', 'Joe': 'm'}, n_boot=5000, ci=99.9):
     """
     """
     set_style_paper()
 
     if plot_area == 'full':
-        taken = np.where(kendalls)
+        taken = np.ones(kendalls.shape, dtype=bool)
     elif plot_area == 'left':
-        taken = np.where(kendalls <= 0.)
+        taken = kendalls <= 0.
     elif plot_area == 'right':
-        taken = np.where(kendalls >= 0.)
+        taken = kendalls >= 0.
 
     sorting = np.argsort(kendalls[taken])
-
     fig, ax = plt.subplots(figsize=figsize)
+
     for copula in output_samples:
-        quantities = q_func(output_samples[copula].T)
-        ax.plot(kendalls[taken][sorting], quantities[taken][sorting], 'o-', label=copula, markersize=5)
+        if plt_lib == 'matplotlib':
+            quantities = q_func(output_samples[copula].T)
+            ax.plot(kendalls[taken][sorting], quantities[taken][sorting], 'o-', label=copula, markersize=5)
+        else:
+            sns.tsplot(output_samples[copula][:, taken], time=kendalls[taken],
+                condition=copula, err_style='ci_band', ci=ci, estimator=q_func, 
+                n_boot=n_boot, color=colors[copula], ax=ax)
 
     ax.set_xlabel('Kendall coefficient')
     if ylabel is not None:

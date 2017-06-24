@@ -1,7 +1,7 @@
 ﻿import numpy as np
 import openturns as ot
 
-def func_overflow(X, model=1):
+def func_overflow(X, model=1, h_power=0.6):
     """Overflow model function.
     
     Parameters
@@ -37,7 +37,7 @@ def func_overflow(X, model=1):
     L = X[ids, 6]
     B = X[ids, 7]
     
-    H = (Q / (B * Ks * np.sqrt((Zm - Zv) / L)))**1.
+    H = (Q / (B * Ks * np.sqrt((Zm - Zv) / L)))**h_power
     S = Zv + H - Hd - Cb
     
     if model == 1:
