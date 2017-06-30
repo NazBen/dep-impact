@@ -109,6 +109,18 @@ class VineCopula(object):
             self.build_vine()
         return np.asarray(VINECOPULA.RVineSim(n_obs, self._rvine))
 
+    def loglikelihood(self, sample):
+        """
+        """
+        data = numpy2ri(sample)
+        return np.asarray(VINECOPULA.RVineLogLik(data, self._rvine, separate=True, calculate_V=False)[0])
+
+    def grad_loglikelihood(self, sample):
+        """
+        """
+        data = numpy2ri(sample)
+        return np.asarray(VINECOPULA.RVineGrad(data, self._rvine)[0])**2
+
 
 def permute_params(params, structure):
     """Permute the parameters of the initiat parameter matrix to fit to the R-vine structure.
