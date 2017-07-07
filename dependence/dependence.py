@@ -97,7 +97,7 @@ class ConservativeEstimate(object):
     def gridsearch(self, n_dep_param, n_input_sample, grid_type='lhs',
                    dep_measure='kendall-tau', q_func=np.var, 
                    lhs_grid_criterion='centermaximin', keep_input_samples=True,
-                   use_grid=None, save_grid=None, grid_path='.',
+                   use_grid=None, save_grid=None, grid_path='.', use_sto_func=False,
                    random_state=None):
         """Grid search over the dependence parameter space.
         
@@ -179,7 +179,16 @@ class ConservativeEstimate(object):
                                  grid_type)
 
         # Evaluate the sample
-        output_samples, input_samples = self.run_stochastic_models(
+        if use_sto_func:
+            output_samples = []
+            input_samples = []
+            for param in params:
+                output_sample, input_sample = self.stochastic_function(
+                    param, n_input_sample, return_input_sample=keep_input_samples)   
+                output_samples.append(output_sample)
+                input_samples.append(input_sample)
+        else:
+            output_samples, input_samples = self.run_stochastic_models(
                 params, n_input_sample, return_input_sample=keep_input_samples)
         
         return ListDependenceResult(margins=self.margins,
@@ -555,11 +564,12 @@ class ConservativeEstimate(object):
         if structure is None:
             listed_pairs = self._indep_pairs + self._fixed_pairs      
             dim = self.input_dim
-            #if len(listed_pairs) > 0:
-            if False:
+            # TODO : this should be corrected...
+            if len(listed_pairs) > 0:
+            #if False:
                 pairs_iter_id = [get_pair_id(dim, pair, with_plus=False) for pair in listed_pairs]
                 pairs_by_levels = get_pairs_by_levels(dim, pairs_iter_id)
-                structure = get_possible_structures(dim, pairs_by_levels)[0]
+                structure = get_possible_structures(dim, pairs_by_levels)[1]
             else:
                 structure = np.zeros((dim, dim), dtype=int)
                 for i in range(dim):

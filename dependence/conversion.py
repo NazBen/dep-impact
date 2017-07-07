@@ -49,7 +49,7 @@ def get_tau_interval(copula):
     if copula in [1, 2]:
         return -0.99, 0.99
     elif copula in [3, 13, 4, 14, 5, 6, 16]:
-        return 0.01, 0.99
+        return 0.01, 0.98
     elif copula in [23, 24, 26, 33, 34, 36]:  # Rotated copulas
         return -0.99, -0.01
     else:

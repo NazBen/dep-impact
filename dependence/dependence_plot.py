@@ -4,7 +4,7 @@ import seaborn as sns
 import pandas as pd
 from scipy import stats
 
-from dependence.utils import get_grid_sample, to_copula_params
+from .utils import get_grid_sample, to_copula_params
 
 sns.set(style="ticks", color_codes=True)
 
@@ -107,7 +107,10 @@ def matrix_plot_quantities(results, indep_result=None, grid_result=None,
                            quantity_name='Quantity', with_bootstrap=False):
     """
     """
-    input_dim = list(results.values())[0].input_dim
+    if isinstance(results, dict):
+        input_dim = list(results.values())[0].input_dim
+    else:
+        input_dim = results.input_dim
     
     # Figure
     fig, axes = plt.subplots(input_dim, input_dim, figsize=figsize, sharex=True, sharey=True)
