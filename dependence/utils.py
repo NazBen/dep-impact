@@ -506,10 +506,24 @@ def asymptotic_error_proba(n, proba):
     return np.sqrt(proba * (1. - proba) / n)
 
 
-    
-
 def add_pair(structure, pair, index, lvl):
     """Adds a pair in a Vine structure in a certain place and for a specific conditionement.
+    
+    Parameters
+    ----------
+    structure : array,
+        The R-vine structure array.
+    pair : list,
+        A pair of variables that we want to add.
+    index : int, 
+        The position of the pair of variable.
+    lvl : int,
+        The tree level.
+
+    Returns
+    -------
+    structure : array,
+        The updated R-vine structure.
     """
     dim = structure.shape[0]
     if lvl == 0: # If it's the unconditiononal variables
@@ -521,11 +535,58 @@ def add_pair(structure, pair, index, lvl):
         structure[dim-1, index] = pair[1]
     else:
         assert structure[index, index] == pair[0], \
-            "First element should be the same as the first variable of the pair"
+            "Diagonal element of the structure should be the same as the first variable of the pair: %d != %d" % (structure[index, index], pair[0])
         assert structure[dim-1-lvl, index] == 0, \
-            "There is already a variable at [%d, %d]" % (dim-1, index)
+            "There is already a variable at [%d, %d]" % (dim-1-lvl, index)
         structure[dim-1-lvl, index] = pair[1]
     return structure
+
+
+def add_pairs(structure, pairs, lvl, verbose=False):
+    """Adds pairs in a structure for a selected level of conditionement.
+
+    Parameters
+    ----------
+    structure : array,
+        The R-vine structure array.
+    pairs : list,
+        The list of pairs of variables.
+    lvl : int,
+        The tree level for which we want the variables to be in.
+
+    verbose : bool,
+        If True, it prints information about the procedure.
+    """
+    dim = structure.shape[0]
+    n_pairs = len(pairs)
+
+    assert n_pairs < dim-lvl, "Not enough place to fill the pairs : %d > %d" % (n_pairs, dim-lvl)
+    
+    # Let's find a way to place these pairs inside the structure
+    n_slots = dim - 1 - lvl
+    possibilities = list(permutations(range(n_slots), r=n_pairs))
+    success = False
+    for possibility in possibilities:
+        try:
+            # Add the pair in the possible order
+            structure_modif = np.copy(structure)
+            for i in range(n_pairs):
+                structure_modif = add_pair(structure_modif, pairs[i], possibility[i], lvl)
+            
+            if check_redundancy(structure_modif):
+                success = True
+                break
+        except AssertionError:
+            pass
+
+    if not success and verbose:
+        print('Did not succeded to fill the structure with the given pairs')
+
+    # If it's the 1st level, the last row of last column must be filled
+    if (lvl == 0) and (n_pairs == dim-1):
+        structure_modif[dim-1, dim-1] = np.setdiff1d(range(dim+1), np.diag(structure_modif))[0]
+    return structure_modif
+
 
 def check_redundancy(structure):
     """Check if there is no redundancy of the diagonal variables.
@@ -538,40 +599,6 @@ def check_redundancy(structure):
             if diag[i] in structure[:, i+1:]:
                 return False
     return True
-
-
-
-
-def add_pairs(structure, pairs, lvl, verbose=False):
-    """Add pairs in a structure for a selected level of conditionement.
-    """
-    dim = structure.shape[0]
-    n_pairs = len(pairs)
-    assert n_pairs < dim - lvl, "Not enough place to fill the pairs"
-    n_slots = dim - 1 - lvl
-    possibilities = list(permutations(range(n_slots), r=n_pairs))
-    success = False
-    init_structure = np.copy(structure)
-    for possibility in possibilities:
-        try:
-            # Add the pair in the possible order
-            structure = np.copy(init_structure)
-            for i in range(n_pairs):
-                structure = add_pair(structure, pairs[i], possibility[i], lvl)
-            if check_redundancy(structure):
-                success = True
-                break
-        except AssertionError:
-            pass
-
-    if not success and verbose:
-        print('Did not succeded to fill the structure with the given pairs')
-
-    # If it's the 1st level, the last row of last column must be filled
-    if (lvl == 0) and (n_pairs == dim-1):
-        structure[dim-1, dim-1] = np.setdiff1d(range(dim+1), np.diag(structure))[0]
-    return structure
-
 
 
 def rotate_pairs(init_pairs, rotations):
@@ -589,8 +616,6 @@ def rotate_pairs(init_pairs, rotations):
         else:
             pairs.append(init_pairs[i])
     return pairs
-
-
 
 
 def get_possible_structures(dim, pairs_by_levels, verbose=False):
@@ -813,6 +838,7 @@ def fill_structure(structure):
         prev_ind.append(values_i[0])
     return structure
 
+
 def get_pair_id(dim, pair, with_plus=True):
     """ Get the pair of variables from a given index.
     """
@@ -827,8 +853,6 @@ def get_pair_id(dim, pair, with_plus=True):
                     return k
             k+=1
             
-            
-
 
 def get_pair(dim, index, with_plus=True):
     """ Get the pair of variables from a given index.

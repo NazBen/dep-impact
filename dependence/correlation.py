@@ -3,7 +3,7 @@ import random
 import openturns as ot
 from pyDOE import lhs
 
-from conversion import Conversion
+from .conversion import Conversion
 
 """
 TODO :

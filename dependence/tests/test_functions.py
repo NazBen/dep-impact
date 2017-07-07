@@ -161,7 +161,7 @@ def func_spec(x, a=[0.58, -1, -1.0, 0]):
         return y
 
     
-def func_cum_sum_weight(x, a=None):
+def func_cum_sum_weight(x, a=None, use_sum=True):
     """Additive weighted model function.
     
     Parameters
@@ -193,7 +193,7 @@ def func_cum_sum_weight(x, a=None):
     elif a.ndim > 2:
         raise AttributeError('Dimension problem for constant a')
         
-    if False:
+    if use_sum:
         y = 1
         for i in range(1, dim):
             for j in range(i):
@@ -202,7 +202,7 @@ def func_cum_sum_weight(x, a=None):
         y = 0
         for i in range(1, dim):
             for j in range(i):
-                y += a[i, j] * func_spec(np.c_[x[:, i], x[:, j]])
+                y += a[i, j] * func_prod(np.c_[x[:, i], x[:, j]])
             
     return y
 
