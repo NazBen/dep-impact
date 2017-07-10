@@ -531,10 +531,10 @@ def get_pairs_by_levels(dim, forced_pairs_ids, verbose=False):
     assert max(forced_pairs_ids) < n_pairs, "Wrong pair id: %d" % (max(forced_pairs_ids))
     
     forced_pairs = get_pairs(dim, forced_pairs_ids, with_plus=True)
-    print forced_pairs
+    print(forced_pairs)
     all_pairs = np.asarray(np.tril_indices(dim, k=-1)).T
-    print all_pairs
-    print np.setdiff1d(all_pairs, forced_pairs, assume_unique=True)
+    print(all_pairs)
+    print(np.setdiff1d(all_pairs, forced_pairs, assume_unique=True))
 
     remaining_pairs_ids = list(range(0, n_pairs))
     for pair_id in forced_pairs_ids:

@@ -197,12 +197,12 @@ def func_cum_sum_weight(x, a=None, use_sum=True):
         y = 1
         for i in range(1, dim):
             for j in range(i):
-                y *= (1. + a[i, j] * func_sum(np.c_[x[:, i], x[:, j]]))
+                y *= (1. + a[i, j] * func_spec(np.c_[x[:, i], x[:, j]]))
     else:
         y = 0
         for i in range(1, dim):
             for j in range(i):
-                y += a[i, j] * func_prod(np.c_[x[:, i], x[:, j]])
+                y += a[i, j] * func_spec(np.c_[x[:, i], x[:, j]])
             
     return y
 
