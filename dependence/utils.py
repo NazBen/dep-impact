@@ -505,7 +505,11 @@ def asymptotic_error_proba(n, proba):
     """    
     return np.sqrt(proba * (1. - proba) / n)
 
-
+#%%
+dim = 5
+forced_pairs_ids = [4, 5, 2, 3]
+verbose=True
+#%%
 def get_pairs_by_levels(dim, forced_pairs_ids, verbose=False):
     """Split a list of pairs in levels.
     
@@ -523,18 +527,16 @@ def get_pairs_by_levels(dim, forced_pairs_ids, verbose=False):
     pairs_by_levels : list of list,
         The list of listed pairs.
     """
+    
+    #%%
     n_pairs = int(dim*(dim-1)/2)
     n_forced_pairs = len(forced_pairs_ids)
     assert len(np.unique(forced_pairs_ids)) == n_forced_pairs, \
         "The list should contain unique values"
-    assert n_forced_pairs <= n_pairs, "Too many pairs: %d > %d" % (n_forced_pairs > n_pairs)
+    assert n_forced_pairs <= n_pairs, "Too many pairs: %d > %d" % (n_forced_pairs, n_pairs)
     assert max(forced_pairs_ids) < n_pairs, "Wrong pair id: %d" % (max(forced_pairs_ids))
     
     forced_pairs = get_pairs(dim, forced_pairs_ids, with_plus=True)
-    print(forced_pairs)
-    all_pairs = np.asarray(np.tril_indices(dim, k=-1)).T
-    print(all_pairs)
-    print(np.setdiff1d(all_pairs, forced_pairs, assume_unique=True))
 
     remaining_pairs_ids = list(range(0, n_pairs))
     for pair_id in forced_pairs_ids:
@@ -546,40 +548,48 @@ def get_pairs_by_levels(dim, forced_pairs_ids, verbose=False):
         print('Conditioning information:')
         
     k0 = 0
-    n_conditionned = range(dim - 1, 0, -1)
     pairs_by_levels = []
-    for i in range(dim-1):
-        k = n_conditionned[i]
-        k1 = min(n_forced_pairs, k0+k)
+    
+    # For each level and the number of slot per level
+    for lvl, n_slot_lvl in enumerate(range(dim-1, 0, -1)):
+        k1 = min(n_forced_pairs, k0+n_slot_lvl)
+        if forced_pairs[k0:k0+n_slot_lvl]:
+            pairs_by_levels.append(forced_pairs[k0:k0+n_slot_lvl])
+                    
         if verbose:
-            print("\t%d pairs with %d conditionned variables" % (k, i))
-            print("Pairs: {0}".format(forced_pairs[k0:k0+k].tolist()))
-        if forced_pairs[k0:k0+k].tolist():
-            pairs_by_levels.append(forced_pairs[k0:k0+k].tolist())
+            print("\t%d pairs with %d conditionned variables" % (n_slot_lvl, lvl))
+            print("Pairs: {0}".format(forced_pairs[k0:k0+n_slot_lvl]))
         k0 = k1
+        
     if verbose:
-        print("Concerned pairs: {0}".format(forced_pairs.tolist()))
-        print("Remaining pairs: {0}".format(remaining_pairs.tolist()))
+        print("Concerned pairs: {0}".format(forced_pairs))
+        print("Remaining pairs: {0}".format(remaining_pairs))
 
+    #%%
     idx = 1
     init_pairs_by_levels = copy.deepcopy(pairs_by_levels)  # copy
-    while not np.all([check_node_loop(pairs_level) for pairs_level in pairs_by_levels]):
-        pairs_by_levels = copy.deepcopy(pairs_by_levels)
+    # This part checks if the pairs in a same level respect the condition. 
+    # If not, a permutation of between levels is made.
+    while not all([check_node_loop(pairs_level) for pairs_level in pairs_by_levels]):
+        pairs_by_levels = copy.deepcopy(init_pairs_by_levels)
         n_levels = len(pairs_by_levels)
         lvl = 0
         while lvl < n_levels:
-            pairs_level = pairs_by_levels[lvl]
-            if not check_node_loop(pairs_level):
-                # A new level is created
-                if lvl == n_levels - 1:
-                    pairs_by_levels.append([pairs_level.pop(-idx)])
+            pairs_lvl = pairs_by_levels[lvl]
+            if not check_node_loop(pairs_lvl):
+                if (lvl == n_levels - 1) and (lvl < dim-2):
+                    # A new level is created
+                    pairs_by_levels.append([pairs_lvl.pop(-idx)])
                     n_levels += 1
                 else:
-                    # The 1st pair of the next level is replaced by the last of the previous
-                    pairs_by_levels[lvl+1].insert(0, pairs_level.pop(-idx))
+                    # The 1st pair of the next level is switch with the last of the previous
+                    pairs_by_levels[lvl+1].insert(0, pairs_lvl.pop(-idx))
                     pairs_by_levels[lvl].append(pairs_by_levels[lvl+1].pop(1))
             lvl += 1
         idx += 1
+    
+    print pairs_by_levels
+    #%%
     return pairs_by_levels
 
 
@@ -792,11 +802,20 @@ def is_vine_structure(matrix):
         return False
 
     
-def check_node_loop(pairs, n_p=3):
-    """Check if not too many variables are connected in a single tree
+def check_node_loop(pairs):
+    """Check if not too many variables are connected in a single tree.
+    For 3 pairs of variables, it should have at least 4 variables involved.
+    
+    Parameters
+    ----------
+    pairs : tuple or list,
+        The pair of variable.
+
+    Returns
+    -------
     """
-    for perm_pairs in list(permutations(pairs, r=n_p)):
-        if len(np.unique(perm_pairs)) <= n_p:
+    for perm_pairs in list(permutations(pairs, r=3)):
+        if len(np.unique(perm_pairs)) <= 3:
             return False
     return True
 
