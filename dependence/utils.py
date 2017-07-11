@@ -859,29 +859,77 @@ def fill_structure(structure):
 
 
 def get_pair_id(dim, pair, with_plus=True):
-    """ Get the pair of variables from a given index.
+    """ Get the pair id from a given index.    
+    
+    Parameters
+    ----------
+    dim : int,
+        The dimension.
+    pair : tuple of int,
+        The pair of variable.
+    with_plus : bool,
+        If True, the variable numbers start at 1 instead of 0.
+        
+    Return
+    ------
+    pair_id : int,
+        The pair index.
     """
     pairs = np.asarray(np.tril_indices(dim, k=-1)).T
     if with_plus:
         pair[0] += 1
         pair[1] += 1
-    return np.where((pairs == pair).all(axis=1))[0][0]
+        
+    pair_id = np.where((pairs == pair).all(axis=1))[0][0]
+    return pair_id
 
 
 def get_pair(dim, index, with_plus=True):
     """ Get the pair of variables from a given index.
+    
+    Parameters
+    ----------
+    dim : int,
+        The dimension.
+    index : int,
+        The ID of the pair.
+    with_plus : bool,
+        If True, the variable numbers start at 1 instead of 0.
+        
+    Return
+    ------
+    pair : tuple of int,
+        The pair of variables.
     """    
     pairs = np.asarray(np.tril_indices(dim, k=-1)).T
     pair = pairs[index]
     if with_plus:
         pair += 1
-    return tuple(pair)
+    pair = tuple(pair)
+    
+    return pair
 
 
 def get_pairs(dim, pair_ids, with_plus=True):
-    """
+    """Get the associated pairs of variables from given IDs.
+    
+    Parameters
+    ----------
+    dim : int,
+        The dimension.
+    pair_ids : list of int,
+        The IDs of the pairs.
+    with_plus : bool,
+        If True, the variable numbers start at 1 instead of 0.
+    
+    Return
+    ------
+    pairs : list of tupple,
+        The list of pairs.    
     """
     pairs = []
     for pair_id in pair_ids:
         pairs.append(get_pair(dim, pair_id, with_plus))
-    return list(map(tuple, pairs))
+        
+    pairs = list(map(tuple, pairs))
+    return pairs
