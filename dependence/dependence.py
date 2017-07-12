@@ -506,25 +506,25 @@ class ConservativeEstimate(object):
                 self.bounds_tau = None
 
     @property
-    def corr_dim_(self):
+    def corr_dim(self):
         """The number of pairs.
         """
         return self._corr_dim
 
     @property
-    def pairs_(self):
+    def pairs(self):
         """The possibly dependent pairs.
         """
         return self._pairs
 
     @property
-    def pair_ids_(self):
+    def pair_ids(self):
         """The possibly dependent pairs.
         """
         return self._pair_ids
 
     @property
-    def n_pairs_(self):
+    def n_pairs(self):
         """The number of possibly dependent pairs.
         """
         return self._n_pairs

@@ -505,11 +505,7 @@ def asymptotic_error_proba(n, proba):
     """    
     return np.sqrt(proba * (1. - proba) / n)
 
-#%%
-dim = 5
-forced_pairs_ids = [4, 5, 2, 3]
-verbose=True
-#%%
+
 def get_pairs_by_levels(dim, forced_pairs_ids, verbose=False):
     """Split a list of pairs in levels.
     
@@ -527,8 +523,6 @@ def get_pairs_by_levels(dim, forced_pairs_ids, verbose=False):
     pairs_by_levels : list of list,
         The list of listed pairs.
     """
-    
-    #%%
     n_pairs = int(dim*(dim-1)/2)
     n_forced_pairs = len(forced_pairs_ids)
     assert len(np.unique(forced_pairs_ids)) == n_forced_pairs, \
@@ -565,71 +559,102 @@ def get_pairs_by_levels(dim, forced_pairs_ids, verbose=False):
         print("Concerned pairs: {0}".format(forced_pairs))
         print("Remaining pairs: {0}".format(remaining_pairs))
 
-    #%%
-    init_pairs_by_levels = copy.deepcopy(pairs_by_levels)  # copy
     # This part checks if the pairs in a same level respect the condition. 
     # If not, a permutation of between levels is made.
+    good_pairs_by_levels = copy.deepcopy(pairs_by_levels)  # copy
     n_moving_pairs = [1]*(dim-1)
     loops = [0]*(dim-1)
-    move_up = [True]*(dim-1)
+    move_up = [1]*(dim-1)
+    
     while not check_conditions(pairs_by_levels, dim):
-        pairs_by_levels = copy.deepcopy(init_pairs_by_levels)
+        pairs_by_levels = copy.deepcopy(good_pairs_by_levels)
         n_levels = len(pairs_by_levels)
         lvl = 0
         while lvl < n_levels:
-            pairs_lvl = pairs_by_levels[lvl]            
+            pairs_lvl = pairs_by_levels[lvl]
+            if verbose:
+                print("Level:", lvl)
+                print("Before:", pairs_lvl)
             if not check_condition(pairs_lvl, lvl, dim):
                 # If it's the last level
-                print(lvl, n_levels, pairs_by_levels)
                 idx = loops[lvl]
                 if lvl == n_levels - 1:
+                    pairs_lvl_up = []
                     # A new level is created
                     n_moving_pair = n_moving_pairs[lvl]
+                    
                     # The last pair is taken back from the level
                     moving_pairs = []
                     for k in range(n_moving_pair-1):
-                        moving_pairs.append(pairs_lvl.pop(-k-1))
+                        moving_pairs.append(pairs_lvl.pop())
                     moving_pairs.append(pairs_lvl.pop(-idx-1))
                     # It is added in the next level (which is created)
                     pairs_by_levels.append(moving_pairs)
                     n_levels += 1
                 else:
-                    # The 1st pair of the next level is switch with the last of the previous
+                    # The 1st pair of the next level is switch with the last 
+                    # of the previous
                     pairs_lvl_up = pairs_by_levels[lvl+1]
-                    moving_pair = pairs_lvl.pop(-idx-1)
-                    pairs_lvl_up.insert(0, moving_pair)
-                    if move_up[lvl]:
-                        moving_pair_up = pairs_lvl_up.pop()
-                        pairs_lvl.append(moving_pair_up)
-                    #pairs_by_levels[lvl+1].insert(0, pairs_lvl.pop(-i-1))
-                    #pairs_by_levels[lvl].append(pairs_by_levels[lvl+1].pop(1))
+                    n_moving_pair = n_moving_pairs[lvl]
+                    for k in range(n_moving_pair-1):
+                        pairs_lvl_up.insert(0, pairs_lvl.pop())
+                    pairs_lvl_up.insert(0, pairs_lvl.pop(-idx-1))
                     
-                print(lvl, n_levels, pairs_by_levels)
-                print()
-                loops[lvl] += 1
-                if loops[lvl] == dim - n_moving_pairs[lvl]:
+                    if move_up[lvl] > 0:
+                        id_up = move_up[lvl]
+                        # The pair is moved
+                        moving_pair_up = pairs_lvl_up.pop(id_up)
+                        pairs_lvl.append(moving_pair_up)                        
+                if verbose:
+                    print("After:", pairs_lvl)
+                    print("n_moving:", n_moving_pairs[lvl])
+                    print("idx:", loops[lvl])
+                    print("move_up:", move_up[lvl])
+                    print("Is OK?", check_condition(pairs_lvl, lvl, dim))
+                
+                if move_up[lvl] == 0:
+                    loops[lvl] += 1
+                else:
+                    move_up[lvl] += 1
+                    
+                if move_up[lvl] >= len(pairs_lvl_up):
+                    move_up[lvl] = 0
+                    
+                if loops[lvl] >= len(pairs_lvl):
                     loops[lvl] = 0
                     n_moving_pairs[lvl] += 1
-                    move_up[lvl] = False
+                    
+                # This level does not work. Lets reset the options of the others
+                for lvl_up in range(lvl+1, n_levels):
+                    move_up[lvl_up] = 1
+                    n_moving_pairs[lvl_up] = 1
+                    loops[lvl_up] = 0
+                    
+                # If still not good, we reloop
+                if not check_condition(pairs_lvl, lvl, dim):
+                    break
+                else:
+                    good_pairs_by_levels[lvl] = pairs_lvl
+
             lvl += 1
 
     return pairs_by_levels
 
-def check_number_variables_level(pairs_lvl, lvl, dim):
+
+def check_pairs_number_level(pairs_lvl, lvl, dim):
     """
     """
-    if len(pairs_lvl) == dim-1-lvl:
-        variables = set()
-        for pair in pairs_lvl:
-            variables.add(pair[0])
-            variables.add(pair[1])
+    if len(pairs_lvl) <= dim-1-lvl:
+        return True
+    else:
+        return False
         
 
 def check_condition(pairs_lvl, lvl, dim):
     """
     """
     
-    return check_node_loop(pairs_lvl)
+    return check_node_loop(pairs_lvl) and check_pairs_number_level(pairs_lvl, lvl, dim)
 
 def check_conditions(pairs_by_levels, dim):
     """
@@ -751,20 +776,22 @@ def rotate_pairs(init_pairs, rotations):
 
 
 def get_possible_structures(dim, pairs_by_levels, verbose=False):
-    """
+    """Get the possible R-vine array for a given list of pairs by levels.
     """
     # For each levels
     good_structures = []
-    for lvl, pairs_level in enumerate(pairs_by_levels):
-        n_pairs_level = len(pairs_level) # Number of pairs in the level
+    for lvl, pairs_lvl in enumerate(pairs_by_levels):
+        n_pairs_lvl = len(pairs_lvl) # Number of pairs in the level
         
         # The possible combinations
-        combinations = list(product([1, -1], repeat=n_pairs_level))
-        
+        combinations = list(product([1, -1], repeat=n_pairs_lvl))
+        if verbose:
+            print("Number of combinations:", len(combinations))
         # Now lets get the possible pair combinations for this level
         for k, comb_k in enumerate(combinations):
+            
             # Rotate the pair to the actual combination
-            pairs_k = rotate_pairs(pairs_level, comb_k)
+            pairs_k = rotate_pairs(pairs_lvl, comb_k)
             if lvl == 0:
                 # Create the associated vine structure
                 structure = np.zeros((dim, dim), dtype=int)

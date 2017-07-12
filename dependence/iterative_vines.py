@@ -24,7 +24,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     -------
     """
     quant_estimate = copy.copy(estimate_object)
-    corr_dim = quant_estimate.corr_dim_
+    corr_dim = quant_estimate.corr_dim
     dim = quant_estimate.input_dim
     
     max_n_pairs = min(max_n_pairs, corr_dim)
