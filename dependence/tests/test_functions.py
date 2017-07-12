@@ -157,8 +157,8 @@ def func_spec(x, a=[0.58, -1, -1.0, 0]):
         a[3] * x.sum(axis=1) + \
         a[4] * np.sin(x).sum(axis=1) + \
         a[5] * np.cos(x).sum(axis=1) + \
-        a[6] * (np.sin(x)**2).sum(axis=1) + \
-        a[7] * (np.cos(x)**2).sum(axis=1)
+        a[6] * (np.sin(x)**2).prod(axis=1) + \
+        a[7] * (np.cos(x)**2).prod(axis=1)
         
     if y.size == 1:
         return y.item()
