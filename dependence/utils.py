@@ -566,32 +566,78 @@ def get_pairs_by_levels(dim, forced_pairs_ids, verbose=False):
         print("Remaining pairs: {0}".format(remaining_pairs))
 
     #%%
-    idx = 1
     init_pairs_by_levels = copy.deepcopy(pairs_by_levels)  # copy
     # This part checks if the pairs in a same level respect the condition. 
     # If not, a permutation of between levels is made.
-    while not all([check_node_loop(pairs_level) for pairs_level in pairs_by_levels]):
+    n_moving_pairs = [1]*(dim-1)
+    loops = [0]*(dim-1)
+    move_up = [True]*(dim-1)
+    while not check_conditions(pairs_by_levels, dim):
         pairs_by_levels = copy.deepcopy(init_pairs_by_levels)
         n_levels = len(pairs_by_levels)
         lvl = 0
         while lvl < n_levels:
-            pairs_lvl = pairs_by_levels[lvl]
-            if not check_node_loop(pairs_lvl):
-                if (lvl == n_levels - 1) and (lvl < dim-2):
+            pairs_lvl = pairs_by_levels[lvl]            
+            if not check_condition(pairs_lvl, lvl, dim):
+                # If it's the last level
+                print(lvl, n_levels, pairs_by_levels)
+                idx = loops[lvl]
+                if lvl == n_levels - 1:
                     # A new level is created
-                    pairs_by_levels.append([pairs_lvl.pop(-idx)])
+                    n_moving_pair = n_moving_pairs[lvl]
+                    # The last pair is taken back from the level
+                    moving_pairs = []
+                    for k in range(n_moving_pair-1):
+                        moving_pairs.append(pairs_lvl.pop(-k-1))
+                    moving_pairs.append(pairs_lvl.pop(-idx-1))
+                    # It is added in the next level (which is created)
+                    pairs_by_levels.append(moving_pairs)
                     n_levels += 1
                 else:
                     # The 1st pair of the next level is switch with the last of the previous
-                    pairs_by_levels[lvl+1].insert(0, pairs_lvl.pop(-idx))
-                    pairs_by_levels[lvl].append(pairs_by_levels[lvl+1].pop(1))
+                    pairs_lvl_up = pairs_by_levels[lvl+1]
+                    moving_pair = pairs_lvl.pop(-idx-1)
+                    pairs_lvl_up.insert(0, moving_pair)
+                    if move_up[lvl]:
+                        moving_pair_up = pairs_lvl_up.pop()
+                        pairs_lvl.append(moving_pair_up)
+                    #pairs_by_levels[lvl+1].insert(0, pairs_lvl.pop(-i-1))
+                    #pairs_by_levels[lvl].append(pairs_by_levels[lvl+1].pop(1))
+                    
+                print(lvl, n_levels, pairs_by_levels)
+                print()
+                loops[lvl] += 1
+                if loops[lvl] == dim - n_moving_pairs[lvl]:
+                    loops[lvl] = 0
+                    n_moving_pairs[lvl] += 1
+                    move_up[lvl] = False
             lvl += 1
-        idx += 1
-    
-    print pairs_by_levels
-    #%%
+
     return pairs_by_levels
 
+def check_number_variables_level(pairs_lvl, lvl, dim):
+    """
+    """
+    if len(pairs_lvl) == dim-1-lvl:
+        variables = set()
+        for pair in pairs_lvl:
+            variables.add(pair[0])
+            variables.add(pair[1])
+        
+
+def check_condition(pairs_lvl, lvl, dim):
+    """
+    """
+    
+    return check_node_loop(pairs_lvl)
+
+def check_conditions(pairs_by_levels, dim):
+    """
+    """
+    for lvl, pairs_lvl in enumerate(pairs_by_levels):
+        if not check_condition(pairs_lvl, lvl, dim):
+            return False
+    return True
 
 def add_pair(structure, pair, index, lvl):
     """Adds a pair in a Vine structure in a certain place and for a specific conditionement.
@@ -814,9 +860,10 @@ def check_node_loop(pairs):
     Returns
     -------
     """
-    for perm_pairs in list(permutations(pairs, r=3)):
-        if len(np.unique(perm_pairs)) <= 3:
-            return False
+    for n_l in range(3, len(pairs)+1):
+        for perm_pairs in list(permutations(pairs, r=n_l)):
+            if len(np.unique(perm_pairs)) <= n_l:
+                return False
     return True
 
 
