@@ -133,7 +133,7 @@ def func_prod(x, a=None):
         return y
 
 
-def func_spec(x, a=[0.58, -1, -1.0, 0]):
+def func_spec(x, a=[0.58, -1, -1.0, 0, 0., 0.]):
     """Product weighted model function.
     
     Parameters
@@ -157,8 +157,6 @@ def func_spec(x, a=[0.58, -1, -1.0, 0]):
         a[3] * x.sum(axis=1) + \
         a[4] * np.sin(x).sum(axis=1) + \
         a[5] * np.cos(x).sum(axis=1)
-#        a[6] * (np.sin(x)**2).prod(axis=1) + \
-#        a[7] * (np.cos(x)**2).prod(axis=1)
         
     if y.size == 1:
         return y.item()
@@ -167,15 +165,15 @@ def func_spec(x, a=[0.58, -1, -1.0, 0]):
     else:
         return y
 
-    
-def func_cum_sum_weight(x, a=None, use_sum=True):
+
+def func_cum_sum_weight(x, weights=None, use_sum=True, const=[0., 0., 0., 1., 0., 0.]):
     """Additive weighted model function.
     
     Parameters
     ----------
     x : np.ndarray
         The input values.
-    a : np.ndarray
+    weights : np.ndarray
         The input coefficients.
         
     Returns
@@ -185,31 +183,31 @@ def func_cum_sum_weight(x, a=None, use_sum=True):
     if isinstance(x, list):
         x = np.asarray(x)
     n, dim = x.shape
-    if a is None:
-        a = np.zeros((dim, dim))
+    if weights is None:
+        weights = np.zeros((dim, dim))
         corr_dim = dim * (dim-1)/2
         k = 1
         for i in range(1, dim):
             for j in range(i):
-                a[i, j] = k
+                weights[i, j] = k
                 k += 1
-        a /= corr_dim
-    if a.ndim == 1:
-        a = a.reshape(-1, 1)
-        assert a.shape[0] == dim, "Shape not good"
-    elif a.ndim > 2:
+        weights /= corr_dim
+    if weights.ndim == 1:
+        weights = weights.reshape(-1, 1)
+        assert weights.shape[0] == dim, "Shape not good"
+    elif weights.ndim > 2:
         raise AttributeError('Dimension problem for constant a')
         
     if use_sum:
         y = 1
         for i in range(1, dim):
             for j in range(i):
-                y *= (1. + a[i, j] * func_spec(np.c_[x[:, i], x[:, j]]))
+                y *= (1. + weights[i, j] * func_spec(np.c_[x[:, i], x[:, j]], a=const))
     else:
         y = 0
         for i in range(1, dim):
             for j in range(i):
-                y += a[i, j] * func_spec(np.c_[x[:, i], x[:, j]])
+                y += weights[i, j] * func_spec(np.c_[x[:, i], x[:, j]], a=const)
             
     return y
 
