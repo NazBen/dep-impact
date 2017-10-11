@@ -7,13 +7,19 @@ https://github.com/NazBen/impact-of-dependence
 """
 
 # Always prefer setuptools over distutils
-from setuptools import setup
+try:
+    from setuptools import setup
+except ImportError:
+    from distutils.core import setup
+    
 from codecs import open
 from os import path
 
-here = path.abspath(path.dirname(__file__))
+with open('requirements.txt') as f:
+    required = f.read().splitlines()
 
 # Get the long description from the README file
+here = path.abspath(path.dirname(__file__))
 with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
@@ -28,5 +34,5 @@ setup(
     license='MIT',
     keywords='copula reliability openturns',
     packages=['dependence'],
-    install_requires=['numpy', 'scipy', 'pandas', 'matplotlib', 'pyDOE', 'scikit-optimize']
+    install_requires=required
 )
