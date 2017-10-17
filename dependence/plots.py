@@ -8,6 +8,7 @@ from .utils import get_grid_sample, to_copula_params
 
 sns.set(style="ticks", color_codes=True)
 
+
 def set_style_paper():
     # This sets reasonable defaults for font size for
     # a figure that will go in a paper

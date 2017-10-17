@@ -120,6 +120,8 @@ class Space(sk_Space):
                 bounds = list(product([-1., 1., 0.], repeat=n_pair))
                 if n_samples is None:
                     bounds.remove((0.,)*n_pair) # remove indepencence
+                if n_pair == 1:
+                    bounds.remove((0.,)*n_pair) # remove indepencence                    
                 bounds = np.asarray(bounds)
                 n_bounds = len(bounds)
     
@@ -132,7 +134,6 @@ class Space(sk_Space):
                     n_samples = min(n_samples, n_bounds)
                     id_taken = np.random.choice(n_bounds, size=n_samples, replace=False)
                     sample = bounds[sorted(id_taken), :]
-
             # Assert the bounds
             for p in range(n_pair):
                 sample_p = sample[:, p]
@@ -140,7 +141,6 @@ class Space(sk_Space):
                 sample_p[sample_p == 1.] = self.dimensions[p].high
 
             rows = sample.tolist()
-            
         elif sampling == 'fixed':
             raise NotImplementedError("Maybe I'll do it...")
         else:
