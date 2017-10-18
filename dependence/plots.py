@@ -3,6 +3,7 @@ import numpy as np
 import seaborn as sns
 import pandas as pd
 from scipy import stats
+from collections import Counter
 
 from .utils import get_grid_sample, to_copula_params
 
@@ -64,16 +65,16 @@ def get_min_result(all_min_results, q_func=None):
     return min_result
 
 def get_n_pairs(all_results):
-    """
+    """Get the number of pairs in each experiments of an dictionary of iterative results.
     """
     n_pairs = []
     for results in all_results:
-        n_pair = results.popitem()[1].n_pairs
+        n_pairs_result = Counter()
         for res_name in results:
-            assert results[res_name].n_pairs== n_pair, "Not the same number of pairs... Weird"
-            
+            n_pair = results[res_name].n_pairs
+            n_pairs_result[n_pair] += 1
+        assert len(n_pairs_result) == 1, "Not the same number of pairs... Weird"
         n_pairs.append(n_pair)
-        
     return n_pairs
 
 def corrfunc_plot(x, y, **kws):
@@ -155,7 +156,7 @@ def matrix_plot_quantities(results, indep_result=None, grid_result=None,
     
 def plot_iterative_results(all_results, indep_result=None, grid_results=None, 
                            q_func=None, figsize=(8, 4), 
-                           quantity_name='Quantity', with_bootstrap=False):
+                           quantity_name='Quantity', with_bootstrap=False, n_boot=200):
     """
     """
     
@@ -167,28 +168,28 @@ def plot_iterative_results(all_results, indep_result=None, grid_results=None,
     
     # Colors of the levels and independence
     cmap = plt.get_cmap('jet')
-    n_p = 0
+    n_p = 0  # Number of additional plots
     n_p += 1 if indep_result is not None else 0
     n_p += 1 if grid_results is not None else 0
     colors = [cmap(i) for i in np.linspace(0, 1, n_levels+n_p)]
     
     # Number of pairs at each iteration
-    n_pairs = get_n_pairs(all_results)   
+    n_pairs = get_n_pairs(all_results)
     
     if indep_result is not None:
         ax.plot([n_pairs[0], n_pairs[-1]], [indep_result.quantity]*2, '-o', 
                 color=colors[0], label='independence')
         
-        if False:
+        if with_bootstrap:
             indep_result.compute_bootstrap()
             boot = indep_result.bootstrap_sample
             
             up = np.percentile(boot, 99)
             down = np.percentile(boot, 1)
             ax.plot([n_pairs[0], n_pairs[-1]], [up]*2, '--', 
-                color=colors[0])
+                color=colors[0], linewidth=0.8)
             ax.plot([n_pairs[0], n_pairs[-1]], [down]*2, '--', 
-                color=colors[0])
+                color=colors[0], linewidth=0.8)
         
     
     if grid_results is not None:
@@ -231,7 +232,7 @@ def plot_iterative_results(all_results, indep_result=None, grid_results=None,
         if n_pairs[lvl] == n_pairs[-1]:
             ax.plot(n_pairs[lvl], min_quantities[lvl], 'o', color=colors[lvl+n_p])
             if with_bootstrap:
-                min_results_level[lvl].compute_bootstrap()
+                min_results_level[lvl].compute_bootstrap(n_boot)
                 boot = min_results_level[lvl].bootstrap_sample
                 up = np.percentile(boot, 95)
                 down = np.percentile(boot, 5)
@@ -242,7 +243,7 @@ def plot_iterative_results(all_results, indep_result=None, grid_results=None,
         else:
             ax.plot([n_pairs[lvl], n_pairs[lvl+1]], [min_quantities[lvl]]*2, 'o-', color=colors[lvl+n_p])
             if with_bootstrap:
-                min_results_level[lvl].compute_bootstrap()
+                min_results_level[lvl].compute_bootstrap(n_boot)
                 boot = min_results_level[lvl].bootstrap_sample
                 up = np.percentile(boot, 95)
                 down = np.percentile(boot, 5)
@@ -257,21 +258,6 @@ def plot_iterative_results(all_results, indep_result=None, grid_results=None,
     ax.set_xticks(n_pairs)
     ax.legend(loc=0)
     fig.tight_layout()        
-
-def set_style_paper():
-    # This sets reasonable defaults for font size for
-    # a figure that will go in a paper
-    sns.set_context("paper")
-    
-    # Set the font to be serif, rather than sans
-    sns.set(font='serif')
-    
-    # Make the background white, and specify the
-    # specific font family
-    sns.set_style("white", {
-        "font.family": "serif",
-        "font.serif": ["Times", "Palatino", "serif"]
-    })
 
 
 def compute_influence(obj, K, n, copulas, pair, eps=1.E-4):
