@@ -32,6 +32,8 @@ from .utils import list_to_matrix, matrix_to_list, bootstrap, to_kendalls, \
 OPERATORS = {">": operator.gt, ">=": operator.ge,
              "<": operator.lt, "<=": operator.le}
 
+GRID_TYPES = ['lhs', 'rand', "fixed", 'vertices']
+DEP_MEASURES = ['kendall', 'parameter']
 
 class ConservativeEstimate(object):
     """
@@ -94,10 +96,16 @@ class ConservativeEstimate(object):
         self.vine_structure = vine_structure
         self.copula_type = copula_type
 
-    def gridsearch(self, n_dep_param, n_input_sample, grid_type='lhs',
-                   dep_measure='kendall-tau', q_func=np.var, 
-                   lhs_grid_criterion='centermaximin', keep_input_samples=True,
-                   use_grid=None, save_grid=None, grid_path='.', use_sto_func=False,
+    def gridsearch(self, 
+                   n_dep_param, 
+                   n_input_sample, 
+                   grid_type='lhs',
+                   dep_measure='kendall',
+                   lhs_grid_criterion='centermaximin', 
+                   keep_input_samples=True,
+                   load_grid=None, 
+                   save_grid=None,
+                   use_sto_func=False,
                    random_state=None):
         """Grid search over the dependence parameter space.
         
@@ -114,11 +122,8 @@ class ConservativeEstimate(object):
             - 'rand' : a random sampling,
             - 'fixed' : an uniform grid,
             - 'vertices' : sampling over the vertices of the space.
-        dep_measure : 'kendall-tau' or 'copula-parameter', optional (default='KendallTau')
-            The measure of dependence in which the dependence parameters are
-            created.            
-        q_func : callable, optional (default=np.var)
-            The function output quantity of interest.            
+        dep_measure : 'kendall' or 'parameter', optional (default='kendall')
+            The space in which the dependence parameters are created.        
         lhs_grid_criterion : string, optional (default = 'centermaximin')
             Configuration of the LHS grid sampling:
 
@@ -132,33 +137,42 @@ class ConservativeEstimate(object):
         A list of DependenceResult instances.
 
         """
+        assert isinstance(n_dep_param, int), "The grid-size should be an integer."
+        assert isinstance(n_input_sample, int), "The sample size should be an integer."
+        assert isinstance(grid_type, str), "Grid type should be a string."
+        assert grid_type in GRID_TYPES, "Unknow grid type: {}".format(grid_type)
+        assert isinstance(dep_measure, str), "Dependence measure should be a string."
+        assert dep_measure in DEP_MEASURES, "Unknow dependence measure: {}".format(dep_measure)
+        assert isinstance(keep_input_samples, bool), "keep_input_samples should be a bool."        
+        
         rng = check_random_state(random_state)
-        run_type = 'grid-search'
-
-        assert callable(q_func), "Quantity function is not callable"
         
         kendalls = None
         grid_filename = None
         
         if n_dep_param == None and grid_type == 'vertices':
-            use_grid = None
+            load_grid = None
             save_grid = None
             
         # Load a grid
-        if use_grid is None:
-            if dep_measure == "copula-parameter":
-                bounds = self._bounds_par_list
-                params = get_grid_sample(bounds, n_dep_param, grid_type)
-                n_dep_param = len(params)
-            elif dep_measure == "kendall-tau":
-                bounds = self._bounds_tau_list
-                kendalls = get_grid_sample(bounds, n_dep_param, grid_type)
+        if load_grid in [None, False]:
+            bounds = self._bounds_par_list
+            values = get_grid_sample(bounds, n_dep_param, grid_type)
+            n_dep_param = len(values)
+            if dep_measure == "parameter":
+                params = values
+            elif dep_measure == "kendall":
+                kendalls = values
                 converter = [self._copula_converters[k] for k in self._pair_ids]
                 params = to_copula_params(converter, kendalls)
-                n_dep_param = len(params)
+            elif dep_measure == 'pearson':
+                raise NotImplementedError('Dependence measure not yet implemented.')
+            elif dep_measure == 'spearman':
+                raise NotImplementedError('Dependence measure not yet implemented.')
             else:
                 raise ValueError("Unknow dependence measure type")
         else:
+            # TODO: correct the loading
             # Load the sample from file and get the filename
             kendalls, grid_filename = load_dependence_grid(
                 dirname=grid_path,
@@ -169,10 +183,10 @@ class ConservativeEstimate(object):
                 use_grid=use_grid)
             converter = [self._copula_converters[k] for k in self._pair_ids]
             params = to_copula_params(converter, kendalls)
-        
-                
+                        
+        # TODO: correct the saving
         # The grid is save if it was asked and if it does not already exists
-        if save_grid is not None and use_grid is None:
+        if save_grid not in [None, False] and load_grid in [None, False]:
             if kendalls is None:
                 kendalls = to_kendalls(self._copula_converters, params)
             grid_filename = save_dependence_grid(grid_path, kendalls, self._bounds_tau_list,
@@ -184,12 +198,17 @@ class ConservativeEstimate(object):
             input_samples = []
             for param in params:
                 output_sample, input_sample = self.stochastic_function(
-                    param, n_input_sample, return_input_sample=keep_input_samples)   
+                    param, n_input_sample, 
+                    return_input_sample=keep_input_samples)
                 output_samples.append(output_sample)
                 input_samples.append(input_sample)
         else:
-            output_samples, input_samples = self.run_stochastic_models(
-                params, n_input_sample, return_input_sample=keep_input_samples)
+            if keep_input_samples:
+                output_samples, input_samples = self.run_stochastic_models(
+                        params, n_input_sample, return_input_sample=keep_input_samples)
+            else:                
+                output_samples = self.run_stochastic_models(
+                        params, n_input_sample, return_input_sample=keep_input_samples)
         
         return ListDependenceResult(margins=self.margins,
                                     families=self.families,
@@ -199,14 +218,17 @@ class ConservativeEstimate(object):
                                     dep_params=params,
                                     input_samples=input_samples,
                                     output_samples=output_samples,
-                                    q_func=q_func,
-                                    run_type=run_type,
+                                    run_type='grid-search',
                                     grid_type=grid_type,
                                     random_state=rng,
                                     lhs_grid_criterion=lhs_grid_criterion,
                                     grid_filename=grid_filename)
 
-    def run_stochastic_models(self, params, n_input_sample, return_input_sample=True, random_state=None):
+    def run_stochastic_models(self, 
+                              params, 
+                              n_input_sample, 
+                              return_input_samples=True, 
+                              random_state=None):
         """This function considers the model output as a stochastic function by 
         taking the dependence parameters as inputs.
         
@@ -218,26 +240,33 @@ class ConservativeEstimate(object):
             The number of evaluations for each parameter
         random_state : 
         """
-        n_params = len(params)
-        # First, get all the input_sample
+        check_random_state(random_state)
+                
+        # Get all the input_sample
         input_samples = []
         for param in params:
             full_param = np.zeros((self._corr_dim, ))
             full_param[self._pair_ids] = param
             full_param[self._fixed_pairs_ids] = self._fixed_params_list
-            
-            input_samples.append(self._get_sample(full_param, n_input_sample))
+            intput_sample = self._get_sample(full_param, n_input_sample)
+            input_samples.append(intput_sample)
         
+        # Evaluate the through the model
         outputs = self.model_func(np.concatenate(input_samples))
         
-        # List of output samples for each param
-        output_samples = np.split(outputs, n_params)
+        # List of output sample for each param
+        output_samples = np.split(outputs, len(params))
 
-        if not return_input_sample:
-            input_samples = None
-        return output_samples, input_samples
+        if return_input_samples:
+            return output_samples, input_samples
+        else:
+            return output_samples
 
-    def stochastic_function(self, param, n_input_sample=1, return_input_sample=True, random_state=None):
+    def stochastic_function(self, 
+                            param, 
+                            n_input_sample=1, 
+                            return_input_sample=True, 
+                            random_state=None):
         """This function considers the model output as a stochastic function by 
         taking the dependence parameters as inputs.
         
@@ -249,7 +278,7 @@ class ConservativeEstimate(object):
             The number of evaluations.
         random_state : 
         """
-        rng = check_random_state(random_state)
+        check_random_state(random_state)
 
         if isinstance(param, list):
             param = np.asarray(param)
@@ -260,9 +289,9 @@ class ConservativeEstimate(object):
 
         full_param = np.zeros((self._corr_dim, ))
         full_param[self._pair_ids] = param
-        full_param[self._fixed_pairs_ids] = self._fixed_params_list
-        
+        full_param[self._fixed_pairs_ids] = self._fixed_params_list        
         input_sample = self._get_sample(full_param, n_input_sample)
+        
         output_sample = self.model_func(input_sample)
 
         if return_input_sample:
