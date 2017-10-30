@@ -103,7 +103,7 @@ class ConservativeEstimate(object):
                    dep_measure='kendall',
                    lhs_grid_criterion='centermaximin', 
                    keep_input_samples=True,
-                   load_grid=None, 
+                   load_grid=None,
                    save_grid=None,
                    use_sto_func=False,
                    random_state=None):
@@ -138,12 +138,15 @@ class ConservativeEstimate(object):
 
         """
         assert isinstance(n_dep_param, int), "The grid-size should be an integer."
+        assert n_dep_param > 0, "The grid-size should be positive."
         assert isinstance(n_input_sample, int), "The sample size should be an integer."
+        assert n_input_sample > 0, "The sample size should be positive."
         assert isinstance(grid_type, str), "Grid type should be a string."
         assert grid_type in GRID_TYPES, "Unknow grid type: {}".format(grid_type)
         assert isinstance(dep_measure, str), "Dependence measure should be a string."
         assert dep_measure in DEP_MEASURES, "Unknow dependence measure: {}".format(dep_measure)
-        assert isinstance(keep_input_samples, bool), "keep_input_samples should be a bool."        
+        assert isinstance(keep_input_samples, bool), "keep_input_samples should be a bool."
+
         
         rng = check_random_state(random_state)
         
@@ -205,10 +208,10 @@ class ConservativeEstimate(object):
         else:
             if keep_input_samples:
                 output_samples, input_samples = self.run_stochastic_models(
-                        params, n_input_sample, return_input_sample=keep_input_samples)
+                        params, n_input_sample, return_input_samples=keep_input_samples)
             else:                
                 output_samples = self.run_stochastic_models(
-                        params, n_input_sample, return_input_sample=keep_input_samples)
+                        params, n_input_sample, return_input_samples=keep_input_samples)
         
         return ListDependenceResult(margins=self.margins,
                                     families=self.families,
@@ -336,8 +339,8 @@ class ConservativeEstimate(object):
                                 q_func=q_func,
                                 random_state=rng)
 
-    def independence(self, n_input_sample, q_func=np.var, 
-                     keep_input_sample=True, random_state=None):
+    def independence(self, n_input_sample, keep_input_sample=True,
+                     random_state=None):
         """Generates and evaluates observations at the independence
         configuration.
 
@@ -350,11 +353,13 @@ class ConservativeEstimate(object):
         -------
         """
         rng = check_random_state(random_state)
-        assert callable(q_func), "Quantity function is not callable"
+
+        assert isinstance(n_input_sample, int), "The sample size should be an integer."
+        assert n_input_sample > 0, "The sample size should be positive."
 
         # Creates the sample of input parameters
-        input_sample = np.asarray(ot.ComposedDistribution(self._margins).\
-                                  getSample(n_input_sample))
+        tmp = ot.ComposedDistribution(self._margins).getSample(n_input_sample)
+        input_sample = np.asarray(tmp)
         output_sample = self.model_func(input_sample)
         
         if not keep_input_sample:
@@ -363,7 +368,6 @@ class ConservativeEstimate(object):
         return DependenceResult(margins=self._margins,
                                 input_sample=input_sample,
                                 output_sample=output_sample,
-                                q_func=q_func,
                                 random_state=rng)
 
     def _get_sample(self, param, n_sample, param2=None):
@@ -1403,6 +1407,13 @@ class DependenceResult(object):
         """
         self._bootstrap_sample = bootstrap(self.output_sample_id, n_bootstrap, self.q_func)
         self._n_bootstrap_sample = self._bootstrap_sample.shape[0]
+        if (self._bootstrap_sample is None) or (self._n_bootstrap_sample != n_bootstrap):
+            self.compute_bootstrap(n_bootstrap)
+
+        self._std = self._bootstrap_sample.std()
+        self._mean = self._bootstrap_sample.mean()
+        self._cov = abs(self._std/self._mean)*100.
+        
         if not inplace:
             return self._bootstrap_sample
 
@@ -1429,6 +1440,30 @@ class DependenceResult(object):
         gaussian_quantile = norm.ppf(1. - (1. - ci)/2.)
         deviation = gaussian_quantile*error
         return [quantity - deviation, quantity + deviation]
+    
+    @property
+    def boot_cov(self):
+        """Coefficient of variation.
+        """
+        if self._cov is None:
+            print('Create a bootstrap sample first.')
+        return self._cov
+
+    @property
+    def boot_mean(self):
+        """Mean of the quantity.
+        """
+        if self._mean is None:
+            print('Create a bootstrap sample first.')
+        return self._mean
+
+    @property
+    def boot_var(self):
+        """Standard deviation of the quantity
+        """
+        if self._std is None:
+            print('Create a bootstrap sample first.')
+        return self._std
 
     @property
     def kde_estimate(self):
