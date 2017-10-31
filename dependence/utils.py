@@ -118,13 +118,11 @@ class Space(sk_Space):
                 sample = np.asarray(sample)
             else:
                 bounds = list(product([-1., 1., 0.], repeat=n_pair))
-                if n_samples is None:
+                if n_samples is None or n_pair == 1:
                     bounds.remove((0.,)*n_pair) # remove indepencence
-                if n_pair == 1:
-                    bounds.remove((0.,)*n_pair) # remove indepencence                    
                 bounds = np.asarray(bounds)
                 n_bounds = len(bounds)
-    
+
                 if n_samples is None:
                     # We take all the vertices
                     n_samples = n_bounds

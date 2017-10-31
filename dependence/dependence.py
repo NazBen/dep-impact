@@ -14,6 +14,7 @@ import operator
 import warnings
 import os
 import json
+import time
 
 import numpy as np
 import pandas as pd
@@ -21,6 +22,9 @@ import openturns as ot
 import h5py
 from sklearn.utils import check_random_state
 from scipy.stats import gaussian_kde, norm
+from concurrent.futures import ThreadPoolExecutor
+from multiprocessing import Process, Manager
+from multiprocessing.managers import BaseManager
 
 from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
@@ -106,15 +110,16 @@ class ConservativeEstimate(object):
                    load_grid=None,
                    save_grid=None,
                    use_sto_func=False,
-                   random_state=None):
+                   random_state=None,
+                   verbose=True):
         """Grid search over the dependence parameter space.
         
         Parameters
         ----------
         n_dep_param : int
-            The number of dependence parameters in the grid search.            
+            The number of dependence parameters in the grid search.
         n_input_sample : int
-            The sample size for each dependence parameter.            
+            The sample size for each dependence parameter.
         grid_type : 'lhs', 'rand' or 'fixed, optional (default='lhs')
             The type of grid :
                 
@@ -123,7 +128,7 @@ class ConservativeEstimate(object):
             - 'fixed' : an uniform grid,
             - 'vertices' : sampling over the vertices of the space.
         dep_measure : 'kendall' or 'parameter', optional (default='kendall')
-            The space in which the dependence parameters are created.        
+            The space in which the dependence parameters are created.
         lhs_grid_criterion : string, optional (default = 'centermaximin')
             Configuration of the LHS grid sampling:
 
@@ -137,19 +142,24 @@ class ConservativeEstimate(object):
         A list of DependenceResult instances.
 
         """
-        assert isinstance(n_dep_param, int), "The grid-size should be an integer."
-        assert n_dep_param > 0, "The grid-size should be positive."
         assert isinstance(n_input_sample, int), "The sample size should be an integer."
-        assert n_input_sample > 0, "The sample size should be positive."
         assert isinstance(grid_type, str), "Grid type should be a string."
+        assert n_input_sample > 0, "The sample size should be positive."
+        if isinstance(n_dep_param, int):
+            assert n_dep_param > 0, "The grid-size should be positive."
+        elif n_dep_param is None:
+            assert grid_type == 'vertices', "NoneType for n_dep_params only works for vertices type of grids."
+        else:
+             "The grid-size should be an integer or a NoneType."
         assert grid_type in GRID_TYPES, "Unknow grid type: {}".format(grid_type)
         assert isinstance(dep_measure, str), "Dependence measure should be a string."
         assert dep_measure in DEP_MEASURES, "Unknow dependence measure: {}".format(dep_measure)
         assert isinstance(keep_input_samples, bool), "keep_input_samples should be a bool."
 
-        
         rng = check_random_state(random_state)
         
+        t_start = time.clock()
+
         kendalls = None
         grid_filename = None
         
@@ -160,12 +170,20 @@ class ConservativeEstimate(object):
         # Load a grid
         if load_grid in [None, False]:
             bounds = self._bounds_par_list
+            if verbose:
+                print('Time taken:', time.clock())
+                print('Creating grid')
+                t_start = time.time()
             values = get_grid_sample(bounds, n_dep_param, grid_type)
             n_dep_param = len(values)
             if dep_measure == "parameter":
                 params = values
             elif dep_measure == "kendall":
                 kendalls = values
+                if verbose:
+                    print('Time taken:', time.clock())
+                    print('Converting to kendall parameters')
+                    t_start = time.time()
                 converter = [self._copula_converters[k] for k in self._pair_ids]
                 params = to_copula_params(converter, kendalls)
             elif dep_measure == 'pearson':
@@ -196,15 +214,29 @@ class ConservativeEstimate(object):
                                  grid_type)
 
         # Evaluate the sample
+        if verbose:
+            print('Time taken:', time.clock())
+            print('Sample evaluation')
         if use_sto_func:
             output_samples = []
             input_samples = []
+            e = ThreadPoolExecutor(8)
+            futures = []
             for param in params:
-                output_sample, input_sample = self.stochastic_function(
-                    param, n_input_sample, 
-                    return_input_sample=keep_input_samples)
-                output_samples.append(output_sample)
+                if keep_input_samples:
+                    output_sample, input_sample = self.stochastic_function(
+                        param, n_input_sample, 
+                        return_input_sample=keep_input_samples)
+                else:
+                    output_sample = e.submit(self.stochastic_function,
+                        param, n_input_sample,
+                        return_input_sample=keep_input_samples)
+                    input_sample = None
+                futures.append(output_sample)
                 input_samples.append(input_sample)
+                
+            output_samples = [f.result() for f in futures]
+            input_samples = None if not keep_input_samples else input_samples
         else:
             if keep_input_samples:
                 output_samples, input_samples = self.run_stochastic_models(
@@ -212,6 +244,7 @@ class ConservativeEstimate(object):
             else:                
                 output_samples = self.run_stochastic_models(
                         params, n_input_sample, return_input_samples=keep_input_samples)
+                input_samples = None
         
         return ListDependenceResult(margins=self.margins,
                                     families=self.families,
@@ -231,7 +264,8 @@ class ConservativeEstimate(object):
                               params, 
                               n_input_sample, 
                               return_input_samples=True, 
-                              random_state=None):
+                              random_state=None,
+                              verbose=True):
         """This function considers the model output as a stochastic function by 
         taking the dependence parameters as inputs.
         
@@ -244,22 +278,37 @@ class ConservativeEstimate(object):
         random_state : 
         """
         check_random_state(random_state)
-                
+
         # Get all the input_sample
+        if verbose:
+            print('Time taken:', time.clock())
+            print('Creating the input samples')
         input_samples = []
+        BaseManager.register('self', self)
+        with BaseManager() as manager:
+            inst = manager.self()
         for param in params:
             full_param = np.zeros((self._corr_dim, ))
             full_param[self._pair_ids] = param
             full_param[self._fixed_pairs_ids] = self._fixed_params_list
             intput_sample = self._get_sample(full_param, n_input_sample)
             input_samples.append(intput_sample)
-        
-        # Evaluate the through the model
-        outputs = self.model_func(np.concatenate(input_samples))
-        
-        # List of output sample for each param
-        output_samples = np.split(outputs, len(params))
 
+        if verbose:
+            print('Time taken:', time.clock())
+            print('Evaluate the input samples')
+        if True:
+            # Evaluate the through the model
+            outputs = self.model_func(np.concatenate(input_samples))
+            # List of output sample for each param
+            output_samples = np.split(outputs, len(params))
+        else:
+            e = ThreadPoolExecutor(8)
+            futures = [e.submit(self.model_func, input_sample) for input_sample in input_samples]
+            output_samples = [f.result() for f in futures]
+            
+        if verbose:
+            print('Time taken:', time.clock())
         if return_input_samples:
             return output_samples, input_samples
         else:
@@ -292,7 +341,7 @@ class ConservativeEstimate(object):
 
         full_param = np.zeros((self._corr_dim, ))
         full_param[self._pair_ids] = param
-        full_param[self._fixed_pairs_ids] = self._fixed_params_list        
+        full_param[self._fixed_pairs_ids] = self._fixed_params_list
         input_sample = self._get_sample(full_param, n_input_sample)
         
         output_sample = self.model_func(input_sample)
@@ -301,8 +350,8 @@ class ConservativeEstimate(object):
             return output_sample, input_sample
         else:
             return output_sample
-        
-    def incomplete(self, n_input_sample, q_func=np.var, 
+
+    def incomplete(self, n_input_sample, q_func=np.var,
                      keep_input_sample=True, random_state=None):
         """Simulates from the incomplete probability distribution.
 
@@ -313,7 +362,6 @@ class ConservativeEstimate(object):
             
         Returns
         -------
-        
         """
         rng = check_random_state(random_state)
         assert callable(q_func), "Quantity function is not callable"
@@ -323,13 +371,12 @@ class ConservativeEstimate(object):
                                        n_input_sample=n_input_sample,
                                        return_input_sample=keep_input_sample, 
                                        random_state=rng)
-        
-        
+
         if keep_input_sample:
             output_sample, input_sample = out
         else:
             output_sample = out
-            
+
         return DependenceResult(margins=self._margins,
                                 families=self.families,
                                 vine_structure = self.vine_structure,
@@ -402,9 +449,10 @@ class ConservativeEstimate(object):
             raise AttributeError('Unknown type of copula.')
 
         # Applied the inverse transformation to get the sample of the joint distribution
+        # TODO: this part is pretty much time consuming...
         input_sample = np.zeros((n_sample, dim))
-        for i, inv_CDF in enumerate(self._margins_quantiles):
-            input_sample[:, i] = np.asarray(inv_CDF(cop_sample[:, i])).ravel()
+        for i, quantile_func in enumerate(self._margins_quantiles):
+            input_sample[:, i] = np.asarray(quantile_func(cop_sample[:, i])).ravel()
 
         return input_sample
 
@@ -497,7 +545,7 @@ class ConservativeEstimate(object):
         # Dpendent pairs
         _, self._pair_ids, self._pairs = matrix_to_list(families, return_ids=True, 
                                                  return_coord=True, op_char='>')
-                                                        
+
         # Independent pairs
         _, self._indep_pairs_ids, self._indep_pairs = matrix_to_list(
                 families,return_ids=True, return_coord=True, op_char='==')
@@ -595,7 +643,7 @@ class ConservativeEstimate(object):
     @vine_structure.setter
     def vine_structure(self, structure):
         if structure is None:
-            listed_pairs = self._indep_pairs + self._fixed_pairs      
+            listed_pairs = self._indep_pairs + self._fixed_pairs
             dim = self.input_dim
             # TODO : this should be corrected...
             if len(listed_pairs) > 0:
@@ -606,7 +654,7 @@ class ConservativeEstimate(object):
             else:
                 structure = np.zeros((dim, dim), dtype=int)
                 for i in range(dim):
-                    structure[i, 0:i+1] = i + 1       
+                    structure[i, 0:i+1] = i + 1
             self._custom_vine_structure = False
         else:
             check_matrix(structure)  
@@ -1113,9 +1161,9 @@ class ListDependenceResult(list):
         dirname = os.path.dirname(path_or_buf)
         if not os.path.exists(dirname):
             os.makedirs(dirname)
-        
+
         assert extension in ['.hdf', '.hdf5'], "File extension should be hdf"
-        
+
         # List of input variable names
         if input_names:
             assert len(input_names) == self.input_dim, \
@@ -1412,7 +1460,7 @@ class DependenceResult(object):
 
         self._std = self._bootstrap_sample.std()
         self._mean = self._bootstrap_sample.mean()
-        self._cov = abs(self._std/self._mean)*100.
+        self._cov = abs(self._std/self._mean)
         
         if not inplace:
             return self._bootstrap_sample
