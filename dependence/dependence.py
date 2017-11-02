@@ -23,8 +23,6 @@ import h5py
 from sklearn.utils import check_random_state
 from scipy.stats import gaussian_kde, norm
 from concurrent.futures import ThreadPoolExecutor
-from multiprocessing import Process, Manager
-from multiprocessing.managers import BaseManager
 
 from .vinecopula import VineCopula, check_matrix
 from .conversion import Conversion, get_tau_interval
@@ -162,11 +160,11 @@ class ConservativeEstimate(object):
 
         kendalls = None
         grid_filename = None
-        
+
         if n_dep_param == None and grid_type == 'vertices':
             load_grid = None
             save_grid = None
-            
+
         # Load a grid
         if load_grid in [None, False]:
             bounds = self._bounds_par_list
@@ -217,26 +215,30 @@ class ConservativeEstimate(object):
         if verbose:
             print('Time taken:', time.clock())
             print('Sample evaluation')
+
+        # Use less memory
         if use_sto_func:
             output_samples = []
-            input_samples = []
-            e = ThreadPoolExecutor(8)
-            futures = []
-            for param in params:
+            input_samples = None if not keep_input_samples else []
+            for i, param in enumerate(params):
+                result = self.stochastic_function(param, n_input_sample, 
+                                                  return_input_sample=keep_input_samples)
                 if keep_input_samples:
-                    output_sample, input_sample = self.stochastic_function(
-                        param, n_input_sample, 
-                        return_input_sample=keep_input_samples)
+                    output_sample, input_sample = result
+                    input_samples.append(input_sample)
                 else:
-                    output_sample = e.submit(self.stochastic_function,
-                        param, n_input_sample,
-                        return_input_sample=keep_input_samples)
-                    input_sample = None
-                futures.append(output_sample)
-                input_samples.append(input_sample)
-                
-            output_samples = [f.result() for f in futures]
-            input_samples = None if not keep_input_samples else input_samples
+                    output_sample = result
+
+                output_samples.append(output_sample)
+
+                if verbose:
+                    if n_dep_param > 10:
+                        if i % int(n_dep_param/10) == 0:
+                            print('Time taken:', time.clock())
+                            print('Iteration %d' % (i))
+                    else:
+                         print('Time taken:', time.clock())
+                         print('Iteration %d' % (i))
         else:
             if keep_input_samples:
                 output_samples, input_samples = self.run_stochastic_models(
@@ -283,10 +285,8 @@ class ConservativeEstimate(object):
         if verbose:
             print('Time taken:', time.clock())
             print('Creating the input samples')
+
         input_samples = []
-        BaseManager.register('self', self)
-        with BaseManager() as manager:
-            inst = manager.self()
         for param in params:
             full_param = np.zeros((self._corr_dim, ))
             full_param[self._pair_ids] = param
@@ -297,6 +297,7 @@ class ConservativeEstimate(object):
         if verbose:
             print('Time taken:', time.clock())
             print('Evaluate the input samples')
+
         if True:
             # Evaluate the through the model
             outputs = self.model_func(np.concatenate(input_samples))
@@ -306,7 +307,7 @@ class ConservativeEstimate(object):
             e = ThreadPoolExecutor(8)
             futures = [e.submit(self.model_func, input_sample) for input_sample in input_samples]
             output_samples = [f.result() for f in futures]
-            
+
         if verbose:
             print('Time taken:', time.clock())
         if return_input_samples:

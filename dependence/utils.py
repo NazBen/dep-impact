@@ -123,13 +123,11 @@ class Space(sk_Space):
                 bounds = np.asarray(bounds)
                 n_bounds = len(bounds)
 
-                if n_samples is None:
+                if (n_samples is None) or (n_samples > n_bounds):
                     # We take all the vertices
                     n_samples = n_bounds
                     sample = bounds
                 else:
-                    # Random sampling over the vertices
-                    n_samples = min(n_samples, n_bounds)
                     id_taken = np.random.choice(n_bounds, size=n_samples, replace=False)
                     sample = bounds[sorted(id_taken), :]
             # Assert the bounds
