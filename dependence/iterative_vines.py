@@ -34,41 +34,12 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     assert 1 <= n_add_pairs < corr_dim, "Must add at least one pair at each iteration"
     assert 0 <= n_remove_pairs < corr_dim, "This cannot be negative"
     assert callable(q_func), "Quantity function must be callable"
-    
-    # Initial configurations
-    init_family = quant_estimate.families
-    init_bounds_tau = quant_estimate.bounds_tau
-    fixed_params = quant_estimate.fixed_params.copy()
-    init_indep_pairs = quant_estimate._indep_pairs[:]
-    init_fixed_pairs = quant_estimate._fixed_pairs[:]
-    
-    # New empty configurations
-    families = np.zeros((dim, dim))
-    bounds_tau = np.zeros((dim, dim))
-    bounds_tau[:] = np.nan
-
-    # Selected pairs through iterations
-    selected_pairs = []
-    all_results = []
-
-    n_dep_param = n_dep_param_init
-    
-    # The pairs to do at each iterations
-    indices = np.asarray(np.tril_indices(dim, k=-1)).T.tolist()
-    
-    # Remove fixed pairs from the list and add in the family matrix
-    for pair in init_fixed_pairs:
-        indices.remove(pair)
-        families[pair[0], pair[1]] = init_family[pair[0], pair[1]]
         
-    # Remove independent pairs
-    for pair in init_indep_pairs:
-        indices.remove(pair)
-    
     # Check if the given parameters are known
     for lib_param in kwargs:
         assert lib_param in LIB_PARAMS, "Unknow parameter %s" % (lib_param)
         
+    # Iterative save of the results
     iterative_save = False
     if 'iterative_save' in kwargs:
         iterative_save = kwargs['iterative_save']
@@ -81,8 +52,9 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
         elif iterative_save is False:
             pass
         else:
-            raise TypeError("Wrong type for iterative_save: {0}".format(type(iterative_save)))
+            raise TypeError("Wrong type for iterative_save: {}".format(type(iterative_save)))
         
+    # Iterative load of the results
     iterative_load = False
     if 'iterative_load' in kwargs:
         iterative_load = kwargs['iterative_load']
@@ -120,17 +92,44 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     save_grid = None
     if 'save_grid' in kwargs:
         save_grid = kwargs['save_grid']
-        
-    grid_path = '.'
-    if 'grid_path' in kwargs:
-        grid_path = kwargs['grid_path']
-        
+                
     n_pairs_start = 0
     if 'n_pairs_start' in kwargs:
         n_pairs_start = kwargs['n_pairs_start']
 
+    # Only a loading execution
     if n_input_sample == 0:
         iterative_save = None
+        
+    # Initial configurations
+    init_family = quant_estimate.families
+    init_bounds_tau = quant_estimate.bounds_tau
+    fixed_params = quant_estimate.fixed_params.copy()
+    init_indep_pairs = quant_estimate._indep_pairs[:]
+    init_fixed_pairs = quant_estimate._fixed_pairs[:]
+    
+    # New empty configurations
+    families = np.zeros((dim, dim))
+    bounds_tau = np.zeros((dim, dim))
+    bounds_tau[:] = np.nan
+
+    # Selected pairs through iterations
+    selected_pairs = []
+    all_results = []
+
+    n_dep_param = n_dep_param_init
+    
+    # The pairs to do at each iterations
+    indices = np.asarray(np.tril_indices(dim, k=-1)).T.tolist()
+    
+    # Remove fixed pairs from the list and add in the family matrix
+    for pair in init_fixed_pairs:
+        indices.remove(pair)
+        families[pair[0], pair[1]] = init_family[pair[0], pair[1]]
+        
+    # Remove independent pairs
+    for pair in init_indep_pairs:
+        indices.remove(pair)
         
     ## Algorithm Loop
     cost = 0
@@ -138,6 +137,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     iteration = 0
     min_quant_iter = []
     stop_conditions = False
+    
     while not stop_conditions:
         min_quantity = {}
         all_results.append({})
@@ -160,18 +160,17 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
             quant_estimate.families = tmp_families
             quant_estimate.fixed_params = fixed_params
             quant_estimate.bounds_tau = tmp_bounds_tau
-            
 
             # Lets get the results for this family structure
             if n_input_sample > 0 and n_pairs >= n_pairs_start:
                 results = quant_estimate.gridsearch(n_dep_param=n_dep_param,
                                                              n_input_sample=n_input_sample,
                                                              grid_type=grid_type,
-                                                             q_func=q_func,
                                                              keep_input_samples=keep_input_samples,
-                                                             use_grid=use_grid,
+                                                             load_grid=use_grid,
                                                              save_grid=save_grid,
-                                                             grid_path=grid_path)
+                                                             use_sto_func=True)
+                results.q_func = q_func
             
             if iterative_save or iterative_load:
                 cop_str = "_".join([str(l) for l in quant_estimate._family_list])

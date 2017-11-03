@@ -109,7 +109,7 @@ class ConservativeEstimate(object):
                    save_grid=None,
                    use_sto_func=False,
                    random_state=None,
-                   verbose=True):
+                   verbose=False):
         """Grid search over the dependence parameter space.
         
         Parameters
@@ -267,7 +267,7 @@ class ConservativeEstimate(object):
                               n_input_sample, 
                               return_input_samples=True, 
                               random_state=None,
-                              verbose=True):
+                              verbose=False):
         """This function considers the model output as a stochastic function by 
         taking the dependence parameters as inputs.
         
