@@ -115,7 +115,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
 
     # Selected pairs through iterations
     selected_pairs = []
-    all_results = []
+    all_results = IterativeDependenceResults(dim)
 
     n_dep_param = n_dep_param_init
     
@@ -140,7 +140,6 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     
     while not stop_conditions:
         min_quantity = {}
-        all_results.append({})
         for i, j in indices:
             # Family matrix for this iteration
             tmp_families = families.copy()
@@ -205,10 +204,6 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
                 # Replace the actual results with the loaded results (this results + all the previous saved ones)
                 results = load_result
                 
-            # Name if the result dictionary
-            result_name = str(selected_pairs + [(i, j)])[1:-1]
-            all_results[iteration][result_name] = results
-            
             # How much does it costs
             cost += results.n_evals
 
@@ -227,14 +222,18 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
                 if input_names:
                     pair_names = [ "%s-%s" % (input_names[k1], input_names[k2]) for k1, k2 in selected_pairs + [(i, j)]]
                     print("The variables are: " + " ".join(pair_names))
-        
+
+
+            # Store the result
+            all_results[iteration, i, j] = results
+
         # Get the min from the iterations
         sorted_quantities = sorted(min_quantity.items(), key=lambda x: x[1])
         
         # Delay of the first iteration
         if iteration == 0:
             delta_q_init = abs(sorted_quantities[0][1] - sorted_quantities[-1][1])
-            
+
         min_quant_iter.append(sorted_quantities[0][1])
         
         if (n_remove_pairs > 0) and (n_remove_pairs < len(sorted_quantities)-1):
@@ -252,6 +251,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
             indices.remove(list(pair[0]))
             selected_pairs.append(pair[0])
             
+        all_results.selected_pairs.append(selected_pairs)
         if True:
             k1, k2 = selected_pair
             tmp = '\nIteration {0}: selected pair: {1}'.format(iteration+1, selected_pair)
@@ -271,11 +271,98 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
             if delta_q <= delta*delta_q_init:
                 stop_conditions = True
                 print('Minimum_variation not fulfiled: %.2f <= %0.2f' % (delta_q, delta*delta_q_init))
-                
         n_pairs += n_add_pairs
         if n_dep_param is not None:
             n_dep_param = n_dep_param_init*int(n_pairs**2)
             
+
+        if not stop_conditions:
+            all_results.new_iteration()
         iteration += 1
     return all_results
 
+
+class IterativeDependenceResults(object):
+    """
+
+    """
+    def __init__(self, dim):
+
+        self.iteration = 0
+        n_pairs = int(dim * (dim-1) / 2)
+        self.results = [[]]
+        tmp = np.zeros((n_pairs, n_pairs), dtype=object)
+        tmp[:] == np.nan
+        self.results[self.iteration] = tmp
+        self.selected_pairs = [[]]
+        
+        self.dim = dim
+        self.n_pairs = n_pairs
+
+    def new_iteration(self):
+        """
+        """
+        self.iteration += 1
+        tmp = np.zeros((self.n_pairs, self.n_pairs), dtype=object)
+        tmp[:] = np.nan
+        self.results.append(tmp)
+
+    def add_result(self, pair, result):
+        """
+        """
+        self.iteration_pairs[self.iteration].append(pair)
+
+    def __getitem__(self, item):
+        """
+        """
+        iteration, i, j = item
+        return self.results[iteration][i, j]
+
+    def __setitem__(self, item, result):
+        """
+        """
+        iteration, i, j = item
+        self.results[iteration][i, j] = result
+
+    def min_quantities(self, iteration):
+        """
+        """
+        results = self.results[iteration]
+        dim = self.dim
+        min_quantities = np.zeros((dim, dim), dtype=np.float)
+        for i in range(1, dim):
+            for j in range(i):
+                if results[i, j] != 0:
+                    min_quantities[i, j] = results[i, j].min_quantity
+
+        return min_quantities
+
+    def min_results(self, iteration):
+        """
+        """
+        results = self.results[iteration]
+        dim = self.dim
+        min_results = np.zeros((dim, dim), dtype=object)
+        for i in range(1, dim):
+            for j in range(i):
+                if results[i, j] != 0:
+                    min_results[i, j] = results[i, j].min_result
+
+        return min_results
+
+    def min_quantity(self, iteration):
+        """
+        """
+        min_quantities = self.min_quantities(iteration)
+        id_min = min_quantities.argmin()
+        min_quantity = self.min_quantity(iteration).item(id_min)
+        return min_quantity
+
+
+    def min_result(self, iteration):
+        """
+        """
+        min_quantities = self.min_quantities(iteration)
+        id_min = min_quantities.argmin()
+        min_result = self.min_results(iteration).item(id_min)
+        return min_result

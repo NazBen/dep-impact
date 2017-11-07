@@ -1466,7 +1466,7 @@ class DependenceResult(object):
         if not inplace:
             return self._bootstrap_sample
 
-    def compute_quantity_bootstrap_ci(self, alphas=[0.05, 0.95], n_bootstrap=1000):
+    def compute_quantity_bootstrap_ci(self, alphas=[0.025, 0.975], n_bootstrap=1000):
         """Boostrap confidence interval.
         """
         if (self._bootstrap_sample is None) or (self._n_bootstrap_sample != n_bootstrap):
@@ -1568,6 +1568,18 @@ class DependenceResult(object):
         """
         kendalls = []
         for family, id_param in zip(*matrix_to_list(self.families, return_ids=True)):
+            kendall = Conversion(family).to_kendall(self.full_dep_params[id_param])
+            if kendall.size == 1:
+                kendall = kendall.item()
+            kendalls.append(kendall)
+        return kendalls
+
+    @property
+    def full_kendall_tau(self):
+        """The Kendall's tau of the dependence parameters.
+        """
+        kendalls = []
+        for family, id_param in zip(*matrix_to_list(self.families, return_ids=True, op_char='>=')):
             kendall = Conversion(family).to_kendall(self.full_dep_params[id_param])
             if kendall.size == 1:
                 kendall = kendall.item()
