@@ -111,7 +111,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     # New empty configurations
     families = np.zeros((dim, dim))
     bounds_tau = np.zeros((dim, dim))
-    bounds_tau[:] = np.nan
+    bounds_tau[:] = None
 
     # Selected pairs through iterations
     selected_pairs = []
@@ -292,7 +292,7 @@ class IterativeDependenceResults(object):
         n_pairs = int(dim * (dim-1) / 2)
         self.results = [[]]
         tmp = np.zeros((n_pairs, n_pairs), dtype=object)
-        tmp[:] == np.nan
+        tmp[:] == None
         self.results[self.iteration] = tmp
         self.selected_pairs = [[]]
         
@@ -304,7 +304,7 @@ class IterativeDependenceResults(object):
         """
         self.iteration += 1
         tmp = np.zeros((self.n_pairs, self.n_pairs), dtype=object)
-        tmp[:] = np.nan
+        tmp[:] = None
         self.results.append(tmp)
 
     def add_result(self, pair, result):
@@ -332,7 +332,7 @@ class IterativeDependenceResults(object):
         min_quantities = np.zeros((dim, dim), dtype=np.float)
         for i in range(1, dim):
             for j in range(i):
-                if results[i, j] != 0:
+                if results[i, j] is not None:
                     min_quantities[i, j] = results[i, j].min_quantity
 
         return min_quantities
@@ -345,7 +345,7 @@ class IterativeDependenceResults(object):
         min_results = np.zeros((dim, dim), dtype=object)
         for i in range(1, dim):
             for j in range(i):
-                if results[i, j] != 0:
+                if results[i, j] is not None:
                     min_results[i, j] = results[i, j].min_result
 
         return min_results
