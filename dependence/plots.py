@@ -176,7 +176,7 @@ def plot_iterative_results(iter_results, indep_result=None, grid_results=None, q
     colors = [cmap(i) for i in np.linspace(0, 1, n_levels+n_p)]
     
     # Number of pairs at each iteration
-    n_pairs = [1, 2, 3]
+    n_pairs = range(1, n_levels+1)
     
     if indep_result is not None:
         ax.plot([n_pairs[0], n_pairs[-1]], [indep_result.quantity]*2, '-o', 
