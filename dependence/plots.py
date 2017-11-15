@@ -164,7 +164,8 @@ def plot_iterative_results(iter_results, indep_result=None, grid_results=None, q
         fig, ax = plt.subplots(figsize=figsize)
     
     # Number of trees
-    n_levels = iter_results.iteration
+    n_levels = iter_results.iteration+1
+    dim = iter_results.dim
     
     # Colors of the levels and independence
     cmap = plt.get_cmap('jet')
@@ -209,8 +210,10 @@ def plot_iterative_results(iter_results, indep_result=None, grid_results=None, q
         
     quantities = []
     min_results_level = []
-    for i in range(iter_results.iteration+1):
-        quantities.append(iter_results.min_quantities(i).ravel().tolist())
+    for i in range(n_levels):
+        values = iter_results.min_quantities(i)[np.tril_indices(dim, -1)]
+        values = values[values != 0.].tolist()
+        quantities.append(values)
         min_results_level.append(iter_results.min_result(i))
         
     # Get the minimum of each level
