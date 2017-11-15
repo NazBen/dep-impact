@@ -154,27 +154,28 @@ def matrix_plot_quantities(results, indep_result=None, grid_result=None,
     fig.tight_layout()
     
     
-def plot_iterative_results(all_results, indep_result=None, grid_results=None, 
-                           q_func=None, figsize=(8, 4), 
-                           quantity_name='Quantity', with_bootstrap=False, n_boot=200):
+def plot_iterative_results(iter_results, indep_result=None, grid_results=None, q_func=None, figsize=(8, 4), 
+                           quantity_name='Quantity', with_bootstrap=False, n_boot=200, ax=None):
     """
     """
     
     # Figure
-    fig, ax = plt.subplots(figsize=figsize)
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
     
     # Number of trees
-    n_levels = len(all_results)
+    n_levels = iter_results.iteration
     
     # Colors of the levels and independence
     cmap = plt.get_cmap('jet')
+
     n_p = 0  # Number of additional plots
     n_p += 1 if indep_result is not None else 0
     n_p += 1 if grid_results is not None else 0
     colors = [cmap(i) for i in np.linspace(0, 1, n_levels+n_p)]
     
     # Number of pairs at each iteration
-    n_pairs = get_n_pairs(all_results)
+    n_pairs = [1, 2, 3]
     
     if indep_result is not None:
         ax.plot([n_pairs[0], n_pairs[-1]], [indep_result.quantity]*2, '-o', 
@@ -208,10 +209,10 @@ def plot_iterative_results(all_results, indep_result=None, grid_results=None,
         
     quantities = []
     min_results_level = []
-    for result_by_level in all_results:
-        quantities.append(get_all_quantity(result_by_level, q_func=q_func))
-        min_results_level.append(get_min_result(result_by_level.values(), q_func=q_func))
-
+    for i in range(iter_results.iteration+1):
+        quantities.append(iter_results.min_quantities(i).ravel().tolist())
+        min_results_level.append(iter_results.min_result(i))
+        
     # Get the minimum of each level
     min_quantities = []
     for quant_lvl in quantities:
@@ -257,7 +258,6 @@ def plot_iterative_results(all_results, indep_result=None, grid_results=None,
     ax.set_ylabel(quantity_name)
     ax.set_xticks(n_pairs)
     ax.legend(loc=0)
-    fig.tight_layout()        
 
 
 def compute_influence(obj, K, n, copulas, pair, eps=1.E-4):

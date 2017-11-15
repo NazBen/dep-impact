@@ -291,7 +291,7 @@ class IterativeDependenceResults(object):
         self.iteration = 0
         n_pairs = int(dim * (dim-1) / 2)
         self.results = [[]]
-        tmp = np.zeros((n_pairs, n_pairs), dtype=object)
+        tmp = np.zeros((dim, dim), dtype=object)
         tmp[:] == None
         self.results[self.iteration] = tmp
         self.selected_pairs = [[]]
@@ -303,14 +303,9 @@ class IterativeDependenceResults(object):
         """
         """
         self.iteration += 1
-        tmp = np.zeros((self.n_pairs, self.n_pairs), dtype=object)
+        tmp = np.zeros((self.dim, self.dim), dtype=object)
         tmp[:] = None
         self.results.append(tmp)
-
-    def add_result(self, pair, result):
-        """
-        """
-        self.iteration_pairs[self.iteration].append(pair)
 
     def __getitem__(self, item):
         """
@@ -354,8 +349,7 @@ class IterativeDependenceResults(object):
         """
         """
         min_quantities = self.min_quantities(iteration)
-        id_min = min_quantities.argmin()
-        min_quantity = self.min_quantity(iteration).item(id_min)
+        min_quantity = min_quantities.min()
         return min_quantity
 
 
