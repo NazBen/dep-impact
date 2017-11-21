@@ -31,9 +31,13 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     
     assert grid_type in GRIDS, "Unknow Grid type {0}".format(grid_type)
     assert 0 < max_n_pairs <= corr_dim, "Maximum number of pairs must be positive"
-    assert 1 <= n_add_pairs < corr_dim, "Must add at least one pair at each iteration"
+    assert 1 <= n_add_pairs <= corr_dim, "Must add at least one pair at each iteration"
     assert 0 <= n_remove_pairs < corr_dim, "This cannot be negative"
     assert callable(q_func), "Quantity function must be callable"
+    
+    if n_add_pairs == corr_dim:
+        adapt_vine_structure = False
+        print('The number of dimension is equal to the number of pairs to add')
         
     # Check if the given parameters are known
     for lib_param in kwargs:
