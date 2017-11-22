@@ -263,7 +263,6 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
                 tmp += " (" + "-".join(input_names[k] for k in selected_pair) + ")"
             print(tmp)
             print('Total number of evaluations = %d. Minimum quantity at %.2f.\n' % (cost, min_quantity[selected_pair]))
-            
 
         # Stop conditions
         if n_pairs >= max_n_pairs:
@@ -278,10 +277,12 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
         n_pairs += n_add_pairs
         if n_dep_param is not None:
             n_dep_param = n_dep_param_init*int(n_pairs**2)
-            
 
         if not stop_conditions:
             all_results.new_iteration()
+
+        all_results.n_evals = cost
+
         iteration += 1
     return all_results
 
@@ -302,6 +303,7 @@ class IterativeDependenceResults(object):
         
         self.dim = dim
         self.n_pairs = n_pairs
+        self.n_evals = 0
 
     def new_iteration(self):
         """
