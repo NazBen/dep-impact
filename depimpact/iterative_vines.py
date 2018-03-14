@@ -3,7 +3,7 @@ import os
 
 import numpy as np
 
-from .dependence import ListDependenceResult
+from .conservative import ListDependenceResult
 from .utils import get_pair_id, get_pairs_by_levels, get_possible_structures
 
 GRIDS = ['lhs', 'rand', 'vertices']

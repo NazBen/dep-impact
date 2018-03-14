@@ -235,3 +235,6 @@ ModelManifest.xml
 *.pyperf
 *.hdf5
 .cache/v/cache
+
+
+.vscode/
