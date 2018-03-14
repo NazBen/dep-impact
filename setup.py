@@ -17,6 +17,6 @@ setup(
     author_email='nazih.benoumechiara@gmail.com',
     license='MIT',
     keywords='copula reliability regular-vines',
-    packages=['dependence'],
+    packages=['depimpact'],
     install_requires=required
 )

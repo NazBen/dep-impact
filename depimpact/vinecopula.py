@@ -1,7 +1,7 @@
 ﻿import numpy as np
 import rpy2.rinterface as ri
-from rpy2.robjects.packages import importr
 from rpy2.robjects.numpy2ri import numpy2ri
+from rpy2.robjects.packages import importr
 
 VINECOPULA = importr('VineCopula')
 

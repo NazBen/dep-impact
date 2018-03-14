@@ -1,6 +1,6 @@
 ﻿import numpy as np
-from rpy2.robjects.packages import importr
 from rpy2.robjects.numpy2ri import numpy2ri
+from rpy2.robjects.packages import importr
 
 R_VINECOPULA = importr('VineCopula')
 

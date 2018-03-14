@@ -1,9 +1,10 @@
+from collections import Counter
+
 import matplotlib.pyplot as plt
 import numpy as np
-import seaborn as sns
 import pandas as pd
+import seaborn as sns
 from scipy import stats
-from collections import Counter
 
 from .utils import get_grid_sample, to_copula_params
 

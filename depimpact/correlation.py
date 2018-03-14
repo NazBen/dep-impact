@@ -1,9 +1,11 @@
 ﻿import numpy as np
 import random
+
 import openturns as ot
 from pyDOE import lhs
 
 from .conversion import Conversion
+
 
 """
 TODO :

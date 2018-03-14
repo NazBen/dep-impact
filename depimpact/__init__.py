@@ -1,6 +1,6 @@
 ﻿"""
 """
-from .dependence import ConservativeEstimate, ListDependenceResult
+from .conservative import ConservativeEstimate, ListDependenceResult
 from .iterative_vines import iterative_vine_minimize
 #except ImportError:
 #    print("No module OpenTURNS... Maybe you don't need it!")

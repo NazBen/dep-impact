@@ -1,13 +1,15 @@
-import os
+import copy
 import operator
+import os
+from itertools import permutations, product
+
 import numpy as np
 import openturns as ot
-from itertools import product, permutations
-import copy
 from pyDOE import lhs
 from sklearn.utils import check_random_state
-from skopt.space import Space as sk_Space
 from sklearn.utils.fixes import sp_version
+
+from skopt.space import Space as sk_Space
 
 OPERATORS = {">=": operator.ge,
             ">": operator.gt,

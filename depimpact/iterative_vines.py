@@ -1,6 +1,7 @@
-﻿import numpy as np
+﻿import copy
 import os
-import copy
+
+import numpy as np
 
 from .dependence import ListDependenceResult
 from .utils import get_pair_id, get_pairs_by_levels, get_possible_structures

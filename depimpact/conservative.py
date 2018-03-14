@@ -10,26 +10,27 @@ TODO:
     - User np.tril to take the values of the matrices
 """
 
-import operator
-import warnings
-import os
 import json
+import operator
+import os
 import time
-
-import numpy as np
-import pandas as pd
-import openturns as ot
-import h5py
-from sklearn.utils import check_random_state
-from scipy.stats import gaussian_kde, norm
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 
-from .vinecopula import VineCopula, check_matrix
+import h5py
+import numpy as np
+import openturns as ot
+import pandas as pd
+from scipy.stats import gaussian_kde, norm
+from sklearn.utils import check_random_state
+
 from .conversion import Conversion, get_tau_interval
-from .utils import list_to_matrix, matrix_to_list, bootstrap, to_kendalls, \
-    load_dependence_grid, to_copula_params, get_grid_sample, \
-    save_dependence_grid, margins_to_dict, dict_to_margins, asymptotic_error_quantile, \
-    get_pair_id, get_pairs_by_levels, get_possible_structures
+from .utils import (asymptotic_error_quantile, bootstrap, dict_to_margins,
+                    get_grid_sample, get_pair_id, get_pairs_by_levels,
+                    get_possible_structures, list_to_matrix,
+                    load_dependence_grid, margins_to_dict, matrix_to_list,
+                    save_dependence_grid, to_copula_params, to_kendalls)
+from .vinecopula import VineCopula, check_matrix
 
 OPERATORS = {">": operator.gt, ">=": operator.ge,
              "<": operator.lt, "<=": operator.le}
