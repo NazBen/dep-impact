@@ -8,3 +8,4 @@ rpy2
 scikit-optimize
 matplotlib
 seaborn
+rpy2
