@@ -30,7 +30,7 @@ conda update --quiet --yes conda
 popd
 
 # Create a conda env and install packages
-conda create -n testenv --quiet --yes python=$PYTHON_VERSION nose pip gcc \
+conda create -n testenv --quiet --yes python=$PYTHON_VERSION nose pip \
 	matplotlib pandas h5py scikit-learn rpy2 R R-copula R-rcpp R-doparallel R-rcpparmadillo
 
 source activate testenv
