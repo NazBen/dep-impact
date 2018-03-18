@@ -1,7 +1,7 @@
 import numpy as np
 import openturns as ot
 
-from dependence import ConservativeEstimate
+from depimpact import ConservativeEstimate
 
 
 def test_len_params():

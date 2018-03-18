@@ -17,10 +17,10 @@ import openturns as ot
 from scipy.special import erf, erfinv
 from numpy.testing import assert_allclose
 
-from dependence import ConservativeEstimate
-from dependence.utils import quantile_func, proba_func
-from dependence.tests import func_sum
-from dependence.iterative_vines import iterative_vine_minimize
+from depimpact import ConservativeEstimate
+from depimpact.utils import quantile_func, proba_func
+from depimpact.tests import func_sum
+from depimpact.iterative_vines import iterative_vine_minimize
 
 QUANTILES_PROB = [0.05, 0.01]
 PROB_THRESHOLDS = [1., 2.]
@@ -139,6 +139,7 @@ def test_modification_dimension():
             grid_type='lhs', 
             random_state=0)
 
+
 def test_modification_families():
     dim = 8
     families = np.tril(np.ones((dim, dim)), k=-1)
@@ -185,6 +186,7 @@ def test_modification_families():
             grid_type='lhs', 
             random_state=0)
         
+
 def test_modification_fixed_params():
     dim = 10
     families = np.tril(np.ones((dim, dim)), k=-1)
@@ -200,9 +202,9 @@ def test_modification_fixed_params():
                                   fixed_params=fixed_params)
     # Test Grid results
     impact.gridsearch(
-        n_dep_param=10, 
-        n_input_sample=10, 
-        grid_type='lhs', 
+        n_dep_param=10,
+        n_input_sample=10,
+        grid_type='lhs',
         random_state=0)
     check_dims(impact, dim)
    
@@ -480,14 +482,3 @@ def test_vines():
         n_input_sample=n_input_sample, 
         grid_type=grid_type, 
         random_state=0)
-    
-    print(grid_results.min_quantity)
-    
-
-if __name__ == '__main__':
-#    test_modification_dimension()
-#    test_modification_families()
-#    test_modification_fixed_params()
-#    test_modification_bounds_tau()
-#    test_modification_multiple()
-    test_iterative()

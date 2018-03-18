@@ -2,7 +2,7 @@ import numpy as np
 
 from numpy.testing import assert_array_equal
 
-from dependence.utils import matrix_to_list, list_to_matrix, get_pairs_by_levels
+from depimpact.utils import matrix_to_list, list_to_matrix, get_pairs_by_levels
 
 
 def test_matrix_to_list():

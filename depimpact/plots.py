@@ -15,16 +15,17 @@ def set_style_paper():
     # This sets reasonable defaults for font size for
     # a figure that will go in a paper
     sns.set_context("paper")
-    
+
     # Set the font to be serif, rather than sans
     sns.set(font='serif')
-    
+
     # Make the background white, and specify the
     # specific font family
     sns.set_style("white", {
         "font.family": "serif",
         "font.serif": ["Times", "Palatino", "serif"]
     })
+
 
 def get_all_quantity(results, q_func=None):
     """
@@ -38,6 +39,7 @@ def get_all_quantity(results, q_func=None):
         quantities.append(min_quantity)
     return quantities
 
+
 def get_all_min_result(results, q_func=None):
     """
     """
@@ -49,6 +51,7 @@ def get_all_min_result(results, q_func=None):
         min_result = results[res_name].min_result
         min_results.append(min_result)
     return min_results
+
 
 def get_min_result(all_min_results, q_func=None):
     """
@@ -62,8 +65,9 @@ def get_min_result(all_min_results, q_func=None):
         if result.min_quantity < min_quantity:
             min_result = result.min_result
             min_quantity = result.min_quantity
-            
+
     return min_result
+
 
 def get_n_pairs(all_results):
     """Get the number of pairs in each experiments of an dictionary of iterative results.
@@ -78,24 +82,26 @@ def get_n_pairs(all_results):
         n_pairs.append(n_pair)
     return n_pairs
 
+
 def corrfunc_plot(x, y, **kws):
     """
-    
-    
+
+
     Source: https://stackoverflow.com/a/30942817/5224576
     """
     r, _ = stats.pearsonr(x, y)
     k, _ = stats.kendalltau(x, y)
     ax = plt.gca()
     ax.annotate("r = {:.2f}\nk = {:.2f}".format(r, k),
-                xy=(.1, .8), xycoords=ax.transAxes, 
+                xy=(.1, .8), xycoords=ax.transAxes,
                 weight='heavy', fontsize=14)
+
 
 def matrix_plot_input(result, kde=False, margins=None):
     """
     """
-    input_sample = result.input_sample    
-    
+    input_sample = result.input_sample
+
     if margins:
         sample = np.zeros(input_sample.shape)
         for i, marginal in enumerate(margins):
@@ -103,7 +109,7 @@ def matrix_plot_input(result, kde=False, margins=None):
                 sample[j, i] = marginal.computeCDF(ui)
     else:
         sample = input_sample
-        
+
     data = pd.DataFrame(sample)
     plot = sns.PairGrid(data, palette=["red"])
     if kde:
@@ -111,16 +117,17 @@ def matrix_plot_input(result, kde=False, margins=None):
         plot.map_lower(sns.kdeplot, cmap="Blues_d")
     else:
         plot.map_offdiag(plt.scatter, s=10)
-        
+
     plot.map_diag(sns.distplot, kde=False)
     plot.map_lower(corrfunc_plot)
-    
+
     if margins:
         plot.set(xlim=(0, 1), ylim=(0, 1))
-    
+
     return plot
 
-def matrix_plot_quantities(results, indep_result=None, grid_result=None, 
+
+def matrix_plot_quantities(results, indep_result=None, grid_result=None,
                            q_func=None, figsize=(9, 7), dep_measure='kendalls',
                            quantity_name='Quantity', with_bootstrap=False):
     """
@@ -129,9 +136,10 @@ def matrix_plot_quantities(results, indep_result=None, grid_result=None,
         input_dim = list(results.values())[0].input_dim
     else:
         input_dim = results.input_dim
-    
+
     # Figure
-    fig, axes = plt.subplots(input_dim, input_dim, figsize=figsize, sharex=True, sharey=True)
+    fig, axes = plt.subplots(input_dim, input_dim,
+                             figsize=figsize, sharex=True, sharey=True)
     for res in results:
         t = res.split(', ')[-1:-3:-1]
         i = int(t[1][1])
@@ -143,7 +151,7 @@ def matrix_plot_quantities(results, indep_result=None, grid_result=None,
             measure = results[res].kendalls
         quantities = results[res].quantities
         ax.plot(measure, quantities, '.')
-    
+
     if dep_measure == 'dependence-param':
         x_label = 'Dependence Parameter'
     else:
@@ -151,23 +159,23 @@ def matrix_plot_quantities(results, indep_result=None, grid_result=None,
     for i in range(input_dim):
         axes[i, 0].set_ylabel(quantity_name)
         axes[-1, i].set_xlabel(x_label)
-    
+
     fig.tight_layout()
-    
-    
-def plot_iterative_results(iter_results, indep_result=None, grid_results=None, q_func=None, figsize=(8, 4), 
+
+
+def plot_iterative_results(iter_results, indep_result=None, grid_results=None, q_func=None, figsize=(8, 4),
                            quantity_name='Quantity', with_bootstrap=False, n_boot=200, ax=None):
     """
     """
-    
+
     # Figure
     if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    
+        _, ax = plt.subplots(figsize=figsize)
+
     # Number of trees
     n_levels = iter_results.iteration+1
     dim = iter_results.dim
-    
+
     # Colors of the levels and independence
     cmap = plt.get_cmap('jet')
 
@@ -175,40 +183,39 @@ def plot_iterative_results(iter_results, indep_result=None, grid_results=None, q
     n_p += 1 if indep_result is not None else 0
     n_p += 1 if grid_results is not None else 0
     colors = [cmap(i) for i in np.linspace(0, 1, n_levels+n_p)]
-    
+
     # Number of pairs at each iteration
     n_pairs = range(1, n_levels+1)
-    
+
     if indep_result is not None:
-        ax.plot([n_pairs[0], n_pairs[-1]], [indep_result.quantity]*2, '-o', 
+        ax.plot([n_pairs[0], n_pairs[-1]], [indep_result.quantity]*2, '-o',
                 color=colors[0], label='independence')
-        
+
         if with_bootstrap:
             indep_result.compute_bootstrap()
             boot = indep_result.bootstrap_sample
-            
+
             up = np.percentile(boot, 99)
             down = np.percentile(boot, 1)
-            ax.plot([n_pairs[0], n_pairs[-1]], [up]*2, '--', 
-                color=colors[0], linewidth=0.8)
-            ax.plot([n_pairs[0], n_pairs[-1]], [down]*2, '--', 
-                color=colors[0], linewidth=0.8)
-        
-    
+            ax.plot([n_pairs[0], n_pairs[-1]], [up]*2, '--',
+                    color=colors[0], linewidth=0.8)
+            ax.plot([n_pairs[0], n_pairs[-1]], [down]*2, '--',
+                    color=colors[0], linewidth=0.8)
+
     if grid_results is not None:
         min_grid_result = grid_results.min_result
-        ax.plot([n_pairs[0], n_pairs[-1]], [min_grid_result.quantity]*2, '-o', 
+        ax.plot([n_pairs[0], n_pairs[-1]], [min_grid_result.quantity]*2, '-o',
                 color=colors[1], label='grid-search with $K=%d$' % (grid_results.n_params))
         if with_bootstrap:
             min_grid_result.compute_bootstrap()
             boot = min_grid_result.bootstrap_sample
             up = np.percentile(boot, 95)
             down = np.percentile(boot, 5)
-            ax.plot([n_pairs[0], n_pairs[-1]], [up]*2, '--', 
-                color=colors[1], linewidth=0.8)
-            ax.plot([n_pairs[0], n_pairs[-1]], [down]*2, '--', 
-                color=colors[1], linewidth=0.8)
-        
+            ax.plot([n_pairs[0], n_pairs[-1]], [up]*2, '--',
+                    color=colors[1], linewidth=0.8)
+            ax.plot([n_pairs[0], n_pairs[-1]], [down]*2, '--',
+                    color=colors[1], linewidth=0.8)
+
     quantities = []
     min_results_level = []
     for i in range(n_levels):
@@ -216,47 +223,49 @@ def plot_iterative_results(iter_results, indep_result=None, grid_results=None, q
         values = values[values != 0.].tolist()
         quantities.append(values)
         min_results_level.append(iter_results.min_result(i))
-        
+
     # Get the minimum of each level
     min_quantities = []
     for quant_lvl in quantities:
         min_quant = min(quant_lvl)
         min_quantities.append(min_quant)
-        
+
         # Remove the minimum from the list of quantities
         quant_lvl.remove(min_quant)
-    
+
     for lvl in range(n_levels):
         # The quantities of this level
         quant_lvl = np.asarray(quantities[lvl])
         # The number of results
         n_res = len(quant_lvl)
         ax.plot([n_pairs[lvl]]*n_res, quant_lvl, '.', color=colors[lvl+n_p])
-        
+
     for lvl in range(n_levels):
         if n_pairs[lvl] == n_pairs[-1]:
-            ax.plot(n_pairs[lvl], min_quantities[lvl], 'o', color=colors[lvl+n_p])
+            ax.plot(n_pairs[lvl], min_quantities[lvl],
+                    'o', color=colors[lvl+n_p])
             if with_bootstrap:
                 min_results_level[lvl].compute_bootstrap(n_boot)
                 boot = min_results_level[lvl].bootstrap_sample
                 up = np.percentile(boot, 95)
                 down = np.percentile(boot, 5)
                 ax.plot(n_pairs[lvl], up, '.',
-                    color=colors[lvl+n_p], linewidth=0.8)
+                        color=colors[lvl+n_p], linewidth=0.8)
                 ax.plot(n_pairs[lvl], down, '.',
-                    color=colors[lvl+n_p], linewidth=0.8)
+                        color=colors[lvl+n_p], linewidth=0.8)
         else:
-            ax.plot([n_pairs[lvl], n_pairs[lvl+1]], [min_quantities[lvl]]*2, 'o-', color=colors[lvl+n_p])
+            ax.plot([n_pairs[lvl], n_pairs[lvl+1]],
+                    [min_quantities[lvl]]*2, 'o-', color=colors[lvl+n_p])
             if with_bootstrap:
                 min_results_level[lvl].compute_bootstrap(n_boot)
                 boot = min_results_level[lvl].bootstrap_sample
                 up = np.percentile(boot, 95)
                 down = np.percentile(boot, 5)
-                ax.plot([n_pairs[lvl], n_pairs[lvl+1]], [up]*2, '--', 
-                    color=colors[lvl+n_p], linewidth=0.8)
-                ax.plot([n_pairs[lvl], n_pairs[lvl+1]], [down]*2, '--', 
-                    color=colors[lvl+n_p], linewidth=0.8)
-    
+                ax.plot([n_pairs[lvl], n_pairs[lvl+1]], [up]*2, '--',
+                        color=colors[lvl+n_p], linewidth=0.8)
+                ax.plot([n_pairs[lvl], n_pairs[lvl+1]], [down]*2, '--',
+                        color=colors[lvl+n_p], linewidth=0.8)
+
     ax.axis('tight')
     ax.set_xlabel('Number of considered pairs')
     ax.set_ylabel(quantity_name)
@@ -280,7 +289,7 @@ def compute_influence(obj, K, n, copulas, pair, eps=1.E-4):
     perfect_output_sample = obj.gridsearch(None, n, 'vertices').output_samples
 
     output_samples = {}
-    for copula in copulas:       
+    for copula in copulas:
         res_out_samples = []
         res_kendalls = []
         for i, num in enumerate(copulas[copula]):
@@ -288,19 +297,22 @@ def compute_influence(obj, K, n, copulas, pair, eps=1.E-4):
             obj.families = families
             converter = [obj._copula_converters[k] for k in obj._pair_ids]
             params = to_copula_params(converter, kendalls_fixed[i])
-            output_sample = obj.run_stochastic_models(params, n, return_input_sample=False)[0]
+            output_sample = obj.run_stochastic_models(
+                params, n, return_input_sample=False)[0]
             res_out_samples.append(np.asarray(output_sample))
 
-        output_samples[copula] = np.r_[np.concatenate(res_out_samples), indep_output_sample.reshape(1, -1), perfect_output_sample].T
+        output_samples[copula] = np.r_[np.concatenate(
+            res_out_samples), indep_output_sample.reshape(1, -1), perfect_output_sample].T
 
     kendalls = np.concatenate(kendalls_fixed).ravel()
     kendalls = np.r_[kendalls, 0.]
     kendalls = np.r_[kendalls, -1., 1.]
-    
+
     return kendalls, output_samples
 
-def plot_variation(output_samples, kendalls, q_func, plot_area='left', plt_lib='seaborn', figsize=(7, 4), ylabel=None, 
-    colors={'Normal': 'b','Clayton': 'g', 'Gumbel': 'r', 'Joe': 'm'}, n_boot=5000, ci=99.9):
+
+def plot_variation(output_samples, kendalls, q_func, plot_area='left', plt_lib='seaborn', figsize=(7, 4), ylabel=None,
+                   colors={'Normal': 'b', 'Clayton': 'g', 'Gumbel': 'r', 'Joe': 'm'}, n_boot=5000, ci=99.9):
     """
     """
     set_style_paper()
@@ -318,11 +330,12 @@ def plot_variation(output_samples, kendalls, q_func, plot_area='left', plt_lib='
     for copula in output_samples:
         if plt_lib == 'matplotlib':
             quantities = q_func(output_samples[copula].T)
-            ax.plot(kendalls[taken][sorting], quantities[taken][sorting], 'o-', label=copula, markersize=5)
+            ax.plot(kendalls[taken][sorting], quantities[taken]
+                    [sorting], 'o-', label=copula, markersize=5)
         else:
             sns.tsplot(output_samples[copula][:, taken], time=kendalls[taken],
-                condition=copula, err_style='ci_band', ci=ci, estimator=q_func, 
-                n_boot=n_boot, color=colors[copula], ax=ax)
+                       condition=copula, err_style='ci_band', ci=ci, estimator=q_func,
+                       n_boot=n_boot, color=colors[copula], ax=ax)
 
     ax.set_xlabel('Kendall coefficient')
     if ylabel is not None:

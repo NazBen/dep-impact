@@ -13,7 +13,7 @@ LIB_PARAMS = ['iterative_save', 'iterative_load', 'input_names',
 
 
 def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_init=20, max_n_pairs=5, grid_type='lhs', 
-                            q_func=np.var, n_add_pairs=1, n_remove_pairs=1, adapt_vine_structure=True, delta=0.1,
+                            q_func=np.var, n_add_pairs=1, n_remove_pairs=0, adapt_vine_structure=True, delta=0.1,
                             with_bootstrap=False, verbose=False, **kwargs):
     """Iteratively minimises the output quantity of interest.
 
@@ -122,7 +122,14 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     selected_pairs = []
     all_results = IterativeDependenceResults(dim)
 
-    n_dep_param = n_dep_param_init
+    if callable(n_dep_param_init):
+        n_param_iter = n_dep_param_init
+    elif n_dep_param_init is None:
+        n_param_iter = lambda x: None
+    else:
+        n_param_iter = lambda k: int(n_dep_param_init*(k+1)**2)
+
+    n_dep_param = n_param_iter(0)
     
     # The pairs to do at each iterations
     indices = np.asarray(np.tril_indices(dim, k=-1)).T.tolist()
@@ -277,7 +284,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
                 print('Minimum_variation not fulfiled: %.2f <= %0.2f' % (delta_q, delta*delta_q_init))
         n_pairs += n_add_pairs
         if n_dep_param is not None:
-            n_dep_param = n_dep_param_init*int(n_pairs**2)
+            n_dep_param = n_param_iter(iteration+1)
 
         if not stop_conditions:
             all_results.new_iteration()

@@ -12,15 +12,15 @@ from sklearn.utils.fixes import sp_version
 from skopt.space import Space as sk_Space
 
 OPERATORS = {">=": operator.ge,
-            ">": operator.gt,
-            "==": operator.eq}
+             ">": operator.gt,
+             "==": operator.eq}
 
 MAX_N_PAIR_VERTICES = 13
 
 
 def get_grid_sample(dimensions, n_sample, grid_type):
     """Sample inside a fixed design space.
-    
+
     Parameters
     ----------
     dimensions : array,
@@ -29,7 +29,7 @@ def get_grid_sample(dimensions, n_sample, grid_type):
         The number of observations inside the space.
     grid_type: str,
         The type of sampling.
-        
+
     Returns
     -------
     sample : array,
@@ -44,13 +44,14 @@ def get_grid_sample(dimensions, n_sample, grid_type):
 class Space(sk_Space):
     """
     """
-    def rvs(self, n_samples=1, sampling='rand', 
+
+    def rvs(self, n_samples=1, sampling='rand',
             lhs_sampling_criterion='centermaximin', random_state=None):
         """Draw random samples.
-    
+
         The samples are in the original space. They need to be transformed
         before being passed to a model or minimizer by `space.transform()`.
-    
+
         Parameters
         ----------
         n_samples : int or None, optional (default=1)
@@ -86,7 +87,8 @@ class Space(sk_Space):
                 if sp_version < (0, 16):
                     columns.append(dim.rvs(n_samples=n_samples))
                 else:
-                    columns.append(dim.rvs(n_samples=n_samples, random_state=rng))
+                    columns.append(
+                        dim.rvs(n_samples=n_samples, random_state=rng))
             # Transpose
             rows = []
             for i in range(n_samples):
@@ -96,7 +98,8 @@ class Space(sk_Space):
                 rows.append(r)
         elif sampling == 'lhs':
             # LHS sampling
-            sample = lhs(self.n_dims, samples=n_samples, criterion=lhs_sampling_criterion)
+            sample = lhs(self.n_dims, samples=n_samples,
+                         criterion=lhs_sampling_criterion)
             tmp = np.zeros((n_samples, self.n_dims))
             # Assert the bounds
             for k, dim in enumerate(self.dimensions):
@@ -105,23 +108,24 @@ class Space(sk_Space):
         elif sampling == 'vertices':
             # Sample on the vertices of the space.
             n_pair = len(self.dimensions)
-            
+
             if n_pair > MAX_N_PAIR_VERTICES:
                 if n_samples is None:
-                    raise MemoryError('Too much pairs to create a vertices grid.')
-                
+                    raise MemoryError(
+                        'Too much pairs to create a vertices grid.')
+
                 # Iterative add instead of sampling in a big bounds matrix
                 sample = []
                 for i in range(n_samples):
                     obs = np.random.choice([-1., 1., 0.], size=n_pair).tolist()
                     if obs not in sample:
                         sample.append(obs)
-                        
+
                 sample = np.asarray(sample)
             else:
                 bounds = list(product([-1., 1., 0.], repeat=n_pair))
                 if n_samples is None or n_pair == 1:
-                    bounds.remove((0.,)*n_pair) # remove indepencence
+                    bounds.remove((0.,)*n_pair)  # remove indepencence
                 bounds = np.asarray(bounds)
                 n_bounds = len(bounds)
 
@@ -130,7 +134,8 @@ class Space(sk_Space):
                     n_samples = n_bounds
                     sample = bounds
                 else:
-                    id_taken = np.random.choice(n_bounds, size=n_samples, replace=False)
+                    id_taken = np.random.choice(
+                        n_bounds, size=n_samples, replace=False)
                     sample = bounds[sorted(id_taken), :]
             # Assert the bounds
             for p in range(n_pair):
@@ -217,7 +222,7 @@ def matrix_to_list(matrix, return_ids=False, return_coord=False, op_char='>'):
 
 def bootstrap(data, num_samples, statistic):
     """Returns bootstrap estimate of 100.0*(1-alpha) CI for statistic.
-    
+
     Inspired from: http://people.duke.edu/~ccc14/pcfb/analysis.html"""
     n = len(data)
     idx = np.random.randint(0, n, (num_samples, n))
@@ -279,7 +284,8 @@ def to_copula_params(converters, kendalls):
     n_params, n_pairs = kendalls.shape
     params = np.zeros(kendalls.shape)
     for k in range(n_pairs):
-        params[:, k] = converters[k].to_copula_parameter(kendalls[:, k], dep_measure='kendall-tau')
+        params[:, k] = converters[k].to_copula_parameter(
+            kendalls[:, k], dep_measure='kendall-tau')
 
     # If there is only one parameter, no need to return the list
     if params.size == 1:
@@ -311,34 +317,35 @@ def margins_to_dict(margins):
             margin_dict[i]['Truncated Parameters'] = params
             name = in_marginal.getName()
             params = list(in_marginal.getParameter())
-        else:        
+        else:
             margin_dict[i]['Type'] = 'Standard'
-            
+
         margin_dict[i]['Marginal Family'] = name
-        margin_dict[i]['Marginal Parameters'] = params    
+        margin_dict[i]['Marginal Parameters'] = params
     return margin_dict
 
 
 def dict_to_margins(margin_dict):
     """Convert a dictionary with margins informations into a list of distributions.
-    
+
     Parameters
     ----------
     margin_dict : dict
         A dictionary of information on the margins
-    
+
     Returns
     -------
     margins
     """
     margins = []
     for i in sorted(margin_dict.keys()):
-        marginal = getattr(ot, margin_dict[i]['Marginal Family'])(*margin_dict[i]['Marginal Parameters'])
+        marginal = getattr(ot, margin_dict[i]['Marginal Family'])(
+            *margin_dict[i]['Marginal Parameters'])
         if margin_dict[i]['Type'] == 'TruncatedDistribution':
-            params = margin_dict[i]['Bounds']        
+            params = margin_dict[i]['Bounds']
             marginal = ot.TruncatedDistribution(marginal, *params)
         margins.append(marginal)
-    
+
     return margins
 
 
@@ -368,17 +375,17 @@ def save_dependence_grid(dirname, kendalls, bounds_tau, grid_type):
     """
     kendalls = np.asarray(kendalls)
     n_param, n_pairs = kendalls.shape
-    
+
     # The sample variable to save
     sample = np.zeros((n_param, n_pairs))
     for k in range(n_pairs):
         tau_min, tau_max = bounds_tau[k]
         sample[:, k] = (kendalls[:, k] - tau_min) / (tau_max - tau_min)
-        
+
     k = 0
     do_save = True
     name = '%s_p_%d_n_%d_%d.csv' % (grid_type, n_pairs, n_param, k)
-    
+
     grid_filename = os.path.join(dirname, name)
     # If this file already exists
     while os.path.exists(grid_filename):
@@ -391,7 +398,7 @@ def save_dependence_grid(dirname, kendalls, bounds_tau, grid_type):
         k += 1
         name = '%s_p_%d_n_%d_%d.csv' % (grid_type, n_pairs, n_param, k)
         grid_filename = os.path.join(dirname, name)
-        
+
     # It is saved
     if do_save:
         np.savetxt(grid_filename, sample)
@@ -450,23 +457,23 @@ def load_dependence_grid(dirname, n_pairs, n_params, bounds_tau, grid_type, use_
     for k in range(n_pairs):
         tau_min, tau_max = bounds_tau[k]
         kendalls[:, k] = sample[:, k]*(tau_max - tau_min) + tau_min
-        
+
     return kendalls, filename
 
 
 def quantile_func(alpha):
     """To associate an alpha to an empirical quantile function.
-    
+
     Parameters
     ----------
     alpha : float
         The probability of the target quantile. The value must be between 0 and 1.
-            
+
     Returns
     -------
     q_func : callable
         The quantile function.
-            
+
     """
     def q_func(x, axis=1):
         return np.percentile(x, alpha*100., axis=axis)
@@ -475,17 +482,17 @@ def quantile_func(alpha):
 
 def proba_func(threshold):
     """To associate an alpha to an empirical distribution function.
-    
+
     Parameters
     ----------
     threshold : float
         The threshold of the target probability.
-            
+
     Returns
     -------
     p_func : callable
         The probability function.
-            
+
     """
     def p_func(x, axis=1):
         return (x >= threshold).mean(axis=axis)
@@ -500,13 +507,13 @@ def asymptotic_error_quantile(n, q_density, q_alpha):
 
 def asymptotic_error_proba(n, proba):
     """
-    """    
+    """
     return np.sqrt(proba * (1. - proba) / n)
 
 
 def get_pairs_by_levels(dim, forced_pairs_ids, verbose=False):
     """Split a list of pairs in levels.
-    
+
     Parameters
     ----------
     dim : int,
@@ -515,7 +522,7 @@ def get_pairs_by_levels(dim, forced_pairs_ids, verbose=False):
         The list of pair ids.
     verbose : bool,
         If True, informations about the procedure are printed.
-        
+
     Returns
     -------
     pairs_by_levels : list of list,
@@ -525,45 +532,48 @@ def get_pairs_by_levels(dim, forced_pairs_ids, verbose=False):
     n_forced_pairs = len(forced_pairs_ids)
     assert len(np.unique(forced_pairs_ids)) == n_forced_pairs, \
         "The list should contain unique values"
-    assert n_forced_pairs <= n_pairs, "Too many pairs: %d > %d" % (n_forced_pairs, n_pairs)
-    assert max(forced_pairs_ids) < n_pairs, "Wrong pair id: %d" % (max(forced_pairs_ids))
-    
+    assert n_forced_pairs <= n_pairs, "Too many pairs: %d > %d" % (
+        n_forced_pairs, n_pairs)
+    assert max(forced_pairs_ids) < n_pairs, "Wrong pair id: %d" % (
+        max(forced_pairs_ids))
+
     forced_pairs = get_pairs(dim, forced_pairs_ids, with_plus=True)
 
     remaining_pairs_ids = list(range(0, n_pairs))
     for pair_id in forced_pairs_ids:
         remaining_pairs_ids.remove(pair_id)
     remaining_pairs = get_pairs(dim, remaining_pairs_ids, with_plus=True)
-    
+
     if verbose:
         print('Vine dimension: %d' % dim)
         print('Conditioning information:')
-        
+
     k0 = 0
     pairs_by_levels = []
-    
+
     # For each level and the number of slot per level
     for lvl, n_slot_lvl in enumerate(range(dim-1, 0, -1)):
         k1 = min(n_forced_pairs, k0+n_slot_lvl)
         if forced_pairs[k0:k0+n_slot_lvl]:
             pairs_by_levels.append(forced_pairs[k0:k0+n_slot_lvl])
-                    
+
         if verbose:
-            print("\t%d pairs with %d conditionned variables" % (n_slot_lvl, lvl))
+            print("\t%d pairs with %d conditionned variables" %
+                  (n_slot_lvl, lvl))
             print("Pairs: {0}".format(forced_pairs[k0:k0+n_slot_lvl]))
         k0 = k1
-        
+
     if verbose:
         print("Concerned pairs: {0}".format(forced_pairs))
         print("Remaining pairs: {0}".format(remaining_pairs))
 
-    # This part checks if the pairs in a same level respect the condition. 
+    # This part checks if the pairs in a same level respect the condition.
     # If not, a permutation of between levels is made.
     good_pairs_by_levels = copy.deepcopy(pairs_by_levels)  # copy
     n_moving_pairs = [1]*(dim-1)
     loops = [0]*(dim-1)
     move_up = [1]*(dim-1)
-    
+
     while not check_conditions(pairs_by_levels, dim):
         pairs_by_levels = copy.deepcopy(good_pairs_by_levels)
         n_levels = len(pairs_by_levels)
@@ -580,7 +590,7 @@ def get_pairs_by_levels(dim, forced_pairs_ids, verbose=False):
                     pairs_lvl_up = []
                     # A new level is created
                     n_moving_pair = n_moving_pairs[lvl]
-                    
+
                     # The last pair is taken back from the level
                     moving_pairs = []
                     for k in range(n_moving_pair-1):
@@ -590,44 +600,44 @@ def get_pairs_by_levels(dim, forced_pairs_ids, verbose=False):
                     pairs_by_levels.append(moving_pairs)
                     n_levels += 1
                 else:
-                    # The 1st pair of the next level is switch with the last 
+                    # The 1st pair of the next level is switch with the last
                     # of the previous
                     pairs_lvl_up = pairs_by_levels[lvl+1]
                     n_moving_pair = n_moving_pairs[lvl]
                     for k in range(n_moving_pair-1):
                         pairs_lvl_up.insert(0, pairs_lvl.pop())
                     pairs_lvl_up.insert(0, pairs_lvl.pop(-idx-1))
-                    
+
                     if move_up[lvl] > 0:
                         id_up = move_up[lvl]
                         # The pair is moved
                         moving_pair_up = pairs_lvl_up.pop(id_up)
-                        pairs_lvl.append(moving_pair_up)                        
+                        pairs_lvl.append(moving_pair_up)
                 if verbose:
                     print("After:", pairs_lvl)
                     print("n_moving:", n_moving_pairs[lvl])
                     print("idx:", loops[lvl])
                     print("move_up:", move_up[lvl])
                     print("Is OK?", check_condition(pairs_lvl, lvl, dim))
-                
+
                 if move_up[lvl] == 0:
                     loops[lvl] += 1
                 else:
                     move_up[lvl] += 1
-                    
+
                 if move_up[lvl] >= len(pairs_lvl_up):
                     move_up[lvl] = 0
-                    
+
                 if loops[lvl] >= len(pairs_lvl):
                     loops[lvl] = 0
                     n_moving_pairs[lvl] += 1
-                    
+
                 # This level does not work. Lets reset the options of the others
                 for lvl_up in range(lvl+1, n_levels):
                     move_up[lvl_up] = 1
                     n_moving_pairs[lvl_up] = 1
                     loops[lvl_up] = 0
-                    
+
                 # If still not good, we reloop
                 if not check_condition(pairs_lvl, lvl, dim):
                     break
@@ -646,13 +656,14 @@ def check_pairs_number_level(pairs_lvl, lvl, dim):
         return True
     else:
         return False
-        
+
 
 def check_condition(pairs_lvl, lvl, dim):
     """
     """
-    
+
     return check_node_loop(pairs_lvl) and check_pairs_number_level(pairs_lvl, lvl, dim)
+
 
 def check_conditions(pairs_by_levels, dim):
     """
@@ -662,9 +673,10 @@ def check_conditions(pairs_by_levels, dim):
             return False
     return True
 
+
 def add_pair(structure, pair, index, lvl):
     """Adds a pair in a Vine structure in a certain place and for a specific conditionement.
-    
+
     Parameters
     ----------
     structure : array,
@@ -682,7 +694,7 @@ def add_pair(structure, pair, index, lvl):
         The updated R-vine structure.
     """
     dim = structure.shape[0]
-    if lvl == 0: # If it's the unconditiononal variables
+    if lvl == 0:  # If it's the unconditiononal variables
         assert structure[index, index] == 0, \
             "There is already a variable at [%d, %d]" % (index, index)
         assert structure[dim-1, index] == 0, \
@@ -691,7 +703,8 @@ def add_pair(structure, pair, index, lvl):
         structure[dim-1, index] = pair[1]
     else:
         assert structure[index, index] == pair[0], \
-            "Diagonal element of the structure should be the same as the first variable of the pair: %d != %d" % (structure[index, index], pair[0])
+            "Diagonal element of the structure should be the same as the first variable of the pair: %d != %d" % (
+                structure[index, index], pair[0])
         assert structure[dim-1-lvl, index] == 0, \
             "There is already a variable at [%d, %d]" % (dim-1-lvl, index)
         structure[dim-1-lvl, index] = pair[1]
@@ -715,8 +728,10 @@ def add_pairs(structure, pairs, lvl, verbose=False):
     dim = structure.shape[0]
     n_pairs = len(pairs)
 
-    assert n_pairs < dim-lvl, "Not enough place to fill the pairs : %d > %d" % (n_pairs, dim-lvl)
-    
+    assert n_pairs < dim - \
+        lvl, "Not enough place to fill the pairs : %d > %d" % (
+            n_pairs, dim-lvl)
+
     # Let's find a way to place these pairs inside the structure
     n_slots = dim - 1 - lvl
     possibilities = list(permutations(range(n_slots), r=n_pairs))
@@ -726,8 +741,9 @@ def add_pairs(structure, pairs, lvl, verbose=False):
             # Add the pair in the possible order
             structure_modif = np.copy(structure)
             for i in range(n_pairs):
-                structure_modif = add_pair(structure_modif, pairs[i], possibility[i], lvl)
-            
+                structure_modif = add_pair(
+                    structure_modif, pairs[i], possibility[i], lvl)
+
             if check_redundancy(structure_modif):
                 success = True
                 break
@@ -739,7 +755,8 @@ def add_pairs(structure, pairs, lvl, verbose=False):
 
     # If it's the 1st level, the last row of last column must be filled
     if (lvl == 0) and (n_pairs == dim-1):
-        structure_modif[dim-1, dim-1] = np.setdiff1d(range(dim+1), np.diag(structure_modif))[0]
+        structure_modif[dim-1, dim -
+                        1] = np.setdiff1d(range(dim+1), np.diag(structure_modif))[0]
     return structure_modif
 
 
@@ -761,7 +778,8 @@ def rotate_pairs(init_pairs, rotations):
     """
     n_pairs = len(init_pairs)
     assert len(rotations) == n_pairs, \
-        "The number of rotations is different to the number of pairs %d != %d" % (len(rotations), n_pairs)
+        "The number of rotations is different to the number of pairs %d != %d" % (
+            len(rotations), n_pairs)
     assert not np.setdiff1d(np.unique(rotations), [1, -1]), \
         "The rotations list should only be composed of -1 and 1."
     pairs = []
@@ -779,15 +797,15 @@ def get_possible_structures(dim, pairs_by_levels, verbose=False):
     # For each levels
     good_structures = []
     for lvl, pairs_lvl in enumerate(pairs_by_levels):
-        n_pairs_lvl = len(pairs_lvl) # Number of pairs in the level
-        
+        n_pairs_lvl = len(pairs_lvl)  # Number of pairs in the level
+
         # The possible combinations
         combinations = list(product([1, -1], repeat=n_pairs_lvl))
         if verbose:
             print("Number of combinations:", len(combinations))
         # Now lets get the possible pair combinations for this level
         for k, comb_k in enumerate(combinations):
-            
+
             # Rotate the pair to the actual combination
             pairs_k = rotate_pairs(pairs_lvl, comb_k)
             if lvl == 0:
@@ -795,18 +813,19 @@ def get_possible_structures(dim, pairs_by_levels, verbose=False):
                 structure = np.zeros((dim, dim), dtype=int)
                 structure = add_pairs(structure, pairs_k, lvl, verbose=verbose)
                 if check_redundancy(structure):
-#                    structure[dim-2, dim-3] = np.setdiff1d(range(1, dim+1), np.diag(structure)[:dim-2].tolist() + [structure[dim-1, dim-3]])[0]
+                    #                    structure[dim-2, dim-3] = np.setdiff1d(range(1, dim+1), np.diag(structure)[:dim-2].tolist() + [structure[dim-1, dim-3]])[0]
                     good_structures.append(structure)
             else:
                 for structure in good_structures:
                     try:
-                        new_structure = add_pairs(structure, pairs_k, lvl, verbose=verbose)
+                        new_structure = add_pairs(
+                            structure, pairs_k, lvl, verbose=verbose)
                     except:
-                        print("Can't add the pairs {0} in the current structure...".format(pairs_k))
+                        print(
+                            "Can't add the pairs {0} in the current structure...".format(pairs_k))
                     if check_redundancy(new_structure):
                         structure = new_structure
-            
-    
+
     remain_structures = []
     for structure in good_structures:
         tmp = fill_structure(structure)
@@ -823,9 +842,10 @@ def check_structure_shape(structure):
     """Check if the structure shape is correct.
     """
     assert structure.shape[0] == structure.shape[1], "Structure matrix should be squared"
-    assert np.triu(structure, k=1).sum() == 0, "Matrix should be lower triangular"
-    
-    
+    assert np.triu(structure, k=1).sum(
+    ) == 0, "Matrix should be lower triangular"
+
+
 def check_natural_order(structure):
     """Check if a parent node is included in a child node.
     """
@@ -833,24 +853,28 @@ def check_natural_order(structure):
     for i in range(d-1):
         i = 1
         for j in range(i+1):
-            parent = [[structure[j, j], structure[i+1, j]], [structure[i+2:d, j].tolist()]]
+            parent = [[structure[j, j], structure[i+1, j]],
+                      [structure[i+2:d, j].tolist()]]
             col = structure[:, j]
-            parent_elements = col[np.setdiff1d(np.arange(j, d), range(j+1, i+1))]
+            parent_elements = col[np.setdiff1d(
+                np.arange(j, d), range(j+1, i+1))]
 
             i_c = i + 1
             if len(parent_elements) > 2:
                 n_child = 0
                 for j_c in range(i_c+1):
-                    possible_child = [[structure[j_c, j_c], structure[i_c+1, j_c]], [structure[i_c+2:d, j_c].tolist()]]
+                    possible_child = [
+                        [structure[j_c, j_c], structure[i_c+1, j_c]], [structure[i_c+2:d, j_c].tolist()]]
                     col = structure[:, j_c]
-                    possible_child_elements = col[np.setdiff1d(np.arange(j_c, d), range(j_c+1, i_c+1))]
+                    possible_child_elements = col[np.setdiff1d(
+                        np.arange(j_c, d), range(j_c+1, i_c+1))]
                     if len(np.intersect1d(possible_child_elements, parent_elements)) == d-i-1:
                         n_child += 1
                 if n_child < 2:
                     return False
 
     return True
-    
+
 
 def is_vine_structure(matrix):
     """Check if the given matrix is a Vine Structure matrix
@@ -858,25 +882,29 @@ def is_vine_structure(matrix):
     dim = matrix.shape[0]
     diag = np.diag(matrix)
     check_structure_shape(matrix)
-    assert matrix.max() == dim, "Maximum should be the dimension: %d != %d" % (matrix.max(), dim)
+    assert matrix.max() == dim, "Maximum should be the dimension: %d != %d" % (
+        matrix.max(), dim)
     assert matrix.min() == 0, "Minimum should be 0: %d != %d" % (matrix.min(), dim)
-    assert len(np.unique(diag)) == dim, "Element should be uniques on the diagonal: %d != %d" % (len(np.unique(diag)), dim)
+    assert len(np.unique(diag)) == dim, "Element should be uniques on the diagonal: %d != %d" % (
+        len(np.unique(diag)), dim)
     for i in range(dim):
         column_i = matrix[i:, i]
-        assert len(np.unique(column_i)) == dim - i, "Element should be unique for each column: %d != %d" % ( len(np.unique(column_i)), dim - i)
+        assert len(np.unique(column_i)) == dim - \
+            i, "Element should be unique for each column: %d != %d" % (
+                len(np.unique(column_i)), dim - i)
         for node in diag[:i]:
             assert node not in column_i, "Previous main node should not exist after"
-            
+
     if check_natural_order(matrix):
         return True
     else:
         return False
 
-    
+
 def check_node_loop(pairs):
     """Check if not too many variables are connected in a single tree.
     For 3 pairs of variables, it should have at least 4 variables involved.
-    
+
     Parameters
     ----------
     pairs : tuple or list,
@@ -898,25 +926,24 @@ def fill_structure(structure):
 #    print structure
     dim = structure.shape[0]
 #    structure[dim-2, dim-3] = np.setdiff1d(range(1, dim+1), np.diag(structure)[:dim-2].tolist() + [structure[dim-1, dim-3]])[0]
-    
+
     diag = np.unique(np.diag(structure)).tolist()
     if 0 in diag:
         diag.remove(0)
     remaining_vals = np.setdiff1d(range(1, dim+1), diag)
-    
+
     n_remaining_vals = len(remaining_vals)
-    
+
     diag_possibility = list(permutations(remaining_vals, n_remaining_vals))[0]
 
-    
     for k, i in enumerate(range(dim - n_remaining_vals, dim)):
         structure[i, i] = diag_possibility[k]
-    
+
     structure[dim-1, dim-2] = structure[dim-1, dim-1]
-    
+
     for i in range(dim - n_remaining_vals, dim-2):
         structure[dim-1, i] = structure[i+1, i+1]
-        
+
     lvl = 1
     for j in range(dim-2, 0, -1):
         for i in range(j):
@@ -925,7 +952,8 @@ def fill_structure(structure):
             var_col_i = tmp[tmp != 0]
             for i_c in range(i+1, j+1):
                 col_ic = structure[:, i_c]
-                tmp = col_ic[np.setdiff1d(np.arange(i_c, dim), range(j+1, i_c+1))]
+                tmp = col_ic[np.setdiff1d(
+                    np.arange(i_c, dim), range(j+1, i_c+1))]
                 var_col_i_c = tmp[tmp != 0]
                 intersection = np.intersect1d(var_col_i, var_col_i_c)
                 if len(intersection) == lvl:
@@ -951,7 +979,7 @@ def fill_structure(structure):
 
 def get_pair_id(dim, pair, with_plus=True):
     """ Get the pair id from a given index.    
-    
+
     Parameters
     ----------
     dim : int,
@@ -960,7 +988,7 @@ def get_pair_id(dim, pair, with_plus=True):
         The pair of variable.
     with_plus : bool,
         If True, the variable numbers start at 1 instead of 0.
-        
+
     Return
     ------
     pair_id : int,
@@ -970,14 +998,14 @@ def get_pair_id(dim, pair, with_plus=True):
     if with_plus:
         pair[0] += 1
         pair[1] += 1
-        
+
     pair_id = np.where((pairs == pair).all(axis=1))[0][0]
     return pair_id
 
 
 def get_pair(dim, index, with_plus=True):
     """ Get the pair of variables from a given index.
-    
+
     Parameters
     ----------
     dim : int,
@@ -986,24 +1014,24 @@ def get_pair(dim, index, with_plus=True):
         The ID of the pair.
     with_plus : bool,
         If True, the variable numbers start at 1 instead of 0.
-        
+
     Return
     ------
     pair : tuple of int,
         The pair of variables.
-    """    
+    """
     pairs = np.asarray(np.tril_indices(dim, k=-1)).T
     pair = pairs[index]
     if with_plus:
         pair += 1
     pair = tuple(pair)
-    
+
     return pair
 
 
 def get_pairs(dim, pair_ids, with_plus=True):
     """Get the associated pairs of variables from given IDs.
-    
+
     Parameters
     ----------
     dim : int,
@@ -1012,7 +1040,7 @@ def get_pairs(dim, pair_ids, with_plus=True):
         The IDs of the pairs.
     with_plus : bool,
         If True, the variable numbers start at 1 instead of 0.
-    
+
     Return
     ------
     pairs : list of tupple,
@@ -1021,6 +1049,6 @@ def get_pairs(dim, pair_ids, with_plus=True):
     pairs = []
     for pair_id in pair_ids:
         pairs.append(get_pair(dim, pair_id, with_plus))
-        
+
     pairs = list(map(tuple, pairs))
     return pairs

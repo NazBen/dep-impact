@@ -5,6 +5,7 @@ from rpy2.robjects.numpy2ri import numpy2ri
 
 VINECOPULA = importr('VineCopula')
 
+
 def check_matrix(value):
     assert isinstance(value, np.ndarray), \
         TypeError('Variable must be a numpy array.')
@@ -13,12 +14,14 @@ def check_matrix(value):
     assert value.shape[0] == value.shape[1], \
         AttributeError('Matrix should be squared.')
 
+
 def check_family(matrix):
     d = matrix.shape[0]
     for i in range(d):
         for j in range(i):
             if isinstance(matrix[i, j], str):
-                matrix[i, j] = int(VINECOPULA.BiCopName(matrix[i, j], False)[0])
+                matrix[i, j] = int(
+                    VINECOPULA.BiCopName(matrix[i, j], False)[0])
             elif isinstance(matrix[i, j], np.integer):
                 pass
             else:
@@ -58,7 +61,8 @@ class VineCopula(object):
         check_matrix(value)
         check_family(value)
         assert value.shape[0] == self._dim, \
-            AttributeError('Family matrix should be of dimension == %d' % (self._dim))
+            AttributeError(
+                'Family matrix should be of dimension == %d' % (self._dim))
         self._family = value
         self._to_rebuild = True
 
@@ -70,7 +74,8 @@ class VineCopula(object):
     def param1(self, value):
         check_matrix(value)
         assert value.shape[0] == self._dim, \
-            AttributeError('Family matrix should be of dimension == %d' % (self._dim))
+            AttributeError(
+                'Family matrix should be of dimension == %d' % (self._dim))
         self._param1 = value
         self._to_rebuild = True
 
@@ -84,7 +89,8 @@ class VineCopula(object):
             value = np.zeros((self._dim, self._dim))
         check_matrix(value)
         assert value.shape[0] == self._dim, \
-            AttributeError('Family matrix should be of dimension == %d' % (self._dim))
+            AttributeError(
+                'Family matrix should be of dimension == %d' % (self._dim))
         self._param2 = value
         self._to_rebuild = True
 
@@ -95,7 +101,8 @@ class VineCopula(object):
         r_family = numpy2ri(permute_params(self.family, self.structure))
         r_par = numpy2ri(permute_params(self.param1, self.structure))
         r_par2 = numpy2ri(permute_params(self.param2, self.structure))
-        self._rvine = VINECOPULA.RVineMatrix(r_structure, r_family, r_par, r_par2)
+        self._rvine = VINECOPULA.RVineMatrix(
+            r_structure, r_family, r_par, r_par2)
         self._to_rebuild = False
 
     def get_sample(self, n_obs):
@@ -147,5 +154,5 @@ def permute_params(params, structure):
             else:
                 coords = structure[j, i]-1, structure[i, i]-1
             permuted_params[j, i] = params[coords]
-        
+
     return permuted_params

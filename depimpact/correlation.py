@@ -14,6 +14,7 @@ TODO :
     and not conditionally to the parameters dimension.
 """
 
+
 class SemiDefiniteMatrixError(Exception):
     """
     Specific exception for matrix which are not semi-definite positives
@@ -25,7 +26,7 @@ def create_corr_matrix(rho, dim=None, library="openturns"):
     """
     Create correlation matrices from a list of input parameters
     """
-    rho = np.asarray(rho) # We convert the parameter in numpy array
+    rho = np.asarray(rho)  # We convert the parameter in numpy array
 
     # Check if the correlation parameter is correct
     if (rho >= 1.).any() or (rho <= -1.).any():
@@ -54,7 +55,7 @@ def create_corr_matrix(rho, dim=None, library="openturns"):
             if library == "numpy":
                 corr_matrix[j, i] = rho[k]
             k += 1
-    
+
     # Check if the matrix is Positive Definite
     error = SemiDefiniteMatrixError("The matrix is not semi-positive definite")
     if library == "openturns":
@@ -71,7 +72,7 @@ def check_params(rho, dim=None):
     """
     Check is the matrix of a given 
     """
-    rho = np.asarray(rho) # We convert the parameter in numpy array
+    rho = np.asarray(rho)  # We convert the parameter in numpy array
 
     # Check if the correlation parameter is correct
     if (rho >= 1.).any() or (rho <= -1.).any():
@@ -87,14 +88,15 @@ def check_params(rho, dim=None):
 
     # Initialize the matrix
     corr_matrix = ot.CorrelationMatrix(dim)
-    
+
     k = 0
     for i in range(dim):
         for j in range(i+1, dim):
             corr_matrix[i, j] = rho[k]
             k += 1
-    
+
     return corr_matrix.isPositiveDefinite()
+
 
 def create_random_correlation_param_previous(dim, n=1, sampling="monte-carlo"):
     """
@@ -106,7 +108,7 @@ def create_random_correlation_param_previous(dim, n=1, sampling="monte-carlo"):
     # Array of correlation parameters
     list_rho = np.zeros((n, corr_dim), dtype=np.float)
 
-    for i in range(n): # For each parameter
+    for i in range(n):  # For each parameter
         condition = True
         # Stop when the matrix is definit semi positive
         while condition:
@@ -119,12 +121,13 @@ def create_random_correlation_param_previous(dim, n=1, sampling="monte-carlo"):
             if check_params(rho, dim):
                 condition = False
         list_rho[i, :] = rho
-        
+
     if n == 1:
         return list_rho.ravel()
     else:
         return list_rho
-        
+
+
 def create_random_kendall_tau(corr_variables, n=1, sampling="monte-carlo"):
     """
     Using acceptation reject...
@@ -147,7 +150,7 @@ def create_random_kendall_tau(corr_variables, n=1, sampling="monte-carlo"):
     # Array of correlation parameters
     list_tau = np.zeros((n, corr_dim))
 
-    for i in range(n): # For each parameter
+    for i in range(n):  # For each parameter
         condition = True
         # Stop when the matrix is definite semi positive
         while condition:
@@ -176,6 +179,7 @@ def create_random_kendall_tau(corr_variables, n=1, sampling="monte-carlo"):
     else:
         return list_tau
 
+
 def create_random_correlation_param(corr_variables, n=1, sampling="monte-carlo"):
     """
     Using acceptation reject...
@@ -184,7 +188,7 @@ def create_random_correlation_param(corr_variables, n=1, sampling="monte-carlo")
     """
 
     # Dimension problem
-    dim = corr_variables.shape[0]    
+    dim = corr_variables.shape[0]
     # Number of correlation parameters
     corr_dim = dim * (dim - 1) / 2
     # Correlated variables
@@ -201,7 +205,7 @@ def create_random_correlation_param(corr_variables, n=1, sampling="monte-carlo")
     # Array of correlation parameters
     list_rho = np.zeros((n, corr_dim), dtype=np.float)
 
-    for i in range(n): # For each parameter
+    for i in range(n):  # For each parameter
         condition = True
         # Stop when the matrix is definit semi positive
         while condition:
@@ -221,7 +225,7 @@ def create_random_correlation_param(corr_variables, n=1, sampling="monte-carlo")
             if check_params(rho, dim):
                 condition = False
         list_rho[i, :] = rho
-        
+
     if n == 1:
         return list_rho.ravel()
     else:
@@ -286,7 +290,7 @@ def get_grid_rho(corr_variables, n):
         raise NotImplementedError('Not implemented for dim > 1')
 
     list_rho[:, corr_vars] = grid
-    
+
     return list_rho
 
 
