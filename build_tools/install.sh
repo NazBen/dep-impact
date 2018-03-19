@@ -31,13 +31,13 @@ popd
 
 # Create a conda env and install packages
 conda create -n testenv --quiet --yes python=$PYTHON_VERSION nose pip \
-	matplotlib pandas h5py scikit-learn
+	matplotlib pandas h5py scikit-learn 
 
 source activate testenv
 
 pip install -q pyDOE scikit-optimize
+conda install --quiet --yes -c conda-forge openturns readline
 conda install --quiet --yes -c R rpy2 R-base R-copula R-rcpp R-doparallel R-rcpparmadillo
-conda install --quiet --yes -c conda-forge openturns
 
 if [[ "$COVERAGE" == "true" ]]; then
     pip install coverage coveralls
