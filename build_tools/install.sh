@@ -24,19 +24,21 @@ if [[ ! -f miniconda.sh ]]; then
 		wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
 	fi
 fi
-bash miniconda.sh -b -p $HOME/miniconda
-export PATH="$HOME/miniconda/bin:$PATH"
+CONDA=$HOME/miniconda
+bash miniconda.sh -b -p $CONDA
+export PATH="$CONDA/bin:$PATH"
 conda update --quiet --yes conda
 popd
 
 # Create a conda env and install packages
-conda create -n testenv --quiet --yes python=$PYTHON_VERSION nose pip gcc \
-	matplotlib pandas h5py scikit-learn rpy2 R R-copula R-rcpp R-doparallel R-rcpparmadillo
+conda create -n testenv --quiet --yes python=$PYTHON_VERSION nose pip \
+	matplotlib pandas h5py scikit-learn 
 
 source activate testenv
 
 pip install -q pyDOE scikit-optimize
-conda install --quiet --yes -c conda-forge openturns
+conda install --quiet --yes -c conda-forge openturns readline
+conda install --quiet --yes -c R rpy2 R-base R-copula R-rcpp R-doparallel R-rcpparmadillo
 
 if [[ "$COVERAGE" == "true" ]]; then
     pip install coverage coveralls
