@@ -24,8 +24,9 @@ if [[ ! -f miniconda.sh ]]; then
 		wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
 	fi
 fi
-bash miniconda.sh -b -p $HOME/miniconda
-export PATH="$HOME/miniconda/bin:$PATH"
+CONDA=$HOME/miniconda
+bash miniconda.sh -b -p $CONDA
+export PATH="$CONDA/bin:$PATH"
 conda update --quiet --yes conda
 popd
 
