@@ -468,7 +468,7 @@ class ConservativeEstimate(object):
     @property
     def model_func(self):
         """The callable model function.
-        """
+        """ 
         return self._model_func
 
     @model_func.setter
