@@ -40,18 +40,18 @@ def get_param2_interval(copula):
         raise NotImplementedError("Not implemented yet.")
 
 
-def get_tau_interval(copula):
+def get_tau_interval(copula, eps=0.01   ):
     assert isinstance(copula, (np.integer, str)), \
         TypeError("Input must be int or str. Not: ", type(copula))
     if isinstance(copula, str):
         copula = int(R_VINECOPULA.BiCopName(copula, False)[0])
 
     if copula in [1, 2]:
-        return -0.99, 0.99
+        return -1+eps, 1.-eps
     elif copula in [3, 13, 4, 14, 5, 6, 16]:
-        return 0.01, 0.98
+        return eps, 1.-eps
     elif copula in [23, 24, 26, 33, 34, 36]:  # Rotated copulas
-        return -0.99, -0.01
+        return -1.+eps, -eps
     else:
         raise NotImplementedError("Not implemented yet.")
 

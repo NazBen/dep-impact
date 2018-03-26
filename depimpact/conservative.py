@@ -174,7 +174,10 @@ class ConservativeEstimate(object):
 
         # Load a grid
         if load_grid in [None, False]:
-            bounds = self._bounds_par_list
+            if dep_measure == "parameter":
+                bounds = self._bounds_par_list
+            elif dep_measure == "kendall":
+                bounds = self._bounds_tau_list
             if verbose:
                 print('Time taken:', time.clock())
                 print('Creating grid')
