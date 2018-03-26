@@ -116,6 +116,12 @@ class VineCopula(object):
             self.build_vine()
         return np.asarray(VINECOPULA.RVineSim(n_obs, self._rvine))
 
+    def get_pdf(self, sample):
+        """
+        """
+        data = numpy2ri(sample)
+        return np.asarray(VINECOPULA.RVineLogLik(data, self._rvine)[0])
+
     def loglikelihood(self, sample):
         """
         """
