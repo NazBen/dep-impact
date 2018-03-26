@@ -142,28 +142,29 @@ class ConservativeEstimate(object):
         A list of DependenceResult instances.
 
         """
-        assert isinstance(
-            n_input_sample, int), "The sample size should be an integer."
+
+        # TODO: gather in functions
+        assert isinstance(n_input_sample, int), \
+            "The sample size should be an integer."
         assert isinstance(grid_type, str), "Grid type should be a string."
         assert n_input_sample > 0, "The sample size should be positive."
         if isinstance(n_dep_param, int):
             assert n_dep_param > 0, "The grid-size should be positive."
         elif n_dep_param is None:
-            assert grid_type == 'vertices', "NoneType for n_dep_params only works for vertices type of grids."
+            assert grid_type == 'vertices', \
+                "NoneType for n_dep_params only works for vertices type of grids."
         else:
             "The grid-size should be an integer or a NoneType."
-        assert grid_type in GRID_TYPES, "Unknow grid type: {}".format(
-            grid_type)
+        assert grid_type in GRID_TYPES,\
+            "Unknow grid type: {}".format(grid_type)
         assert isinstance(
             dep_measure, str), "Dependence measure should be a string."
-        assert dep_measure in DEP_MEASURES, "Unknow dependence measure: {}".format(
-            dep_measure)
+        assert dep_measure in DEP_MEASURES,\
+            "Unknow dependence measure: {}".format(dep_measure)
         assert isinstance(keep_input_samples,
                           bool), "keep_input_samples should be a bool."
 
         rng = check_random_state(random_state)
-
-        t_start = time.clock()
 
         kendalls = None
         grid_filename = None
@@ -462,24 +463,21 @@ class ConservativeEstimate(object):
         # Applied the inverse transformation to get the sample of the joint distribution
         # TODO: this part is pretty much time consuming...
         input_sample = np.zeros((n_sample, dim))
-        for i, quantile_func in enumerate(self._margins_quantiles):
-            input_sample[:, i] = np.asarray(
-                quantile_func(cop_sample[:, i])).ravel()
-
+        for i, marginal in enumerate(self.margins):
+            quantile_func = marginal.computeQuantile
+            input_sample[:, i] = np.asarray(quantile_func(cop_sample[:, i])).ravel()
         return input_sample
 
     @property
     def model_func(self):
         """The callable model function.
-        """ 
+        """
         return self._model_func
 
     @model_func.setter
     def model_func(self, func):
-        """
-        """
-        assert callable(func), TypeError(
-            "The model function must be callable.")
+        assert callable(func), \
+            TypeError("The model function must be callable.")
         self._model_func = func
 
     @property
@@ -492,19 +490,12 @@ class ConservativeEstimate(object):
 
     @margins.setter
     def margins(self, margins):
-        assert isinstance(margins, (list, tuple)), \
-            TypeError("It should be a sequence of OT distribution objects.")
-
-        self._margins_quantiles = []
-        for marginal in margins:
-            assert isinstance(marginal, ot.DistributionImplementation), \
-                TypeError("Must be an OpenTURNS distribution objects.")
-            self._margins_quantiles.append(marginal.computeQuantile)
-
+        margins = check_margins(margins)
         self._margins = margins
         self._input_dim = len(margins)
         self._corr_dim = int(self._input_dim * (self._input_dim - 1) / 2)
 
+        # TODO: clean these checking steps in functions
         if hasattr(self, '_families'):
             if self._families.shape[0] != self._input_dim:
                 print("Don't forget to change the family matrix.")
@@ -545,12 +536,9 @@ class ConservativeEstimate(object):
         elif isinstance(families, np.ndarray):
             pass
         else:
-            raise TypeError("Not a good type for the familie matrix.")
+            raise TypeError("Not a good type for the family matrix.")
 
-        families = families.astype(int)
-        check_matrix(families)  # Check the matrix
-
-        self._families = families
+        self._families = check_families(families)
 
         # The family list values. Event the independent ones
         self._family_list = matrix_to_list(families, op_char='>=')
@@ -565,9 +553,9 @@ class ConservativeEstimate(object):
 
         self._n_pairs = len(self._pair_ids)
 
-        self._copula_converters = [Conversion(
-            family) for family in self._family_list]
+        self._copula_converters = [Conversion(family) for family in self._family_list]
 
+        # TODO: add check part in functions
         if hasattr(self, '_input_dim'):
             if self._families.shape[0] != self._input_dim:
                 print("Don't forget to change the margins.")
@@ -1634,3 +1622,21 @@ class DependenceResult(object):
                 kendall = kendall.item()
             kendalls.append(kendall)
         return kendalls
+
+
+def check_margins(margins):
+    assert isinstance(margins, (list, tuple)), \
+        TypeError("It should be a sequence of OT distribution objects.")
+
+    for marginal in margins:
+        assert isinstance(marginal, ot.DistributionImplementation), \
+            TypeError("Must be an OpenTURNS distribution objects.")
+
+    return margins
+
+def check_families(families):
+    check_matrix(families)
+    assert families[np.triu_indices(families.shape[0])].sum() == 0,\
+        "The family matrix should be lower triangular."
+    families = families.astype(int)
+    return families

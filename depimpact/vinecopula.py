@@ -6,13 +6,14 @@ from rpy2.robjects.numpy2ri import numpy2ri
 VINECOPULA = importr('VineCopula')
 
 
-def check_matrix(value):
-    assert isinstance(value, np.ndarray), \
-        TypeError('Variable must be a numpy array.')
-    assert value.ndim == 2, \
+def check_matrix(matrix):
+    if not isinstance(matrix, np.ndarray):
+        matrix = np.asarray(matrix)
+    assert matrix.ndim == 2, \
         AttributeError('Matrix should be of dimension 2.')
-    assert value.shape[0] == value.shape[1], \
+    assert matrix.shape[0] == matrix.shape[1], \
         AttributeError('Matrix should be squared.')
+    return matrix
 
 
 def check_family(matrix):
