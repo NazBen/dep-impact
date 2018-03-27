@@ -35,6 +35,7 @@ def get_grid_sample(dimensions, n_sample, grid_type):
     sample : array,
         The sample from the given space and the given grid.
     """
+    # TODO: check all
     # We create the grid
     space = Space(dimensions)
     sample = space.rvs(n_sample, sampling=grid_type)
@@ -44,7 +45,6 @@ def get_grid_sample(dimensions, n_sample, grid_type):
 class Space(sk_Space):
     """
     """
-
     def rvs(self, n_samples=1, sampling='rand',
             lhs_sampling_criterion='centermaximin', random_state=None):
         """Draw random samples.
@@ -284,8 +284,8 @@ def to_copula_params(converters, kendalls):
     n_params, n_pairs = kendalls.shape
     params = np.zeros(kendalls.shape)
     for k in range(n_pairs):
-        params[:, k] = converters[k].to_copula_parameter(
-            kendalls[:, k], dep_measure='kendall-tau')
+        params[:, k] = converters[k].to_parameter(
+            kendalls[:, k], dep_measure='kendall')
 
     # If there is only one parameter, no need to return the list
     if params.size == 1:

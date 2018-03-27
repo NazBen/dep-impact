@@ -40,20 +40,48 @@ def get_param2_interval(copula):
         raise NotImplementedError("Not implemented yet.")
 
 
-def get_tau_interval(copula, eps=0.01   ):
-    assert isinstance(copula, (np.integer, str)), \
-        TypeError("Input must be int or str. Not: ", type(copula))
-    if isinstance(copula, str):
-        copula = int(R_VINECOPULA.BiCopName(copula, False)[0])
+def get_tau_interval(family, eps=0.01):
+    assert isinstance(family, (np.integer, str)), \
+        TypeError("Input must be int or str, given:", type(family))
+    if isinstance(family, str):
+        family = int(R_VINECOPULA.BiCopName(family, False)[0])
 
-    if copula in [1, 2]:
+    if family in [1, 2, 3, 4, 6, 13, 14, 16]:
         return -1+eps, 1.-eps
-    elif copula in [3, 13, 4, 14, 5, 6, 16]:
-        return eps, 1.-eps
-    elif copula in [23, 24, 26, 33, 34, 36]:  # Rotated copulas
-        return -1.+eps, -eps
     else:
         raise NotImplementedError("Not implemented yet.")
+
+
+def to_ri(values):
+    if isinstance(values, np.ndarray):
+        values = numpy2ri(values)
+    return values
+
+def convert_to(convert_func, family, values):    
+    if isinstance(values, float):
+        rot = 0 if values >= 0 else 20
+        params = convert_func(family + rot, values)
+    else:
+        params = np.zeros(values.shape)
+        up_id = values >= 0
+        down_id = ~up_id
+        if up_id.any():
+            params[up_id] = convert_func(family, values[up_id])
+        if down_id.any():
+            params[down_id] = convert_func(family+20, values[down_id])    
+    return params
+
+
+def kendall_to_parameter(family, values):
+    values = to_ri(values)
+    params = np.asarray(R_VINECOPULA.BiCopTau2Par(family, values))
+    return params
+
+
+def parameter_to_kendall(family, values):
+    values = to_ri(values)
+    params =  np.asarray(R_VINECOPULA.BiCopPar2Tau(family, values))
+    return params
 
 
 class Conversion(object):
@@ -62,65 +90,58 @@ class Conversion(object):
     
     Parameters
     ----------
-    family : array,
-        The family matrix.
+    family : int or str,
+        The copula family.
     """    
     def __init__(self, family):
         self.family = family
 
-    def to_copula_parameter(self, measure_param, dep_measure='kendall-tau'):
+    def to_parameter(self, values, dep_measure='kendall'):
         """Convert the dependence_measure to the copula parameter.
         
-        Parameters
+        Parameters:
         ----------
-        
-        
+        values : float or list/array of float
+            The dependence measure vlaue to convert.
+        dep_measure : str, optional (default='kendall')
+            The dependence measure to convert.
+               
         Returns
         -------
+        params : float or list of float
+            The copula parameter(s) associated to the values.
+            
         """
-        if isinstance(measure_param, list):
-            measure_param = np.asarray(measure_param)
-
-        if isinstance(measure_param, np.ndarray):
-            n_sample = measure_param.shape[0]
-            assert n_sample == measure_param.size, "It must be a vector"
-        elif isinstance(measure_param, float):
-            n_sample = 1
-            measure_param = np.asarray([measure_param])
-        else:
-            raise TypeError("Wrong type for measure_param: {0}".format(type(measure_param)))
-        
-        if dep_measure == "kendall-tau":
-            r_kendall = numpy2ri(measure_param)
-            copula_param = np.asarray(R_VINECOPULA.BiCopTau2Par(self._family, r_kendall))
-        elif dep_measure == "pearson-rho":
-            copula_param = self._copula.fromPearsonToParam(measure_param)
+        check_values(values)
+        if dep_measure == "kendall":
+            if self._family in [1, 2]:
+                params = kendall_to_parameter(self._family, values)
+            else:
+                params = convert_to(kendall_to_parameter, self._family, values)
+        elif dep_measure == "pearson":
+            raise NotImplementedError('Maybe in the next versions...')
+        elif dep_measure == "spearman":
+            raise NotImplementedError('Maybe in the next versions...')
         else:
             raise ValueError("Unknow Dependence Measure")
-
-        if copula_param.size == 1:
-            return copula_param.item()
-        else:
-            return copula_param
+        return params
     
-    def to_kendall(self, params):
+
+    def to_kendall(self, values):
         """Convert the dependence_measure to the copula parameter.      
         
         Parameters
-        ----------
-        
+        ----------       
         
         Returns
         -------
         """
-        if isinstance(params, np.ndarray):
-            r_params = numpy2ri(params)
-        elif isinstance(params, float):
-            r_params = params
+        check_values(values)
+        if self._family in [1, 2]:
+            kendalls = parameter_to_kendall(self._family, values)
         else:
-            raise TypeError("Wrong type for params. Got: ", type(params))
-        copula_param = np.asarray(R_VINECOPULA.BiCopPar2Tau(self._family, r_params))
-        return copula_param
+            kendalls = convert_to(parameter_to_kendall, self._family, values)
+        return kendalls
 
     def to_pearson(self, measure_param):
         """Convert the dependence_measure to the copula parameter.
@@ -132,52 +153,34 @@ class Conversion(object):
         Returns
         -------
         """
-        return self._copula.fromParamToPearson(measure_param)
+        raise NotImplementedError('Not yet...')
         
     @property
     def family(self):
-        """The family matrix.
+        """The copula family.
         """
         return self._family
         
     @family.setter
     def family(self, value):
-        if isinstance(value, (int, float, np.integer)):
+        if isinstance(value, (int, np.integer)):
             np.testing.assert_equal(value, int(value))
             self._family = int(value)
-            self._family_name = R_VINECOPULA.BiCopName(int(value), False)[0]            
+            self._family_name = R_VINECOPULA.BiCopName(int(value), False)[0]
         elif isinstance(value, str):
             self._family = int(R_VINECOPULA.BiCopName(value, False)[0])
             self._family_name = value
         else:
-            raise TypeError("Unkow Type for family")
+            raise TypeError("Unkow family {}".format(value))
 
-    class NormalCopula:
-        """
-        """
-        @staticmethod
-        def to_kendall(param):
-            """
-            From Pearson correlation parameter to Kendal dependence parameter.        
-            Parameters
-            ----------
-            
-            
-            Returns
-            -------
-            """
-            return 2. / np.pi * np.arcsin(param)
 
-        @staticmethod
-        def to_copula_parameter(tau):
-            """
-            From Kendal dependence parameter to Pearson correlation parameter.
-                    
-            Parameters
-            ----------
-            
-            
-            Returns
-            -------
-            """
-            return np.sin(np.pi / 2. * tau)
+def check_values(values):
+    if isinstance(values, list):
+        values = np.asarray(values)
+
+    if isinstance(values, np.ndarray):
+        assert values.shape[0] == values.size, "It must be a vector"
+    elif isinstance(values, float):
+        pass
+    else:
+        raise TypeError("Wrong type of values: {}".format(type(values)))

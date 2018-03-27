@@ -78,12 +78,7 @@ class ConservativeEstimate(object):
         The type of copula. Available types:
         - 'vine': Vine Copula construction
         - 'normal': Multi dimensionnal Gaussian copula.
-
-    Attributes
-    ----------
-
     """
-
     def __init__(self,
                  model_func,
                  margins,
@@ -142,7 +137,6 @@ class ConservativeEstimate(object):
         A list of DependenceResult instances.
 
         """
-
         # TODO: gather in functions
         assert isinstance(n_input_sample, int), \
             "The sample size should be an integer."
@@ -172,38 +166,15 @@ class ConservativeEstimate(object):
         if n_dep_param == None and grid_type == 'vertices':
             load_grid = None
             save_grid = None
-
-        # Load a grid
-        if load_grid in [None, False]:
-            if dep_measure == "parameter":
-                bounds = self._bounds_par_list
-            elif dep_measure == "kendall":
-                bounds = self._bounds_tau_list
-            if verbose:
-                print('Time taken:', time.clock())
-                print('Creating grid')
-                t_start = time.time()
+            
+        if load_grid in [None, False]:       
+            bounds = self._get_bounds(dep_measure)
             values = get_grid_sample(bounds, n_dep_param, grid_type)
             n_dep_param = len(values)
             if dep_measure == "parameter":
                 params = values
-            elif dep_measure == "kendall":
-                kendalls = values
-                if verbose:
-                    print('Time taken:', time.clock())
-                    print('Converting to kendall parameters')
-                    t_start = time.time()
-                converter = [self._copula_converters[k]
-                             for k in self._pair_ids]
-                params = to_copula_params(converter, kendalls)
-            elif dep_measure == 'pearson':
-                raise NotImplementedError(
-                    'Dependence measure not yet implemented.')
-            elif dep_measure == 'spearman':
-                raise NotImplementedError(
-                    'Dependence measure not yet implemented.')
             else:
-                raise ValueError("Unknow dependence measure type")
+                params = self.to_copula_parameters(values, dep_measure)
         else:
             # TODO: correct the loading
             # Load the sample from file and get the filename
@@ -224,11 +195,6 @@ class ConservativeEstimate(object):
                 kendalls = to_kendalls(self._copula_converters, params)
             grid_filename = save_dependence_grid(grid_path, kendalls, self._bounds_tau_list,
                                                  grid_type)
-
-        # Evaluate the sample
-        if verbose:
-            print('Time taken:', time.clock())
-            print('Sample evaluation')
 
         # Use less memory
         if use_sto_func:
@@ -518,6 +484,37 @@ class ConservativeEstimate(object):
                 if self._custom_fixed_params:
                     print("Don't forget to change the fixed params matrix")
 
+    def _get_bounds(self, dep_measure):
+        if dep_measure == "parameter":
+            bounds = self._bounds_par_list
+        elif dep_measure == "kendall":
+            bounds = self._bounds_tau_list
+        else:
+            raise TypeError('Unknow dep measure {}'.format(bounds))
+        return bounds
+
+    def to_copula_parameters(self, values, dep_measure):
+        """
+        """
+        # TODO: do it better
+        if isinstance(values, list):
+            values = np.asarray(values)
+        elif isinstance(values, float):
+            values = np.asarray([values])
+
+        n_params, n_pairs = values.shape
+        params = np.zeros((n_params, n_pairs))
+        converters = [self._copula_converters[k] for k in self._pair_ids]
+        # For each pair-copula
+        for k in range(n_pairs):
+            params[:, k] = converters[k].to_parameter(
+                values[:, k], dep_measure=dep_measure)
+
+        # If there is only one parameter, no need to return the list
+        if params.size == 1:
+            params = params.item()
+        return params
+
     @property
     def families(self):
         """The copula families.
@@ -546,12 +543,11 @@ class ConservativeEstimate(object):
         # Dpendent pairs
         _, self._pair_ids, self._pairs = matrix_to_list(families, return_ids=True,
                                                         return_coord=True, op_char='>')
+        self._n_pairs = len(self._pair_ids)
 
         # Independent pairs
         _, self._indep_pairs_ids, self._indep_pairs = matrix_to_list(
             families, return_ids=True, return_coord=True, op_char='==')
-
-        self._n_pairs = len(self._pair_ids)
 
         self._copula_converters = [Conversion(family) for family in self._family_list]
 
@@ -621,6 +617,7 @@ class ConservativeEstimate(object):
 
     @copula_type.setter
     def copula_type(self, value):
+        # TODO: check this
         assert isinstance(value, str), \
             TypeError('Type must be a string. Type given:', type(value))
 
@@ -644,6 +641,7 @@ class ConservativeEstimate(object):
 
     @vine_structure.setter
     def vine_structure(self, structure):
+        # TODO: check this
         if structure is None:
             listed_pairs = self._indep_pairs + self._fixed_pairs
             dim = self.input_dim
@@ -692,7 +690,7 @@ class ConservativeEstimate(object):
         value : :class:`~numpy.ndarray`, str or None
             Matrix of bounds.
         """
-
+        # TODO: check this
         dim = self._input_dim
         self._custom_bounds_tau = True
         # If no bounds given, we take the min and max, depending on the copula family
@@ -720,13 +718,13 @@ class ConservativeEstimate(object):
 
             if not np.isnan(bounds_tau[j, i]):
                 tau_max = min(bounds_tau[j, i], tau_max)
-
             bounds_tau_list.append([tau_min, tau_max])
+
             # Conversion to copula parameters
-            param_min = self._copula_converters[p].to_copula_parameter(
-                tau_min, 'kendall-tau')
-            param_max = self._copula_converters[p].to_copula_parameter(
-                tau_max, 'kendall-tau')
+            param_min = self._copula_converters[p].to_parameter(
+                tau_min, 'kendall')
+            param_max = self._copula_converters[p].to_parameter(
+                tau_max, 'kendall')
 
             bounds_par[i, j] = tau_min
             bounds_par[j, i] = tau_max
@@ -747,6 +745,7 @@ class ConservativeEstimate(object):
 
     @fixed_params.setter
     def fixed_params(self, value):
+        # TODO: check this
         # TODO: if it is changed multiple times, it keeps deleting pairs...
         self._custom_fixed_params = True
         if value is None:

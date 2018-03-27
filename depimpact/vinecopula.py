@@ -74,9 +74,16 @@ class VineCopula(object):
     @param1.setter
     def param1(self, value):
         check_matrix(value)
-        assert value.shape[0] == self._dim, \
+        dim = self._dim
+        assert value.shape[0] == dim, \
             AttributeError(
-                'Family matrix should be of dimension == %d' % (self._dim))
+                'Family matrix should be of dimension == %d' % (dim))
+
+        families = self._family.copy()
+        elements = np.where((value < 0) & (families > 2))
+        families[elements] += 20
+
+        self.family = families
         self._param1 = value
         self._to_rebuild = True
 
