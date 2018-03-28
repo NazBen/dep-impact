@@ -394,7 +394,7 @@ def test_bidim_additive_gaussian_gridsearch():
     for alpha, threshold in zip(QUANTILES_PROB, PROB_THRESHOLDS):
         for grid in GRIDS:
             # Only Gaussian families
-            families = np.tril(np.ones((dim, dim)), k=1)
+            families = np.tril(np.ones((dim, dim), dtype=int), k=-1)
 
             impact = ConservativeEstimate(model_func=func_sum,
                                           margins=[ot.Normal()]*dim,
@@ -436,7 +436,7 @@ def test_independence():
     for alpha, threshold in zip(QUANTILES_PROB, PROB_THRESHOLDS):
         for dim in DIMENSIONS:
             # Only Gaussian families
-            families = np.tril(np.ones((dim, dim)), k=1)
+            families = np.tril(np.ones((dim, dim), dtype=int), k=-1)
     
             impact = ConservativeEstimate(model_func=func_sum,
                                           margins=[ot.Normal()]*dim,
@@ -470,7 +470,7 @@ def test_vines():
     dim = 3
     n_params = 200
     grid_type = 'lhs'
-    families = np.tril(np.ones((dim, dim)), k=1)
+    families = np.tril(np.ones((dim, dim), dtype=int), k=-1)
     
     impact = ConservativeEstimate(model_func=func_sum,
                                   margins=[ot.Normal()]*dim,

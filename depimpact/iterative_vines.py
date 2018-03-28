@@ -114,7 +114,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     init_fixed_pairs = quant_estimate._fixed_pairs[:]
     
     # New empty configurations
-    families = np.zeros((dim, dim))
+    families = np.zeros((dim, dim), dtype=int)
     bounds_tau = np.zeros((dim, dim))
     bounds_tau[:] = None
 

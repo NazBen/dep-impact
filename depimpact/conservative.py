@@ -535,7 +535,7 @@ class ConservativeEstimate(object):
         else:
             raise TypeError("Not a good type for the family matrix.")
 
-        self._families = check_families(families)
+        families = check_families(families)
 
         # The family list values. Event the independent ones
         self._family_list = matrix_to_list(families, op_char='>=')
@@ -543,6 +543,8 @@ class ConservativeEstimate(object):
         # Dpendent pairs
         _, self._pair_ids, self._pairs = matrix_to_list(families, return_ids=True,
                                                         return_coord=True, op_char='>')
+
+        self._families = families
         self._n_pairs = len(self._pair_ids)
 
         # Independent pairs
