@@ -80,8 +80,14 @@ class VineCopula(object):
                 'Family matrix should be of dimension == %d' % (dim))
 
         families = self._family.copy()
-        elements = np.where((value < 0) & (families > 2))
+        negative_ids = value < 0
+        indep_ids = value == 0
+        non_gaussian_ids = families > 2
+
+        elements = np.where(negative_ids & non_gaussian_ids)
         families[elements] += 20
+        elements = np.where(indep_ids & non_gaussian_ids)
+        families[elements] = 1
 
         self.family = families
         self._param1 = value

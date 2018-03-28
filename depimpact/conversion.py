@@ -40,7 +40,7 @@ def get_param2_interval(copula):
         raise NotImplementedError("Not implemented yet.")
 
 
-def get_tau_interval(family, eps=0.01):
+def get_tau_interval(family, eps=0.02):
     assert isinstance(family, (np.integer, str)), \
         TypeError("Input must be int or str, given:", type(family))
     if isinstance(family, str):
@@ -59,29 +59,39 @@ def to_ri(values):
 
 def convert_to(convert_func, family, values):    
     if isinstance(values, float):
-        rot = 0 if values >= 0 else 20
-        params = convert_func(family + rot, values)
+        if values == 0:
+            params = 0
+        else:
+            rot = 0 if values > 0 else 20
+            params = convert_func(family + rot, values)
     else:
         params = np.zeros(values.shape)
-        up_id = values >= 0
-        down_id = ~up_id
+        up_id = values > 0
+        down_id = values < 0
+        null_id = values == 0
         if up_id.any():
             params[up_id] = convert_func(family, values[up_id])
         if down_id.any():
             params[down_id] = convert_func(family+20, values[down_id])    
+        if null_id.any():
+            params[null_id] = 0.
     return params
 
 
 def kendall_to_parameter(family, values):
     values = to_ri(values)
     params = np.asarray(R_VINECOPULA.BiCopTau2Par(family, values))
+    if params.size == 1:
+        params = params.item()
     return params
 
 
 def parameter_to_kendall(family, values):
     values = to_ri(values)
-    params =  np.asarray(R_VINECOPULA.BiCopPar2Tau(family, values))
-    return params
+    kendalls =  np.asarray(R_VINECOPULA.BiCopPar2Tau(family, values))
+    if kendalls.size == 1:
+        kendalls = kendalls.item()
+    return kendalls
 
 
 class Conversion(object):

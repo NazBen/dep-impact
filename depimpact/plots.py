@@ -1,12 +1,16 @@
 from collections import Counter
 
+from scipy.stats import logistic
+
 import matplotlib.pyplot as plt
+from matplotlib import colors as mcolors
 import numpy as np
 import pandas as pd
 import seaborn as sns
 from scipy import stats
 
 from .utils import get_grid_sample, to_copula_params
+from .conservative import ListDependenceResult
 
 sns.set(style="ticks", color_codes=True)
 
@@ -125,6 +129,107 @@ def matrix_plot_input(result, kde=False, margins=None):
         plot.set(xlim=(0, 1), ylim=(0, 1))
 
     return plot
+
+
+def get_color_range(n):
+    colors = mcolors.TABLEAU_COLORS
+    by_hsv = sorted((tuple(mcolors.rgb_to_hsv(mcolors.to_rgba(color)[:3])), name)
+                    for name, color in colors.items())
+    sorted_names = [name for hsv, name in by_hsv]
+    delta = int(len(sorted_names)/n)
+    return sorted_names[::delta]
+
+def get_hull(x, y, n_bins):
+    bins = np.linspace(-5., 5., n_bins)
+    bins = logistic.cdf(bins) * (2) - 1
+    bins = np.linspace(x.min(), x.max(), n_bins)
+    down_hull = np.zeros((n_bins-1, ))
+    up_hull = np.zeros((n_bins-1, ))
+    x_hull = np.zeros((n_bins-1, ))
+    for i in range(n_bins-1):
+        down, up = bins[i], bins[i+1]
+        bin_ids = (x >= down) & (x < up)
+        down_id = y[bin_ids].argmin()
+        up_id = y[bin_ids].argmax()
+        down_hull[i] = y[bin_ids][down_id]
+        up_hull[i] = y[bin_ids][up_id]
+        x_hull[i] = x[bin_ids][down_id]
+
+    x_hull = bins[:-1] + (bins[1] - bins[0])/2
+    return x_hull, down_hull, up_hull
+
+
+def plot_quantities(results, ratio=(3.5, 2.5), quantity_name=None, label=None, 
+    plot_scatter=False, plot_hull=True, n_bins=15):
+
+    if isinstance(results, ListDependenceResult):
+        n_plot = 1
+        dim = results.input_dim
+        kendalls = [results.kendalls]
+        quantities = [results.quantities]
+        label = [label] 
+    elif isinstance(results, list):
+        n_plot = len(results)
+        dim = results[0].input_dim
+        kendalls = []
+        quantities = []
+        for result in results:
+            kendalls.append(result.kendalls)
+            quantities.append(result    .quantities)
+            assert result.input_dim == dim, "The dimension should be the same for all plots."
+        
+    if dim == 2:
+        plot_hull = False
+        plot_scatter = True
+
+    fig, axes = plt.subplots(
+        dim-1, dim-1, figsize=(dim*ratio[0], dim*ratio[1]), sharex=True, sharey=True)
+
+    colors = get_color_range(n_plot)
+    for i_plot in range(n_plot):
+        k = 0
+        for i in range(dim-1):
+            for j in range(i+1):
+                if dim == 2:
+                    ax = axes
+                    sorted_items = np.argsort(kendalls[i_plot].ravel())
+                    kendalls[i_plot] = kendalls[i_plot][sorted_items]
+                    quantities[i_plot] = quantities[i_plot][sorted_items]
+                    linestyle = '-'
+                else:
+                    ax = axes[i, j]
+                    linestyle = ''
+
+                x, y = kendalls[i_plot][:, k], quantities[i_plot]
+                if plot_scatter:
+                    h = ax.plot(x, y, '.',
+                            linestyle=linestyle, label=label[i_plot])
+                    color = h[0].get_color()
+                else:
+                    color = colors[i_plot]
+                
+                if plot_hull:
+                    x_hull, y_down, y_up = get_hull(x, y, n_bins)
+                    h = ax.plot(x_hull, y_down, '--', color=color,
+                            label='Down hull '+label[i_plot])
+                    color = h[0].get_color()
+                    ax.plot(x_hull, y_up, '--', color=color,
+                            label='Up hull '+label[i_plot])
+
+                ax.set_xlabel('$\\tau_{%d, %d}$' % (j+1, i+2))
+                ax.set_xlim(-1, 1.)
+
+                if j == 0:
+                    ax.set_ylabel(quantity_name)
+                k += 1
+
+    if dim == 2:
+        ax.legend(loc=0)
+    else:
+        handles, labels = axes[0, 0].get_legend_handles_labels()
+        axes[0, dim-2].legend(handles, labels)
+        
+    return fig, axes
 
 
 def matrix_plot_quantities(results, indep_result=None, grid_result=None,

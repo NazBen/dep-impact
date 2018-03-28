@@ -1604,8 +1604,8 @@ class DependenceResult(object):
         for family, id_param in zip(*matrix_to_list(self.families, return_ids=True)):
             kendall = Conversion(family).to_kendall(
                 self.full_dep_params[id_param])
-            if kendall.size == 1:
-                kendall = kendall.item()
+            # if kendall.size == 1:
+            #     kendall = kendall.item()
             kendalls.append(kendall)
         return kendalls
 
@@ -1617,8 +1617,8 @@ class DependenceResult(object):
         for family, id_param in zip(*matrix_to_list(self.families, return_ids=True, op_char='>=')):
             kendall = Conversion(family).to_kendall(
                 self.full_dep_params[id_param])
-            if kendall.size == 1:
-                kendall = kendall.item()
+            # if kendall.size == 1:
+            #     kendall = kendall.item()
             kendalls.append(kendall)
         return kendalls
 
