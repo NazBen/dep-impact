@@ -1623,21 +1623,3 @@ class DependenceResult(object):
             #     kendall = kendall.item()
             kendalls.append(kendall)
         return kendalls
-
-
-def check_margins(margins):
-    assert isinstance(margins, (list, tuple)), \
-        TypeError("It should be a sequence of OT distribution objects.")
-
-    for marginal in margins:
-        assert isinstance(marginal, ot.DistributionImplementation), \
-            TypeError("Must be an OpenTURNS distribution objects.")
-
-    return margins
-
-def check_families(families):
-    check_matrix(families)
-    assert families[np.triu_indices(families.shape[0])].sum() == 0,\
-        "The family matrix should be lower triangular."
-    families = families.astype(int)
-    return families
