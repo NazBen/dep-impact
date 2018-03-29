@@ -9,7 +9,7 @@ ROTATED_FAMILIES = [3, 4, 6, 13, 14, 16]
 
 class VineCopula(object):
     """Vine Copula class.
-    
+
     Parameters:
     ----------
     structure : array
@@ -133,7 +133,7 @@ class VineCopula(object):
 
     def get_pdf(self, x):
         """Computes the probability density function.
-        
+
         Parameters
         ----------
         x : float or array
@@ -150,7 +150,7 @@ class VineCopula(object):
 
     def loglikelihood(self, x):
         """Computes the loglikelihood function.
-        
+
         Parameters
         ----------
         x : float or array
@@ -162,12 +162,13 @@ class VineCopula(object):
             The loglikelihood.
         """
         x = numpy2ri(x)
-        lilelihood = np.asarray(VINECOPULA.RVineLogLik(x, self._rvine, separate=True, calculate_V=False)[0])
+        lilelihood = np.asarray(VINECOPULA.RVineLogLik(
+            x, self._rvine, separate=True, calculate_V=False)[0])
         return lilelihood
 
     def grad_loglikelihood(self, x):
         """Computes the gradient of the loglikelihood function.
-        
+
         Parameters
         ----------
         x : float or array
@@ -185,7 +186,7 @@ class VineCopula(object):
 
 def check_matrix(matrix):
     """Check the validity of a matrix for the vine copula.
-    
+
     Parameters:
     ----------
     matrix : array,
@@ -204,14 +205,14 @@ def check_matrix(matrix):
 
 def check_triangular(matrix, k=1):
     """Checks if a matrix is triangular.
-    
+
     Parameters:
     ----------
     matrix : array
         The triangular matrix.
     k : int, (default=1)
         The distance with the diagonal.
-    
+
     Returns
     -------
     matrix : array
@@ -232,17 +233,18 @@ def check_triangular(matrix, k=1):
 
 def check_family(matrix):
     """Check the validity of a family matrix for the vine copula.
-    
+
     Parameters:
     ----------
     matrix : array
         The pair-copula families.
-    
+
     Returns
     -------
     matrix : array
         The corrected matrix.
     """
+    # TODO: check if the families are in the list of copulas
     matrix = check_matrix(matrix)
     matrix = check_triangular(matrix, k=1)
     dim = matrix.shape[0]
@@ -253,20 +255,18 @@ def check_family(matrix):
                     VINECOPULA.BiCopName(matrix[i, j], False)[0])
             elif isinstance(matrix[i, j], np.integer):
                 pass
-            else:
-                raise ValueError("Uncorrect Family matrix")
     matrix = matrix.astype(int)
     return matrix
 
 
 def check_structure(structure):
     """Check a vine structure matrix.
-    
+
     Parameters:
     ----------
     matrix : array
         The vine structure array.
-    
+
     Returns
     -------
     matrix : array
