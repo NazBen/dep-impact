@@ -4,6 +4,7 @@ from rpy2.robjects.packages import importr
 
 from .vinecopula import ROTATED_FAMILIES
 
+AVAILABLE_COPULAS = [1, 2, 3, 4, 6, 13, 14, 16]
 R_VINECOPULA = importr('VineCopula')
 
 
@@ -121,7 +122,7 @@ def get_tau_interval(family, eps=0.01):
     if isinstance(family, str):
         family = int(R_VINECOPULA.BiCopName(family, False)[0])
 
-    if family in [1, 2, 3, 4, 5, 6, 13, 14, 16]:
+    if family in AVAILABLE_COPULAS:
         return -1+eps, 1.-eps
     else:
         raise NotImplementedError("Not implemented yet.")

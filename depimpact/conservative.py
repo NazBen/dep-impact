@@ -78,8 +78,10 @@ class ConservativeEstimate(object):
         The type of copula. Available types:
         - 'vine': Vine Copula construction
         - 'normal': Multi dimensionnal Gaussian copula.
+    params2 : array or None
+        The second parameter of the pair-copulas with two parameters. This one
+        is fixed for all the estimation.
     """
-
     def __init__(self,
                  model_func,
                  margins,
@@ -87,7 +89,8 @@ class ConservativeEstimate(object):
                  fixed_params=None,
                  bounds_tau=None,
                  vine_structure=None,
-                 copula_type='vine'):
+                 copula_type='vine',
+                 params2=None):
         self.model_func = model_func
         self.margins = margins
         self.families = families
@@ -95,6 +98,7 @@ class ConservativeEstimate(object):
         self.fixed_params = fixed_params
         self.vine_structure = vine_structure
         self.copula_type = copula_type
+        self.params2 = params2
 
     def gridsearch(self,
                    n_dep_param,
@@ -161,7 +165,6 @@ class ConservativeEstimate(object):
 
         rng = check_random_state(random_state)
 
-        kendalls = None
         grid_filename = None
 
         if n_dep_param == None and grid_type == 'vertices':
@@ -176,27 +179,28 @@ class ConservativeEstimate(object):
                 params = values
             else:
                 params = self.to_copula_parameters(values, dep_measure)
-        else:
-            # TODO: correct the loading
-            # Load the sample from file and get the filename
-            kendalls, grid_filename = load_dependence_grid(
-                dirname=grid_path,
-                n_pairs=self._n_pairs,
-                n_params=n_dep_param,
-                bounds_tau=self._bounds_tau_list,
-                grid_type=grid_type,
-                use_grid=use_grid)
-            converter = [self._copula_converters[k] for k in self._pair_ids]
-            params = to_copula_params(converter, kendalls)
+        # else:
+        #     # TODO: correct the loading
+        #     # Load the sample from file and get the filename
+        #     kendalls, grid_filename = load_dependence_grid(
+        #         dirname=grid_path,
+        #         n_pairs=self._n_pairs,
+        #         n_params=n_dep_param,
+        #         bounds_tau=self._bounds_tau_list,
+        #         grid_type=grid_type,
+        #         use_grid=use_grid)
+        #     converter = [self._copula_converters[k] for k in self._pair_ids]
+        #     params = to_copula_params(converter, kendalls)
 
         # TODO: correct the saving
         # The grid is save if it was asked and if it does not already exists
-        if save_grid not in [None, False] and load_grid in [None, False]:
-            if kendalls is None:
-                kendalls = to_kendalls(self._copula_converters, params)
-            grid_filename = save_dependence_grid(grid_path, kendalls, self._bounds_tau_list,
-                                                 grid_type)
+        # if save_grid not in [None, False] and load_grid in [None, False]:
+        #     if kendalls is None:
+        #         kendalls = to_kendalls(self._copula_converters, params)
+        #     grid_filename = save_dependence_grid(grid_path, kendalls, self._bounds_tau_list,
+        #                                          grid_type)
 
+        # TODO: clean this...
         # Use less memory
         if use_sto_func:
             output_samples = []
@@ -261,6 +265,7 @@ class ConservativeEstimate(object):
         random_state : 
         """
         check_random_state(random_state)
+        func = self.model_func
 
         # Get all the input_sample
         if verbose:
@@ -280,7 +285,7 @@ class ConservativeEstimate(object):
             print('Evaluate the input samples')
 
         # Evaluate the through the model
-        outputs = self.model_func(np.concatenate(input_samples))
+        outputs = func(np.concatenate(input_samples))
         # List of output sample for each param
         output_samples = np.split(outputs, len(params))
 
@@ -308,6 +313,7 @@ class ConservativeEstimate(object):
         random_state : 
         """
         check_random_state(random_state)
+        func = self.model_func
 
         if isinstance(param, list):
             param = np.asarray(param)
@@ -320,8 +326,7 @@ class ConservativeEstimate(object):
         full_param[self._pair_ids] = param
         full_param[self._fixed_pairs_ids] = self._fixed_params_list
         input_sample = self._get_sample(full_param, n_input_sample)
-
-        output_sample = self.model_func(input_sample)
+        output_sample = func(input_sample)
 
         if return_input_sample:
             return output_sample, input_sample
@@ -335,7 +340,7 @@ class ConservativeEstimate(object):
         Parameters
         ----------
         n_input_sample : int
-            The number of observations in the sampling of :math:`\mathbf X`.
+            The number of observations in the sampling of X.
 
         Returns
         -------
@@ -371,7 +376,7 @@ class ConservativeEstimate(object):
         Parameters
         ----------
         n_input_sample : int
-            The number of observations in the sampling of :math:`\mathbf{X}`.
+            The number of observations in the sampling of X`.
 
         Returns
         -------
@@ -385,7 +390,8 @@ class ConservativeEstimate(object):
         # Creates the sample of input parameters
         tmp = ot.ComposedDistribution(self._margins).getSample(n_input_sample)
         input_sample = np.asarray(tmp)
-        output_sample = self.model_func(input_sample)
+        func = self.model_func
+        output_sample = func(input_sample)
 
         if not keep_input_sample:
             input_sample = None
@@ -444,8 +450,7 @@ class ConservativeEstimate(object):
 
     @model_func.setter
     def model_func(self, func):
-        assert callable(func), \
-            TypeError("The model function must be callable.")
+        assert callable(func), "The model function must be callable."
         self._model_func = func
 
     @property
@@ -511,10 +516,6 @@ class ConservativeEstimate(object):
         for k in range(n_pairs):
             params[:, k] = converters[k].to_parameter(
                 values[:, k], dep_measure=dep_measure)
-
-        # If there is only one parameter, no need to return the list
-        if params.size == 1:
-            params = params.item()
         return params
 
     @property

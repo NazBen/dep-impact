@@ -4,7 +4,7 @@ from rpy2.robjects.packages import importr
 from rpy2.robjects.numpy2ri import numpy2ri
 
 VINECOPULA = importr('VineCopula')
-ROTATED_FAMILIES = [3, 4, 6, 13, 14, 16]
+ROTATED_FAMILIES = [3, 4, 6, 7, 13, 14, 16, 17]
 
 
 class VineCopula(object):
@@ -92,7 +92,7 @@ class VineCopula(object):
     @param2.setter
     def param2(self, param2):
         if param2 is None:
-            param2 = np.zeros((self._dim, self._dim))
+            param2 = np.tril(np.ones((self._dim, self._dim))*2., k=-1)
         param2 = check_matrix(param2)
         param2 = check_triangular(param2, k=1)
         assert param2.shape[0] == self._dim, 'Wrong matrix dimension'
