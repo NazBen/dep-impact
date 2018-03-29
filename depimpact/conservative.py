@@ -29,7 +29,7 @@ from .utils import (asymptotic_error_quantile, bootstrap, dict_to_margins,
                     get_possible_structures, list_to_matrix,
                     load_dependence_grid, margins_to_dict, matrix_to_list,
                     save_dependence_grid, to_copula_params, to_kendalls)
-from .vinecopula import VineCopula, check_matrix
+from .vinecopula import VineCopula, check_matrix, check_family
 
 OPERATORS = {">": operator.gt, ">=": operator.ge,
              "<": operator.lt, "<=": operator.le}
@@ -79,6 +79,7 @@ class ConservativeEstimate(object):
         - 'vine': Vine Copula construction
         - 'normal': Multi dimensionnal Gaussian copula.
     """
+
     def __init__(self,
                  model_func,
                  margins,
@@ -166,8 +167,8 @@ class ConservativeEstimate(object):
         if n_dep_param == None and grid_type == 'vertices':
             load_grid = None
             save_grid = None
-            
-        if load_grid in [None, False]:       
+
+        if load_grid in [None, False]:
             bounds = self._get_bounds(dep_measure)
             values = get_grid_sample(bounds, n_dep_param, grid_type)
             n_dep_param = len(values)
@@ -431,7 +432,8 @@ class ConservativeEstimate(object):
         input_sample = np.zeros((n_sample, dim))
         for i, marginal in enumerate(self.margins):
             quantile_func = marginal.computeQuantile
-            input_sample[:, i] = np.asarray(quantile_func(cop_sample[:, i])).ravel()
+            input_sample[:, i] = np.asarray(
+                quantile_func(cop_sample[:, i])).ravel()
         return input_sample
 
     @property
@@ -535,7 +537,7 @@ class ConservativeEstimate(object):
         else:
             raise TypeError("Not a good type for the family matrix.")
 
-        families = check_families(families)
+        families = check_family(families)
 
         # The family list values. Event the independent ones
         self._family_list = matrix_to_list(families, op_char='>=')
@@ -551,7 +553,8 @@ class ConservativeEstimate(object):
         _, self._indep_pairs_ids, self._indep_pairs = matrix_to_list(
             families, return_ids=True, return_coord=True, op_char='==')
 
-        self._copula_converters = [Conversion(family) for family in self._family_list]
+        self._copula_converters = [Conversion(
+            family) for family in self._family_list]
 
         # TODO: add check part in functions
         if hasattr(self, '_input_dim'):
@@ -1623,3 +1626,14 @@ class DependenceResult(object):
             #     kendall = kendall.item()
             kendalls.append(kendall)
         return kendalls
+
+
+def check_margins(margins):
+    assert isinstance(margins, (list, tuple)), \
+        TypeError("It should be a sequence of OT distribution objects.")
+
+    for marginal in margins:
+        assert isinstance(marginal, ot.DistributionImplementation), \
+            TypeError("Must be an OpenTURNS distribution objects.")
+
+    return margins

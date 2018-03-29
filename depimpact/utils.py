@@ -351,23 +351,18 @@ def dict_to_margins(margin_dict):
 
 def save_dependence_grid(dirname, kendalls, bounds_tau, grid_type):
     """Save a grid of kendall's into a csv ifile.
-
     The grid is always saved in Kendall's Tau measures.
 
     Parameters
     ----------
     dirname : str
         The directory path.
-
     kendalls : list or array
         The kendall's tau of each pair.
-
     bounds_tau : list or array
         The bounds on the kendall's tau.
-
     grid_type : str
         The ype of grid.
-
     Returns
     -------
     grid_filename : str
@@ -414,19 +409,14 @@ def load_dependence_grid(dirname, n_pairs, n_params, bounds_tau, grid_type, use_
     ----------
     dirname : str
         The directory path.
-
     n_params : int
         The grid dimension (the number of dependent pairs).
-
     n_params : int
         The grid size of the sample.
-
     bounds_tau : list or array
         The bounds on the kendall's tau.
-
     grid_type : str
         The ype of grid.
-
     use_grid : int, str or None, optional (default=None)
         If a particular grid should be used.
 
