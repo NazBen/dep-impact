@@ -29,7 +29,7 @@ from .utils import (asymptotic_error_quantile, bootstrap, dict_to_margins,
                     get_possible_structures, list_to_matrix,
                     load_dependence_grid, margins_to_dict, matrix_to_list,
                     save_dependence_grid, to_copula_params, to_kendalls)
-from .vinecopula import VineCopula, check_matrix, check_family
+from .vinecopula import VineCopula, check_matrix, check_family, check_triangular
 
 OPERATORS = {">": operator.gt, ">=": operator.ge,
              "<": operator.lt, "<=": operator.le}
@@ -90,7 +90,7 @@ class ConservativeEstimate(object):
                  bounds_tau=None,
                  vine_structure=None,
                  copula_type='vine',
-                 params2=None):
+                 param2=None):
         self.model_func = model_func
         self.margins = margins
         self.families = families
@@ -98,7 +98,7 @@ class ConservativeEstimate(object):
         self.fixed_params = fixed_params
         self.vine_structure = vine_structure
         self.copula_type = copula_type
-        self.params2 = params2
+        self.param2 = param2
 
     def gridsearch(self,
                    n_dep_param,
@@ -420,7 +420,7 @@ class ConservativeEstimate(object):
         if self._copula_type == 'vine':
             # TODO: One param is used. Do it for two parameters copulas.
             vine_copula = VineCopula(self._vine_structure, self._families,
-                                     matrix_param)
+                                     matrix_param, param2=self._param2)
             # Sample from the copula
             # The reshape is in case there is only one sample (for RF tests)
             cop_sample = vine_copula.get_sample(
@@ -742,6 +742,19 @@ class ConservativeEstimate(object):
         self._bounds_par = bounds_par
         self._bounds_tau_list = bounds_tau_list
         self._bounds_par_list = bounds_par_list
+
+    @property
+    def param2(self):
+        """The second parameter for bi-variate copulas.
+        """
+        return self._param2
+
+
+    @param2.setter
+    def param2(self, param):
+        param = check_matrix(param)
+        param = check_triangular(param)
+        self._param2 = param
 
     @property
     def fixed_params(self):
