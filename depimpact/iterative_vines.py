@@ -11,6 +11,7 @@ LIB_PARAMS = ['iterative_save', 'iterative_load', 'input_names',
               'output_names', 'keep_input_samples', 'load_input_samples',
               'use_grid', 'save_grid', 'grid_path', 'n_pairs_start']
 
+# TODO: add the function as a method in ConservativeEstimate
 
 def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_init=20, max_n_pairs=5, grid_type='lhs', 
                             q_func=np.var, n_add_pairs=1, n_remove_pairs=0, adapt_vine_structure=True, delta=0.1,
