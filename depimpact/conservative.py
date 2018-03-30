@@ -401,7 +401,7 @@ class ConservativeEstimate(object):
                                 output_sample=output_sample,
                                 random_state=rng)
 
-    def _get_sample(self, param, n_sample, param2=None):
+    def _get_sample(self, param, n_sample):
         """Creates the observations of the joint input distribution.
 
         Parameters
@@ -410,9 +410,6 @@ class ConservativeEstimate(object):
             A list of :math:`p` copula dependence parameters.
         n_sample : int
             The number of observations.
-        param2 : :class:`~numpy.ndarray`, optional (default=None)
-            The 2nd copula parameters. For some copula families
-            (e.g. Student)
         """
         dim = self._input_dim
         matrix_param = list_to_matrix(param, dim)
@@ -752,8 +749,9 @@ class ConservativeEstimate(object):
 
     @param2.setter
     def param2(self, param):
-        param = check_matrix(param)
-        param = check_triangular(param)
+        if param is not None:
+            param = check_matrix(param)
+            param = check_triangular(param)
         self._param2 = param
 
     @property
