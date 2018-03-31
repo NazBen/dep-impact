@@ -297,7 +297,7 @@ class Conversion(object):
             raise TypeError("Unkow family {}".format(value))
 
 
-def get_tau_interval(family, eps=0.01):
+def get_tau_interval(family, eps=0.02):
     assert isinstance(family, (np.integer, str)), \
         TypeError("Input must be int or str, given:", type(family))
     if isinstance(family, str):
