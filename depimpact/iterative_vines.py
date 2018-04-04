@@ -14,7 +14,7 @@ LIB_PARAMS = ['iterative_save', 'iterative_load', 'input_names',
 # TODO: add the function as a method in ConservativeEstimate
 
 def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_init=20, max_n_pairs=5, grid_type='lhs', 
-                            q_func=np.var, n_add_pairs=1, n_remove_pairs=0, adapt_vine_structure=True, delta=0.1,
+                            q_func=np.var, n_add_pairs=1, n_remove_pairs=0, adapt_vine_structure=True, delta=0.1, list_families=None,
                             with_bootstrap=False, verbose=False, **kwargs):
     """Iteratively minimises the output quantity of interest.
 
@@ -103,6 +103,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     if 'n_pairs_start' in kwargs:
         n_pairs_start = kwargs['n_pairs_start']
 
+
     # Only a loading execution
     if n_input_sample == 0:
         iterative_save = None
@@ -114,6 +115,13 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     init_indep_pairs = quant_estimate._indep_pairs[:]
     init_fixed_pairs = quant_estimate._fixed_pairs[:]
     
+
+    if list_families is None:
+        list_families = []
+        multiple_families = False
+    else:
+        multiple_families = True
+
     # New empty configurations
     families = np.zeros((dim, dim), dtype=int)
     bounds_tau = np.zeros((dim, dim))
@@ -123,6 +131,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     selected_pairs = []
     all_results = IterativeDependenceResults(dim)
 
+    # Grid-size evolution
     if callable(n_dep_param_init):
         n_param_iter = n_dep_param_init
     elif n_dep_param_init is None:
@@ -153,76 +162,100 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
     
     while not stop_conditions:
         min_quantity = {}
+
+        best_families = np.zeros((dim, dim), dtype=int)
+        # The candidates
         for i, j in indices:
-            # Family matrix for this iteration
-            tmp_families = families.copy()
-            tmp_families[i, j] = init_family[i, j]
+            # Update the bound matrix
             tmp_bounds_tau = bounds_tau.copy()
             tmp_bounds_tau[i, j] = init_bounds_tau[i, j]
             tmp_bounds_tau[j, i] = init_bounds_tau[j, i]
             
-            # Adapt the vine structure matrix
-            if adapt_vine_structure:
-                pairs_iter = init_indep_pairs + init_fixed_pairs + selected_pairs + [(i, j)]
-                pairs_iter_id = [get_pair_id(dim, pair, with_plus=False) for pair in pairs_iter]
-                pairs_by_levels = get_pairs_by_levels(dim, pairs_iter_id)
-                quant_estimate.vine_structure = get_possible_structures(dim, pairs_by_levels)[0]
+            # The algorithm can iterate through several families for each candidate
+            if not multiple_families:
+                list_families = [init_family[i, j]]
             
-            # Family matrix is changed
-            quant_estimate.families = tmp_families
-            quant_estimate.fixed_params = fixed_params
-            quant_estimate.bounds_tau = tmp_bounds_tau
+            min_quantities_fam = []
+            # For each copula family
+            for cop_id in list_families:
+                # update the family matrix
+                tmp_families = families.copy()
+                tmp_families[i, j] = cop_id
 
-            # Lets get the results for this family structure
-            if n_input_sample > 0 and n_pairs >= n_pairs_start:
-                results = quant_estimate.gridsearch(n_dep_param=n_dep_param,
-                                                             n_input_sample=n_input_sample,
-                                                             grid_type=grid_type,
-                                                             keep_input_samples=keep_input_samples,
-                                                             load_grid=use_grid,
-                                                             save_grid=save_grid,
-                                                             use_sto_func=True)
-                results.q_func = q_func
-            
-            if iterative_save or iterative_load:
-                cop_str = "_".join([str(l) for l in quant_estimate._family_list])
-                vine_str = "_".join([str(l) for l in quant_estimate._vine_structure_list])
-                filename = "%s/%s" % (load_dir, grid_type)
-                if n_dep_param is None:
-                    filename += "_K_None"
-                else:
-                    filename += "_K_%d" % (n_dep_param)
-                filename += "_cop_%s_vine_%s.hdf5" % (cop_str, vine_str)
-
-            if iterative_save and n_pairs >= n_pairs_start:
-                results.to_hdf(filename, input_names, output_names, with_input_sample=keep_input_samples)
-
-            if iterative_load :
-                name, extension = os.path.splitext(filename)
-                condition = os.path.exists(filename)
-                k = 0
-                while condition:
-                    try:
-                        load_result = ListDependenceResult.from_hdf(filename, with_input_sample=load_input_samples, q_func=q_func)
-                        # TODO: create a function to check the configurations of two results
-                        # TODO: is the testing necessary? If the saving worked, the loading should be ok.
-                        np.testing.assert_equal(load_result.families, tmp_families, err_msg="Not good family")
-                        np.testing.assert_equal(load_result.bounds_tau, tmp_bounds_tau, err_msg="Not good Bounds")
-                        np.testing.assert_equal(load_result.vine_structure, quant_estimate.vine_structure, err_msg="Not good structure")
-                        condition = False
-                    except AssertionError:
-                        filename = '%s_num_%d%s' % (name, k, extension)
-                        condition = os.path.exists(filename)
-                        k += 1
-                # Replace the actual results with the loaded results (this results + all the previous saved ones)
-                results = load_result
+                print(tmp_families)
+                # Adapt the vine structure matrix
+                if adapt_vine_structure:
+                    pairs_iter = init_indep_pairs + init_fixed_pairs + selected_pairs + [(i, j)]
+                    pairs_iter_id = [get_pair_id(dim, pair, with_plus=False) for pair in pairs_iter]
+                    pairs_by_levels = get_pairs_by_levels(dim, pairs_iter_id)
+                    quant_estimate.vine_structure = get_possible_structures(dim, pairs_by_levels)[0]
                 
-            # How much does it costs
-            cost += results.n_evals
+                # Family matrix is changed
+                quant_estimate.families = tmp_families
+                quant_estimate.fixed_params = fixed_params
+                quant_estimate.bounds_tau = tmp_bounds_tau
+
+                # Lets get the results for this family structure
+                if n_input_sample > 0 and n_pairs >= n_pairs_start:
+                    results = quant_estimate.gridsearch(n_dep_param=n_dep_param,
+                                                                n_input_sample=n_input_sample,
+                                                                grid_type=grid_type,
+                                                                keep_input_samples=keep_input_samples,
+                                                                load_grid=use_grid,
+                                                                save_grid=save_grid,
+                                                                use_sto_func=True)
+                    results.q_func = q_func
+                
+                # Save iteratively
+                if iterative_save or iterative_load:
+                    cop_str = "_".join([str(l) for l in quant_estimate._family_list])
+                    vine_str = "_".join([str(l) for l in quant_estimate._vine_structure_list])
+                    filename = "%s/%s" % (load_dir, grid_type)
+                    if n_dep_param is None:
+                        filename += "_K_None"
+                    else:
+                        filename += "_K_%d" % (n_dep_param)
+                    filename += "_cop_%s_vine_%s.hdf5" % (cop_str, vine_str)
+
+                if iterative_save and n_pairs >= n_pairs_start:
+                    results.to_hdf(filename, input_names, output_names, with_input_sample=keep_input_samples)
+
+                if iterative_load :
+                    name, extension = os.path.splitext(filename)
+                    condition = os.path.exists(filename)
+                    k = 0
+                    while condition:
+                        try:
+                            load_result = ListDependenceResult.from_hdf(filename, with_input_sample=load_input_samples, q_func=q_func)
+                            # TODO: create a function to check the configurations of two results
+                            # TODO: is the testing necessary? If the saving worked, the loading should be ok.
+                            np.testing.assert_equal(load_result.families, tmp_families, err_msg="Not good family")
+                            np.testing.assert_equal(load_result.bounds_tau, tmp_bounds_tau, err_msg="Not good Bounds")
+                            np.testing.assert_equal(load_result.vine_structure, quant_estimate.vine_structure, err_msg="Not good structure")
+                            condition = False
+                        except AssertionError:
+                            filename = '%s_num_%d%s' % (name, k, extension)
+                            condition = os.path.exists(filename)
+                            k += 1
+                    # Replace the actual results with the loaded results (this results + all the previous saved ones)
+                    results = load_result
+                    
+                quantity = results.min_quantity
+                print("Quantity: {:5f} for copula {}".format(quantity, cop_id))
+
+                min_quantities_fam.append(quantity)
+                # How much does it costs
+                cost += results.n_evals
+
+            # Minimum among the copulas
+            min_quantity_candidate = min(min_quantities_fam)
+            cop_min_quantity = list_families[np.argmin(min_quantities_fam)]
+
+            best_families[i, j] = cop_min_quantity
 
             # Save the minimum
             if not with_bootstrap:
-                min_quantity[i, j] = results.min_quantity
+                min_quantity[i, j] = min_quantity_candidate
             else:
                 assert isinstance(with_bootstrap, int), "Must be a number"
                 n_bootstrap = with_bootstrap
@@ -236,13 +269,11 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
                     pair_names = [ "%s-%s" % (input_names[k1], input_names[k2]) for k1, k2 in selected_pairs + [(i, j)]]
                     print("The variables are: " + " ".join(pair_names))
 
-
             # Store the result
             all_results[iteration, i, j] = results
-
+            
         # Get the min from the iterations
         sorted_quantities = sorted(min_quantity.items(), key=lambda x: x[1])
-        
         # Delay of the first iteration
         if iteration == 0:
             delta_q_init = abs(sorted_quantities[0][1] - sorted_quantities[-1][1])
@@ -258,15 +289,14 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
         # Selected pairs to add 
         for pair in sorted_quantities[:n_add_pairs]:
             i, j = pair[0][0], pair[0][1]
-            families[i, j] = init_family[i, j]
+            families[i, j] = best_families[i, j]
             bounds_tau[i, j] = init_bounds_tau[i, j]
             bounds_tau[j, i] = init_bounds_tau[j, i]
             indices.remove(list(pair[0]))
             selected_pairs.append(pair[0])
             
         all_results.selected_pairs.append(selected_pairs)
-        if True:
-            k1, k2 = selected_pair
+        if verbose:
             tmp = '\nIteration {0}: selected pair: {1}'.format(iteration+1, selected_pair)
             if input_names:
                 tmp += " (" + "-".join(input_names[k] for k in selected_pair) + ")"
@@ -283,6 +313,7 @@ def iterative_vine_minimize(estimate_object, n_input_sample=1000, n_dep_param_in
             if delta_q <= delta*delta_q_init:
                 stop_conditions = True
                 print('Minimum_variation not fulfiled: %.2f <= %0.2f' % (delta_q, delta*delta_q_init))
+
         n_pairs += n_add_pairs
         if n_dep_param is not None:
             n_dep_param = n_param_iter(iteration+1)
