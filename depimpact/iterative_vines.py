@@ -335,7 +335,7 @@ def iterative_vine_minimize(
             candidate_pairs.remove(list(pair[0]))
             selected_pairs.append(pair[0])
 
-        iterative_result.selected_pairs.append(selected_pairs)
+        iterative_result.selected_pairs.append(selected_pairs[:])
         if verbose:
             i, j = selected_pair
             tmp = '\nIteration {}: selected pair: {}, selected family: {}'.format(
@@ -383,7 +383,7 @@ class IterativeDependenceResults(object):
         tmp = np.zeros((dim, dim), dtype=object)
         tmp[:] == None
         self.results[self.iteration] = tmp
-        self.selected_pairs = [[]]
+        self.selected_pairs = []
 
         self.dim = dim
         self.n_pairs = n_pairs

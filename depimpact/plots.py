@@ -14,6 +14,13 @@ from .conservative import ListDependenceResult
 
 sns.set(style="ticks", color_codes=True)
 
+COPULA_NAME = {1: "Gaussian",
+2: "Student",
+3: "Clayton",
+4: "Gumbel",
+5: "Frank",
+14: "S-Gumbel"}
+
 
 def set_style_paper():
     # This sets reasonable defaults for font size for
@@ -268,7 +275,7 @@ def matrix_plot_quantities(results, indep_result=None, grid_result=None,
     fig.tight_layout()
 
 
-def plot_iterative_results(iter_results, indep_result=None, grid_results=None, q_func=None, figsize=(8, 4),
+def plot_iterative_results(iter_results, indep_result=None, grid_results=None, q_func=None, diff_with_indep=False, figsize=(8, 4),
                            quantity_name='Quantity', with_bootstrap=False, n_boot=200, ax=None):
     """
     """
@@ -277,7 +284,7 @@ def plot_iterative_results(iter_results, indep_result=None, grid_results=None, q
     if ax is None:
         _, ax = plt.subplots(figsize=figsize)
 
-    # Number of trees
+    # Number of iteration
     n_levels = iter_results.iteration+1
     dim = iter_results.dim
 
@@ -290,11 +297,16 @@ def plot_iterative_results(iter_results, indep_result=None, grid_results=None, q
     colors = [cmap(i) for i in np.linspace(0, 1, n_levels+n_p)]
 
     # Number of pairs at each iteration
-    n_pairs = range(1, n_levels+1)
+    n_pairs = range(n_levels)
+
 
     if indep_result is not None:
-        ax.plot([n_pairs[0], n_pairs[-1]], [indep_result.quantity]*2, '-o',
-                color=colors[0], label='independence')
+        if not diff_with_indep:
+            ax.plot([n_pairs[0], n_pairs[-1]], [indep_result.quantity]*2, '-o',
+                    color=colors[0], label='Independence')
+        else:
+            ax.plot([n_pairs[0], n_pairs[-1]], [0]*2, '--',
+                    color=colors[0])
 
         if with_bootstrap:
             indep_result.compute_bootstrap()
@@ -302,15 +314,15 @@ def plot_iterative_results(iter_results, indep_result=None, grid_results=None, q
 
             up = np.percentile(boot, 99)
             down = np.percentile(boot, 1)
-            ax.plot([n_pairs[0], n_pairs[-1]], [up]*2, '--',
+            ax.plot([n_pairs[0], n_pairs[-1]], [up]*2, '-.',
                     color=colors[0], linewidth=0.8)
-            ax.plot([n_pairs[0], n_pairs[-1]], [down]*2, '--',
+            ax.plot([n_pairs[0], n_pairs[-1]], [down]*2, '-.',
                     color=colors[0], linewidth=0.8)
 
     if grid_results is not None:
         min_grid_result = grid_results.min_result
         ax.plot([n_pairs[0], n_pairs[-1]], [min_grid_result.quantity]*2, '-o',
-                color=colors[1], label='grid-search with $K=%d$' % (grid_results.n_params))
+                color=colors[1], label='Grid-search with $K=%d$' % (grid_results.n_params))
         if with_bootstrap:
             min_grid_result.compute_bootstrap()
             boot = min_grid_result.bootstrap_sample
@@ -323,19 +335,26 @@ def plot_iterative_results(iter_results, indep_result=None, grid_results=None, q
 
     quantities = []
     min_results_level = []
-    for i in range(n_levels):
-        values = iter_results.min_quantities(i)[np.tril_indices(dim, -1)]
+    selected_families = []
+    # TODO : bug in iterative algorithm for the saving results of families
+    last_families = iter_results.min_result(-1).families
+    for lvl in range(n_levels):
+        # All the results
+        values = iter_results.min_quantities(lvl)[np.tril_indices(dim, -1)]
         values = values[values != 0.].tolist()
+        min_result = iter_results.min_result(lvl)
         quantities.append(values)
-        min_results_level.append(iter_results.min_result(i))
+        min_results_level.append(min_result)
+        pair = iter_results.selected_pairs[lvl][-1]
+        selected_families.append(last_families[pair])
 
     # Get the minimum of each level
     min_quantities = []
     for quant_lvl in quantities:
         min_quant = min(quant_lvl)
         min_quantities.append(min_quant)
-
         # Remove the minimum from the list of quantities
+        # It's repetitve with the othr list
         quant_lvl.remove(min_quant)
 
     for lvl in range(n_levels):
@@ -343,12 +362,24 @@ def plot_iterative_results(iter_results, indep_result=None, grid_results=None, q
         quant_lvl = np.asarray(quantities[lvl])
         # The number of results
         n_res = len(quant_lvl)
-        ax.plot([n_pairs[lvl]]*n_res, quant_lvl, '.', color=colors[lvl+n_p])
+        if not diff_with_indep:
+            y_quantities = quant_lvl
+            y_min_quantity = min_quantities[lvl]
+        else:
+            y_quantities = quant_lvl - indep_result.quantity
+            y_min_quantity = min_quantities[lvl] - indep_result.quantity
 
-    for lvl in range(n_levels):
+        if not diff_with_indep:
+            ax.plot([n_pairs[lvl]]*n_res, y_quantities,
+                    '.', color=colors[lvl+n_p])
+        else:
+            ax.plot([n_pairs[lvl]]*n_res, y_quantities,
+                    '.', color=colors[lvl+n_p])
+
         if n_pairs[lvl] == n_pairs[-1]:
-            ax.plot(n_pairs[lvl], min_quantities[lvl],
+            ax.plot(n_pairs[lvl], y_min_quantity,
                     'o', color=colors[lvl+n_p])
+
             if with_bootstrap:
                 min_results_level[lvl].compute_bootstrap(n_boot)
                 boot = min_results_level[lvl].bootstrap_sample
@@ -359,8 +390,10 @@ def plot_iterative_results(iter_results, indep_result=None, grid_results=None, q
                 ax.plot(n_pairs[lvl], down, '.',
                         color=colors[lvl+n_p], linewidth=0.8)
         else:
+            ax.plot(n_pairs[lvl], y_min_quantity, 'o', color=colors[lvl+n_p])
             ax.plot([n_pairs[lvl], n_pairs[lvl+1]],
-                    [min_quantities[lvl]]*2, 'o-', color=colors[lvl+n_p])
+                    [y_min_quantity]*2, '-', color=colors[lvl+n_p])
+
             if with_bootstrap:
                 min_results_level[lvl].compute_bootstrap(n_boot)
                 boot = min_results_level[lvl].bootstrap_sample
@@ -372,9 +405,14 @@ def plot_iterative_results(iter_results, indep_result=None, grid_results=None, q
                         color=colors[lvl+n_p], linewidth=0.8)
 
     ax.axis('tight')
-    ax.set_xlabel('Number of considered pairs')
-    ax.set_ylabel(quantity_name)
+    # ax.set_xlabel('Iterations')
+    ax.set_ylabel(quantity_name, fontsize=12)
+    
+    selected_pairs = iter_results.selected_pairs
+    x_label = ['$k=%d$\n%s\n%s' % (i, selected_pairs[i][-1], COPULA_NAME[selected_families[i]])
+               for i in range(n_levels)]
     ax.set_xticks(n_pairs)
+    ax.set_xticklabels(x_label)
     ax.legend(loc=0)
 
 
