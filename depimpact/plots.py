@@ -409,8 +409,13 @@ def plot_iterative_results(iter_results, indep_result=None, grid_results=None, q
     ax.set_ylabel(quantity_name, fontsize=12)
     
     selected_pairs = iter_results.selected_pairs
-    x_label = ['$k=%d$\n%s\n%s' % (i, selected_pairs[i][-1], COPULA_NAME[selected_families[i]])
-               for i in range(n_levels)]
+    x_label = []
+    for lvl in range(n_levels):
+        i, j = selected_pairs[lvl][-1]
+        copula_name = COPULA_NAME[selected_families[lvl]]
+        label = '$k=%d$\n$X_%d-X_%d$\n%s' % (lvl, j+1, i+1, copula_name)
+        x_label.append(label)
+
     ax.set_xticks(n_pairs)
     ax.set_xticklabels(x_label)
     ax.legend(loc=0)

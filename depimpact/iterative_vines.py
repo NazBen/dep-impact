@@ -198,6 +198,7 @@ def iterative_vine_minimize(
                 list_families = [init_family[i, j]]
 
             min_quantities_families = {}
+            results_families = {}
             # For each copula family
             for cop_id in list_families:
                 # update the family matrix
@@ -273,6 +274,7 @@ def iterative_vine_minimize(
 
                 tmp_quantity = results.min_quantity
                 min_quantities_families[cop_id] = tmp_quantity
+                results_families[cop_id] = results
                 n_evals += results.n_evals
 
                 if verbose:
@@ -284,7 +286,9 @@ def iterative_vine_minimize(
                               key=min_quantities_families.get)
             min_quantity = min_quantities_families[best_family]
 
+            # Store the result
             best_families[i, j] = best_family
+            iterative_result[iteration, i, j] = results_families[best_family]
 
             # Save the minimum
             if not with_bootstrap:
@@ -307,8 +311,6 @@ def iterative_vine_minimize(
                                   for k1, k2 in selected_pairs + [(i, j)]]
                     print("The variables are: " + " ".join(pair_names))
 
-            # Store the result
-            iterative_result[iteration, i, j] = results
 
         # Get the min from the iterations
         sorted_quantities = sorted(min_quantities_iter.items(),
