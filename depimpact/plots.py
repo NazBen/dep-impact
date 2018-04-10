@@ -15,11 +15,11 @@ from .conservative import ListDependenceResult
 sns.set(style="ticks", color_codes=True)
 
 COPULA_NAME = {1: "Gaussian",
-2: "Student",
-3: "Clayton",
-4: "Gumbel",
-5: "Frank",
-14: "S-Gumbel"}
+               2: "Student",
+               3: "Clayton",
+               4: "Gumbel",
+               5: "Frank",
+               14: "S-Gumbel"}
 
 
 def set_style_paper():
@@ -146,6 +146,7 @@ def get_color_range(n):
     delta = int(len(sorted_names)/n)
     return sorted_names[::delta]
 
+
 def get_hull(x, y, n_bins):
     bins = np.linspace(-5., 5., n_bins)
     bins = logistic.cdf(bins) * (2) - 1
@@ -166,15 +167,15 @@ def get_hull(x, y, n_bins):
     return x_hull, down_hull, up_hull
 
 
-def plot_quantities(results, ratio=(3.5, 2.5), quantity_name=None, label=None, 
-    plot_scatter=False, plot_hull=True, n_bins=15):
+def plot_quantities(results, ratio=(3.5, 2.5), quantity_name=None, label=None,
+                    plot_scatter=False, plot_hull=True, n_bins=15):
 
     if isinstance(results, ListDependenceResult):
         n_plot = 1
         dim = results.input_dim
         kendalls = [results.kendalls]
         quantities = [results.quantities]
-        label = [label] 
+        label = [label]
     elif isinstance(results, list):
         n_plot = len(results)
         dim = results[0].input_dim
@@ -184,7 +185,7 @@ def plot_quantities(results, ratio=(3.5, 2.5), quantity_name=None, label=None,
             kendalls.append(result.kendalls)
             quantities.append(result    .quantities)
             assert result.input_dim == dim, "The dimension should be the same for all plots."
-        
+
     if dim == 2:
         plot_hull = False
         plot_scatter = True
@@ -210,15 +211,15 @@ def plot_quantities(results, ratio=(3.5, 2.5), quantity_name=None, label=None,
                 x, y = kendalls[i_plot][:, k], quantities[i_plot]
                 if plot_scatter:
                     h = ax.plot(x, y, '.',
-                            linestyle=linestyle, label=label[i_plot])
+                                linestyle=linestyle, label=label[i_plot])
                     color = h[0].get_color()
                 else:
                     color = colors[i_plot]
-                
+
                 if plot_hull:
                     x_hull, y_down, y_up = get_hull(x, y, n_bins)
                     h = ax.plot(x_hull, y_down, '--', color=color,
-                            label='Down hull '+label[i_plot])
+                                label='Down hull '+label[i_plot])
                     color = h[0].get_color()
                     ax.plot(x_hull, y_up, '--', color=color,
                             label='Up hull '+label[i_plot])
@@ -235,7 +236,7 @@ def plot_quantities(results, ratio=(3.5, 2.5), quantity_name=None, label=None,
     else:
         handles, labels = axes[0, 0].get_legend_handles_labels()
         axes[0, dim-2].legend(handles, labels)
-        
+
     return fig, axes
 
 
@@ -275,6 +276,92 @@ def matrix_plot_quantities(results, indep_result=None, grid_result=None,
     fig.tight_layout()
 
 
+def plot_iterative_results_2(iter_results, indep_result=None, grid_results=None, q_func=None, diff_with_indep=False, figsize=(8, 4),
+                             quantity_name='Quantity', with_bootstrap=False, n_boot=200, ax=None, color='r', with_all_quantities=True):
+    """
+    """
+
+    # Figure
+    if ax is None:
+        _, ax = plt.subplots(figsize=figsize)
+
+    # Number of iteration
+    n_levels = iter_results.iteration+1
+    dim = iter_results.dim
+
+    # Number of pairs at each iteration
+    n_pairs = range(n_levels)
+
+    if indep_result is not None:
+        if not diff_with_indep:
+            ax.plot([n_pairs[0], n_pairs[-1]], [indep_result.quantity]*2, '-o',
+                    color='k', label='Independence')
+        else:
+            ax.plot([n_pairs[0], n_pairs[-1]], [0]*2, '--',
+                    color='k')
+
+    if grid_results is not None:
+        min_grid_result = grid_results.min_result
+        ax.plot([n_pairs[0], n_pairs[-1]], [min_grid_result.quantity]*2, '-o',
+                color='b', label='Grid-search with $K=%d$' % (grid_results.n_params))
+
+    quantities = []
+    min_results_level = []
+    selected_families = []
+
+    last_families = iter_results.min_result(-1).families
+    for lvl in range(n_levels):
+        # All the results
+        values = iter_results.min_quantities(lvl)[np.tril_indices(dim, -1)]
+        values = values[values != 0.].tolist()
+        min_result = iter_results.min_result(lvl)
+        quantities.append(values)
+        min_results_level.append(min_result)
+        pair = iter_results.selected_pairs[lvl][-1]
+        selected_families.append(last_families[pair])
+
+    # Get the minimum of each level
+    min_quantities = []
+    for quant_lvl in quantities:
+        min_quant = min(quant_lvl)
+        min_quantities.append(min_quant)
+        # Remove the minimum from the list of quantities
+        # It's repetitve with the othr list
+        quant_lvl.remove(min_quant)
+
+    for lvl in range(n_levels):
+        # The quantities of this level
+        quant_lvl = np.asarray(quantities[lvl])
+        # The number of results
+        n_res = len(quant_lvl)
+        if not diff_with_indep:
+            y_quantities = quant_lvl
+            y_min_quantity = min_quantities[lvl]
+        else:
+            y_quantities = quant_lvl - indep_result.quantity
+            y_min_quantity = min_quantities[lvl] - indep_result.quantity
+
+        if with_all_quantities:
+            if not diff_with_indep:
+                ax.plot([n_pairs[lvl]]*n_res, y_quantities, '.', color=color)
+            else:
+                ax.plot([n_pairs[lvl]]*n_res, y_quantities, '.', color=color)
+
+        if n_pairs[lvl] == n_pairs[-1]:
+            ax.plot(n_pairs[lvl], y_min_quantity,
+                    'o', color=color)
+        else:
+            ax.plot(n_pairs[lvl], y_min_quantity, 'o', color=color)
+            ax.plot([n_pairs[lvl], n_pairs[lvl+1]],
+                    [y_min_quantity]*2, '-', color=color)
+
+    ax.axis('tight')
+    ax.set_ylabel(quantity_name, fontsize=12)
+
+    ax.set_xticks(n_pairs)
+    ax.set_xticklabels(['$k=%d$' % (lvl) for lvl in range(n_levels)])
+
+
 def plot_iterative_results(iter_results, indep_result=None, grid_results=None, q_func=None, diff_with_indep=False, figsize=(8, 4),
                            quantity_name='Quantity', with_bootstrap=False, n_boot=200, ax=None):
     """
@@ -298,7 +385,6 @@ def plot_iterative_results(iter_results, indep_result=None, grid_results=None, q
 
     # Number of pairs at each iteration
     n_pairs = range(n_levels)
-
 
     if indep_result is not None:
         if not diff_with_indep:
@@ -336,6 +422,7 @@ def plot_iterative_results(iter_results, indep_result=None, grid_results=None, q
     quantities = []
     min_results_level = []
     selected_families = []
+
     # TODO : bug in iterative algorithm for the saving results of families
     last_families = iter_results.min_result(-1).families
     for lvl in range(n_levels):
@@ -407,7 +494,7 @@ def plot_iterative_results(iter_results, indep_result=None, grid_results=None, q
     ax.axis('tight')
     # ax.set_xlabel('Iterations')
     ax.set_ylabel(quantity_name, fontsize=12)
-    
+
     selected_pairs = iter_results.selected_pairs
     x_label = []
     for lvl in range(n_levels):
