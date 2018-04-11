@@ -19,7 +19,10 @@ COPULA_NAME = {1: "Gaussian",
                3: "Clayton",
                4: "Gumbel",
                5: "Frank",
-               14: "S-Gumbel"}
+               6: "Joe",
+               13: "Gumbel",
+               14: "Gumbel",
+               16: "Joe"}
 
 
 def set_style_paper():
@@ -183,7 +186,7 @@ def plot_quantities(results, ratio=(3.5, 2.5), quantity_name=None, label=None,
         quantities = []
         for result in results:
             kendalls.append(result.kendalls)
-            quantities.append(result    .quantities)
+            quantities.append(result.quantities)
             assert result.input_dim == dim, "The dimension should be the same for all plots."
 
     if dim == 2:
