@@ -170,7 +170,7 @@ def get_hull(x, y, n_bins):
     return x_hull, down_hull, up_hull
 
 
-def plot_quantities(results, ratio=(3.5, 2.5), quantity_name=None, label=None,
+def plot_quantities(results, ratio=(3.5, 2.5), quantity_name=None, label="",
                     plot_scatter=False, plot_hull=True, n_bins=15):
 
     if isinstance(results, ListDependenceResult):
